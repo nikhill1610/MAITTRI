@@ -1,0 +1,141 @@
+# ==============================================================================
+# Git Ignore Configuration - Maitri Smart Agriculture AI Platform
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Environment Variables & Credentials
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+config/secrets.*
+secrets.h
+
+# ------------------------------------------------------------------------------
+# 2. Python & Bytecode
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Packaging & Builds
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# ------------------------------------------------------------------------------
+# 3. Virtual Environments
+# ------------------------------------------------------------------------------
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ------------------------------------------------------------------------------
+# 4. Databases & SQLite Files
+# ------------------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+agri.db
+backups/
+
+# ------------------------------------------------------------------------------
+# 5. Node.js & Frontend
+# ------------------------------------------------------------------------------
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.vite/
+frontend/.vite/
+.npm/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------------------------
+# 6. IDEs & Editors
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------------------------------------------------
+# 7. Operating System Files
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------------------------
+# 8. Logs & Temporary Files
+# ------------------------------------------------------------------------------
+logs/
+*.log
+tmp/
+temp/
+.cache/
+*.tmp
+
+# ------------------------------------------------------------------------------
+# 9. Hardware & Embedded Build Artifacts (ESP32 / Arduino / PlatformIO)
+# ------------------------------------------------------------------------------
+.pio/
+.pioenvs/
+.piolibdeps/
+*.hex
+*.elf
+*.bin
+*.map
+# Explicitly keep microcontroller source code
+!*.ino
+!*.h
+!*.cpp
+!*.c

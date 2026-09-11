@@ -1,0 +1,521 @@
+import json
+import math
+import random
+import socket
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any, Tuple
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+
+from ..models import IoTDevice, IoTSensorReading, utcnow
+from ..schemas import (
+    IoTSensorDataCreate,
+    RadarScanPoint,
+    NearestObject,
+    IoTLatestResponse,
+    IoTDeviceSummary,
+    IoTThresholdConfig
+)
+
+# Configurable prototype thresholds
+DEFAULT_THRESHOLDS = {
+    "clear_distance": 100.0,      # > 100 cm: CLEAR
+    "warning_distance": 50.0,    # 20 cm < dist <= 50 cm: WARNING (50 < dist <= 100: OBJECT DETECTED)
+    "critical_distance": 20.0,   # <= 20 cm: VERY CLOSE
+    "offline_timeout_seconds": 45  # Generous timeout for physical hardware sweeps (45s)
+}
+
+_current_thresholds: Dict[str, Any] = dict(DEFAULT_THRESHOLDS)
+
+# High-speed in-memory telemetry cache
+_latest_telemetry: Dict[str, Dict[str, Any]] = {}
+_latest_overall: Optional[Dict[str, Any]] = None
+
+
+def get_host_lan_ips(port: int = 8000) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Returns list of host LAN IPv4 endpoints and recommended URL for ESP32/ESP8266.
+    """
+    endpoints: List[Dict[str, Any]] = []
+    recommended = f"http://192.168.137.1:{port}/api/iot/sensor-data"
+    try:
+        hostname = socket.gethostname()
+        _, _, ips = socket.gethostbyname_ex(hostname)
+        for ip in ips:
+            if ip.startswith("127."):
+                continue
+            is_hotspot = ip.startswith("192.168.137.")
+            label = "Windows Hotspot (Recommended)" if is_hotspot else ("Local Wi-Fi Network" if ip.startswith("192.168.") or ip.startswith("10.") else "LAN Interface")
+            url = f"http://{ip}:{port}/api/iot/sensor-data"
+            item = {"ip": ip, "label": label, "url": url, "is_hotspot": is_hotspot}
+            endpoints.append(item)
+            if is_hotspot:
+                recommended = url
+    except Exception:
+        pass
+
+    if not endpoints:
+        endpoints.append({"ip": "192.168.137.1", "label": "Windows Hotspot", "url": f"http://192.168.137.1:{port}/api/iot/sensor-data", "is_hotspot": True})
+        recommended = f"http://192.168.137.1:{port}/api/iot/sensor-data"
+
+    return endpoints, recommended
+
+
+def get_current_thresholds() -> Dict[str, Any]:
+    return dict(_current_thresholds)
+
+
+def update_thresholds(config: IoTThresholdConfig) -> Dict[str, Any]:
+    global _current_thresholds
+    _current_thresholds["clear_distance"] = config.clear_distance
+    _current_thresholds["warning_distance"] = config.warning_distance
+    _current_thresholds["critical_distance"] = config.critical_distance
+    _current_thresholds["offline_timeout_seconds"] = config.offline_timeout_seconds
+    return dict(_current_thresholds)
+
+
+def classify_distance(distance: Optional[float]) -> Tuple[bool, str]:
+    """
+    Classifies an ultrasonic distance measurement against prototype thresholds:
+    - distance > 100 cm -> CLEAR
+    - 50 cm < distance <= 100 cm -> OBJECT DETECTED
+    - 20 cm < distance <= 50 cm -> WARNING
+    - distance <= 20 cm -> VERY CLOSE
+    - No echo / None / <= 0 -> NO READING
+    """
+    if distance is None or distance <= 0.0 or distance > 400.0:
+        return False, "NO READING"
+
+    clear_th = _current_thresholds["clear_distance"]
+    warn_th = _current_thresholds["warning_distance"]
+    crit_th = _current_thresholds["critical_distance"]
+
+    if distance > clear_th:
+        return False, "CLEAR"
+    elif distance > warn_th:
+        return True, "OBJECT DETECTED"
+    elif distance > crit_th:
+        return True, "WARNING"
+    else:
+        return True, "VERY CLOSE"
+
+
+def calculate_nearest_object(scan_points: List[Any]) -> Tuple[Optional[Dict[str, Any]], str]:
+    """
+    Finds the closest detected obstacle in the ultrasonic radar scan.
+    Returns (nearest_object_dict, overall_scan_status).
+    """
+    closest_dist = float("inf")
+    closest_point = None
+    has_warning = False
+    has_critical = False
+    has_detected = False
+
+    for pt in scan_points:
+        # Support both Pydantic model and dict
+        if isinstance(pt, dict):
+            angle = pt.get("angle", 90)
+            distance = pt.get("distance")
+            status = pt.get("status", "CLEAR")
+            detected = pt.get("object_detected", False)
+        else:
+            angle = pt.angle
+            distance = pt.distance
+            status = pt.status
+            detected = pt.object_detected
+
+        if distance is not None and distance > 0.0 and distance <= _current_thresholds["clear_distance"]:
+            detected = True
+            if distance < closest_dist:
+                closest_dist = distance
+                closest_point = {
+                    "angle": int(angle),
+                    "distance": round(float(distance), 1),
+                    "status": status if status != "CLEAR" else classify_distance(distance)[1]
+                }
+
+        if status == "VERY CLOSE":
+            has_critical = True
+        elif status == "WARNING":
+            has_warning = True
+        elif status == "OBJECT DETECTED" or detected:
+            has_detected = True
+
+    overall_status = "CLEAR"
+    if has_critical:
+        overall_status = "VERY CLOSE"
+    elif has_warning:
+        overall_status = "WARNING"
+    elif has_detected:
+        overall_status = "OBJECT DETECTED"
+    elif not scan_points:
+        overall_status = "NO READING"
+
+    return closest_point, overall_status
+
+
+def get_default_demo_telemetry(device_id: str = "MAITRI_ESP32_01", controller_type: str = "ESP32") -> Dict[str, Any]:
+    """
+    Returns default calibrated prototype telemetry so the dashboard looks realistic
+    and populated even before the physical hardware is plugged in.
+    """
+    now = datetime.now(timezone.utc)
+    # Default 20° to 160° scan with a simulated crop obstacle around 70° at 34.2 cm
+    angles = list(range(20, 161, 10))
+    sample_scan = []
+    for a in angles:
+        if a in (60, 70, 80):
+            # Target obstacle at ~34.2 cm
+            d = 34.2 if a == 70 else (42.0 if a == 80 else 48.5)
+            det, st = classify_distance(d)
+        elif a in (40, 50):
+            d = 63.0 if a == 50 else 70.0
+            det, st = classify_distance(d)
+        elif a == 90:
+            d = 32.0
+            det, st = classify_distance(d)
+        else:
+            d = round(110.0 + (a % 30), 1)
+            det, st = classify_distance(d)
+
+        sample_scan.append({
+            "angle": a,
+            "distance": d,
+            "object_detected": det,
+            "status": st
+        })
+
+    nearest_obj, overall_status = calculate_nearest_object(sample_scan)
+    lan_list, rec_url = get_host_lan_ips()
+    return {
+        "device_id": device_id,
+        "controller_type": controller_type,
+        "status": "OFFLINE",
+        "is_online": False,
+        "temperature": 28.6,
+        "humidity": 67.2,
+        "soil_moisture": 45.0,
+        "water_distance_cm": 32.0,
+        "scan": sample_scan,
+        "nearest_object": nearest_obj or {"angle": 70, "distance": 34.2, "status": "WARNING"},
+        "object_status": "WARNING",
+        "timestamp": now.isoformat(),
+        "last_seen": now.strftime("%H:%M:%S UTC"),
+        "time_diff_seconds": 999.0,
+        "thresholds": get_current_thresholds(),
+        "lan_ips": lan_list,
+        "recommended_url": rec_url
+    }
+
+
+def process_incoming_sensor_data(db: Session, data: IoTSensorDataCreate) -> Dict[str, Any]:
+    """
+    Processes incoming sensor telemetry from ESP8266 or ESP32:
+    - Validates / re-classifies scan points
+    - Computes nearest object and overall alert status
+    - Upserts device registration in DB
+    - Stores historical reading in DB
+    - Updates in-memory fast cache
+    """
+    now = datetime.now(timezone.utc)
+
+    # 1. Normalize, sanitize and re-classify scan points with current thresholds
+    processed_scan: List[Dict[str, Any]] = []
+    for pt in data.scan:
+        raw_dist = pt.distance
+        # Safe cleanup: treat negative distance or > 450cm as no echo
+        if raw_dist is not None and (raw_dist <= 0.0 or raw_dist > 450.0):
+            clean_dist = None
+        else:
+            clean_dist = round(float(raw_dist), 1) if raw_dist is not None else None
+
+        det, st = classify_distance(clean_dist)
+        processed_scan.append({
+            "angle": int(pt.angle),
+            "distance": clean_dist,
+            "object_detected": det,
+            "status": st
+        })
+
+    # 2. Calculate nearest obstacle
+    nearest_obj, overall_status = calculate_nearest_object(processed_scan)
+    if not nearest_obj and data.water_distance_cm is not None and data.water_distance_cm > 0:
+        det, st = classify_distance(data.water_distance_cm)
+        nearest_obj = {
+            "angle": 90,
+            "distance": round(float(data.water_distance_cm), 1),
+            "status": st
+        }
+        overall_status = st
+
+    # 3. Upsert device in DB
+    device = db.query(IoTDevice).filter(IoTDevice.device_id == data.device_id).first()
+    if not device:
+        device = IoTDevice(
+            device_id=data.device_id,
+            controller_type=data.controller_type or "ESP32",
+            name=f"MAITRI {data.controller_type or 'ESP'} Node",
+            is_active=True,
+            last_seen=now,
+            created_at=now
+        )
+        db.add(device)
+    else:
+        device.controller_type = data.controller_type or device.controller_type
+        device.last_seen = now
+        device.is_active = True
+
+    # 4. Save reading to DB
+    reading = IoTSensorReading(
+        device_id=data.device_id,
+        controller_type=data.controller_type or "ESP32",
+        timestamp=now,
+        temperature=round(float(data.temperature), 1) if data.temperature is not None else None,
+        humidity=round(float(data.humidity), 1) if data.humidity is not None else None,
+        soil_moisture=round(float(data.soil_moisture), 1) if data.soil_moisture is not None else None,
+        water_distance_cm=round(float(data.water_distance_cm), 1) if data.water_distance_cm is not None else None,
+        scan_json=json.dumps(processed_scan),
+        nearest_distance=nearest_obj["distance"] if nearest_obj else None,
+        nearest_angle=nearest_obj["angle"] if nearest_obj else None,
+        object_status=overall_status,
+        created_at=now
+    )
+    db.add(reading)
+    db.commit()
+
+    lan_list, rec_url = get_host_lan_ips()
+
+    # 5. Build telemetry payload
+    telemetry = {
+        "device_id": data.device_id,
+        "controller_type": data.controller_type or "ESP32",
+        "status": "ONLINE",
+        "is_online": True,
+        "temperature": reading.temperature,
+        "humidity": reading.humidity,
+        "soil_moisture": reading.soil_moisture,
+        "water_distance_cm": reading.water_distance_cm,
+        "scan": processed_scan,
+        "nearest_object": nearest_obj,
+        "object_status": overall_status,
+        "timestamp": now.isoformat(),
+        "last_seen": now.strftime("%H:%M:%S UTC"),
+        "time_diff_seconds": 0.0,
+        "thresholds": get_current_thresholds(),
+        "lan_ips": lan_list,
+        "recommended_url": rec_url
+    }
+
+    # 6. Update in-memory cache
+    global _latest_overall
+    _latest_telemetry[data.device_id] = telemetry
+    _latest_overall = telemetry
+
+    return telemetry
+
+
+def get_latest_telemetry(db: Session, device_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Returns the latest sensor reading and live status for the requested device
+    (or any active device if none specified).
+    """
+    now = datetime.now(timezone.utc)
+    timeout_sec = _current_thresholds["offline_timeout_seconds"]
+    lan_list, rec_url = get_host_lan_ips()
+
+    # Try in-memory cache first
+    target_telemetry = None
+    if device_id and device_id in _latest_telemetry:
+        target_telemetry = _latest_telemetry[device_id]
+    elif not device_id and _latest_overall:
+        target_telemetry = _latest_overall
+
+    if target_telemetry:
+        # Check online / offline based on timestamp
+        try:
+            reading_time = datetime.fromisoformat(target_telemetry["timestamp"])
+            diff_sec = max(0.0, (now - reading_time).total_seconds())
+        except Exception:
+            diff_sec = 0.0
+
+        is_online = diff_sec <= timeout_sec
+        target_telemetry["time_diff_seconds"] = round(diff_sec, 1)
+        target_telemetry["is_online"] = is_online
+        target_telemetry["status"] = "ONLINE" if is_online else "OFFLINE"
+        target_telemetry["thresholds"] = get_current_thresholds()
+        target_telemetry["lan_ips"] = lan_list
+        target_telemetry["recommended_url"] = rec_url
+        return target_telemetry
+
+    # If not in cache, query DB
+    query = db.query(IoTSensorReading)
+    if device_id:
+        query = query.filter(IoTSensorReading.device_id == device_id)
+    last_reading = query.order_by(desc(IoTSensorReading.timestamp)).first()
+
+    if last_reading:
+        try:
+            scan_points = json.loads(last_reading.scan_json or "[]")
+        except Exception:
+            scan_points = []
+
+        nearest_obj = None
+        if last_reading.nearest_distance is not None and last_reading.nearest_angle is not None:
+            nearest_obj = {
+                "angle": last_reading.nearest_angle,
+                "distance": last_reading.nearest_distance,
+                "status": last_reading.object_status or "CLEAR"
+            }
+
+        diff_sec = max(0.0, (now - last_reading.timestamp.replace(tzinfo=timezone.utc if last_reading.timestamp.tzinfo is None else None)).total_seconds())
+        is_online = diff_sec <= timeout_sec
+
+        result = {
+            "device_id": last_reading.device_id,
+            "controller_type": last_reading.controller_type or "ESP8266",
+            "status": "ONLINE" if is_online else "OFFLINE",
+            "is_online": is_online,
+            "temperature": last_reading.temperature,
+            "humidity": last_reading.humidity,
+            "soil_moisture": last_reading.soil_moisture,
+            "water_distance_cm": getattr(last_reading, "water_distance_cm", None),
+            "scan": scan_points,
+            "nearest_object": nearest_obj,
+            "object_status": last_reading.object_status or "CLEAR",
+            "timestamp": last_reading.timestamp.isoformat(),
+            "last_seen": last_reading.timestamp.strftime("%H:%M:%S UTC"),
+            "time_diff_seconds": round(diff_sec, 1),
+            "thresholds": get_current_thresholds(),
+            "lan_ips": lan_list,
+            "recommended_url": rec_url
+        }
+        return result
+
+    # Fallback to demo default prototype so frontend renders cleanly
+    return get_default_demo_telemetry(
+        device_id=device_id or "MAITRI_ESP32_01",
+        controller_type="ESP32" if not device_id or "32" in device_id else "ESP8266"
+    )
+
+
+def list_registered_devices(db: Session) -> List[Dict[str, Any]]:
+    """
+    Returns list of all known IoT devices with online/offline status.
+    """
+    now = datetime.now(timezone.utc)
+    timeout_sec = _current_thresholds["offline_timeout_seconds"]
+
+    devices = db.query(IoTDevice).order_by(desc(IoTDevice.last_seen)).all()
+    results = []
+
+    # If no devices in DB, provide standard defaults
+    if not devices:
+        return [
+            {
+                "device_id": "MAITRI_ESP32_01",
+                "controller_type": "ESP32",
+                "name": "MAITRI ESP32 Node",
+                "status": "OFFLINE",
+                "is_online": False,
+                "last_seen": "Never",
+                "time_diff_seconds": 999.0,
+                "latest_temperature": None,
+                "latest_humidity": None,
+                "latest_soil_moisture": None
+            }
+        ]
+
+    for d in devices:
+        last_seen_aware = d.last_seen.replace(tzinfo=timezone.utc if d.last_seen.tzinfo is None else None)
+        diff_sec = max(0.0, (now - last_seen_aware).total_seconds())
+        is_online = diff_sec <= timeout_sec
+
+        # Fetch latest reading values
+        latest_r = db.query(IoTSensorReading).filter(IoTSensorReading.device_id == d.device_id).order_by(desc(IoTSensorReading.timestamp)).first()
+
+        results.append({
+            "device_id": d.device_id,
+            "controller_type": d.controller_type or "ESP8266",
+            "name": d.name or f"MAITRI {d.controller_type} Node",
+            "status": "ONLINE" if is_online else "OFFLINE",
+            "is_online": is_online,
+            "last_seen": d.last_seen.strftime("%H:%M:%S UTC"),
+            "time_diff_seconds": round(diff_sec, 1),
+            "latest_temperature": latest_r.temperature if latest_r else None,
+            "latest_humidity": latest_r.humidity if latest_r else None,
+            "latest_soil_moisture": latest_r.soil_moisture if latest_r else None
+        })
+
+    return results
+
+
+def get_telemetry_history(db: Session, device_id: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
+    """
+    Returns recent historical readings for telemetry graphs.
+    """
+    query = db.query(IoTSensorReading)
+    if device_id:
+        query = query.filter(IoTSensorReading.device_id == device_id)
+    readings = query.order_by(desc(IoTSensorReading.timestamp)).limit(limit).all()
+
+    results = []
+    for r in reversed(readings):
+        results.append({
+            "id": r.id,
+            "device_id": r.device_id,
+            "controller_type": r.controller_type,
+            "timestamp": r.timestamp.isoformat(),
+            "time": r.timestamp.strftime("%H:%M:%S"),
+            "temperature": r.temperature,
+            "humidity": r.humidity,
+            "soil_moisture": r.soil_moisture,
+            "water_distance_cm": getattr(r, "water_distance_cm", None),
+            "nearest_distance": r.nearest_distance,
+            "nearest_angle": r.nearest_angle,
+            "object_status": r.object_status
+        })
+
+    return results
+
+
+def generate_simulation_payload(device_id: str = "MAITRI_ESP8266_01", controller_type: str = "ESP8266") -> IoTSensorDataCreate:
+    """
+    Generates a dynamic radar sweep and sensor readings for live demo testing.
+    """
+    # Simulate an obstacle oscillating around 60° to 100° at distance 25 to 45 cm
+    t = datetime.now().timestamp()
+    obstacle_angle = int(60 + 40 * (0.5 + 0.5 * math.sin(t / 4.0)))
+    obstacle_dist = round(32.0 + 15.0 * (0.5 + 0.5 * math.cos(t / 3.0)), 1)
+
+    angles = list(range(20, 161, 10))
+    scan = []
+    for a in angles:
+        # Distance calculation with falloff around obstacle
+        angle_diff = abs(a - obstacle_angle)
+        if angle_diff <= 15:
+            d = round(obstacle_dist + angle_diff * 2.5, 1)
+        elif a in (30, 40) and random.random() > 0.6:
+            d = round(75.0 + random.uniform(-5, 10), 1)
+        else:
+            d = round(120.0 + random.uniform(5, 40), 1)
+
+        det, st = classify_distance(d)
+        scan.append(RadarScanPoint(
+            angle=a,
+            distance=d,
+            object_detected=det,
+            status=st
+        ))
+
+    temp = round(28.2 + 1.2 * math.sin(t / 10.0), 1)
+    hum = round(66.5 + 2.0 * math.cos(t / 12.0), 1)
+    soil = round(44.0 + 3.0 * math.sin(t / 15.0), 1)
+
+    return IoTSensorDataCreate(
+        device_id=device_id,
+        controller_type=controller_type,
+        temperature=temp,
+        humidity=hum,
+        soil_moisture=soil,
+        scan=scan
+    )
