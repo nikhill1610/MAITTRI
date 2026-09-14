@@ -1,0 +1,32 @@
+[
+  {
+    "topic": "Nitrogen (N) & Urea Management",
+    "hindi_topic": "नाइट्रोजन एवं यूरिया प्रबंधन",
+    "details": "Nitrogen promotes vegetative growth, dark green foliage, and protein synthesis. Deficiency causes generalized yellowing (chlorosis) starting from older lower leaves. Never apply entire Urea at sowing because of leaching and volatilization losses. Use neem-coated urea and apply in 2-3 split doses coinciding with irrigation.",
+    "tips": "Foliar spray of 2% Urea solution provides rapid greening during active tillering/vegetative stages if yellowing is due to nitrogen starvation."
+  },
+  {
+    "topic": "Phosphorus (P) & DAP / SSP",
+    "hindi_topic": "फॉस्फोरस एवं डीएपी / एसएसपी",
+    "details": "Phosphorus stimulates root elongation, vigorous early seedling growth, and grain development. Deficiency results in purplish or dark bronze discoloration along leaf margins and stunted root systems. Phosphorus is immobile in soil; always place DAP or Single Super Phosphate (SSP) 4-5 cm below and beside seed during sowing (basal dose).",
+    "tips": "For oilseeds and pulses, SSP is preferred over DAP because SSP also contains 11-12% Sulphur and 19-21% Calcium."
+  },
+  {
+    "topic": "Potassium (K) & MOP",
+    "hindi_topic": "पोटाश (MOP) एवं रोग प्रतिरोधक क्षमता",
+    "details": "Potassium regulates stomatal movement, water use efficiency, lodging resistance, and disease defense. Deficiency shows scorching or burnt appearance along leaf margins of older leaves. Muriate of Potash (MOP / 0-0-60) is applied basally at sowing.",
+    "tips": "Avoid MOP for chloride-sensitive crops like tobacco and potato seed tubers; use Sulphate of Potash (SOP) instead."
+  },
+  {
+    "topic": "Micronutrients: Zinc, Iron & Sulphur",
+    "hindi_topic": "सूक्ष्म पोषक तत्व (जिंक, लोहा, गंधक)",
+    "details": "Zinc deficiency causes khaira disease in paddy (chlorotic patches between veins turning rusty brown) and white bud in maize. Rectified by soil application of 25 kg/ha Zinc Sulphate (21% Zn) or foliar spray of 0.5% Zinc Sulphate + 0.25% Lime. Iron deficiency causes ivory-white bleaching of young top leaves in calcareous or high pH soils.",
+    "tips": "Do not mix Zinc Sulphate directly with DAP in the same spray tank as insoluble Zinc Phosphate precipitates."
+  },
+  {
+    "topic": "Soil pH & Salinity Management",
+    "hindi_topic": "मृदा पीएच एवं क्षारीयता सुधार",
+    "details": "Optimum crop soil pH is 6.5-7.5. Acidic soils (pH < 6.0) fix phosphorus and require agricultural lime or dolomite application. Alkaline/Sodic soils (pH > 8.5) contain excess exchangeable sodium and require agricultural Gypsum (calcium sulphate) followed by leaching with clean water.",
+    "tips": "Adding organic farmyard manure (FYM), compost, or green manuring (Dhaincha/Sunhemp) buffers both acidic and alkaline soils."
+  }
+]

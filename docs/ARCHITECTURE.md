@@ -164,3 +164,24 @@ Only an approved registry version may serve user requests. The application does 
 3. **Evaluation pilot:** only after ethics/privacy approval where needed; monitored, scoped users, immutable evaluation configuration.
 4. **Public pilot:** outside the final-year MVP unless safety, privacy, operations, and agronomic governance are independently approved.
 
+## 13. Production Authoritative Architecture & Legacy Retirement (Phase 6)
+
+### 13.1 Authoritative Production Infrastructure
+As of Phase 6 cutover, **Supabase PostgreSQL and pgvector** serve as the sole authoritative production data layer for MAITTRI:
+- **Authoritative Database:** Supabase PostgreSQL (`aws-0-ap-south-1.pooler.supabase.com:5432`).
+- **Semantic RAG Engine:** Supabase `pgvector` invoking `private.match_knowledge_chunks` (384-dimensional `all-MiniLM-L6-v2` dense embeddings, HNSW index, cosine distance, isolated in `private` schema with `SET search_path = ''`).
+- **Identity & Auth:** Supabase GoTrue Auth (`auth.users`) synchronized 1-to-1 with `public.profiles` using cryptographic UUID identifiers. Argon2id password hashes are preserved.
+- **Document Vault:** Supabase Storage private bucket `farmer-vault` enforcing user path isolation (`{user_id}/{filename}`).
+- **Chatbot Context:** Zero permanent storage of chatbot queries, responses, or chain-of-thought in PostgreSQL (0 `chat_sessions`, 0 `chat_messages` tables). State remains strictly client/browser-bounded.
+- **Production Guard:** Zero silent fallback to SQLite or ChromaDB in production (`ENVIRONMENT=production`). Database failure yields explicit HTTP 503/500 errors.
+
+### 13.2 Legacy Retirement & Archive Locations
+Legacy data stores have been retired from active application execution and moved into immutable archive locations:
+- **Live SQLite Archive:** `backups/archived_legacy_sqlite/agri.db` (SHA-256: `41ad617ce3cd5fcb39367c07961352a6305334b781d938941badab8cd8978b19`)
+- **Root Legacy SQLite Archive:** `backups/archived_legacy_sqlite/root_agri.db` (SHA-256: `3e4b36fa3976c704151044b6a7c1ca6cb9a2037f69f4410025f5acebeeea2127`)
+- **Live ChromaDB Archive:** `backups/archived_legacy_chroma/vector_store/`
+- **Pristine Migration Backup (Permanently Untouched & Preserved):**
+  - `backups/pre_migration_backup/agri.db` (SHA-256: `dd2b616106ae3ce57d6185331621bade39beadd8910a3a9b31e0b52c6985dd2c`)
+  - `backups/pre_migration_backup/vector_store/`
+
+

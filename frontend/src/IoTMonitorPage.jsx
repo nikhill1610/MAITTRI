@@ -164,11 +164,11 @@ export default function IoTMonitorPage() {
       case "VERY CLOSE":
         return <span className="iotBadge critical"><ShieldAlert size={14} /> {lang === "hi" ? "अत्यधिक निकट" : "VERY CLOSE"}</span>;
       case "WARNING":
-        return <span className="iotBadge warning"><AlertTriangle size={14} /> {lang === "hi" ? "चेतावनी (Warning)" : "WARNING"}</span>;
+        return <span className="iotBadge warning"><AlertTriangle size={14} /> {lang === "hi" ? "चेतावनी" : "WARNING"}</span>;
       case "OBJECT DETECTED":
         return <span className="iotBadge detected"><Target size={14} /> {lang === "hi" ? "वस्तु पहचानी गई" : "OBJECT DETECTED"}</span>;
       case "CLEAR":
-        return <span className="iotBadge clear"><ShieldCheck size={14} /> {lang === "hi" ? "सुरक्षित (Clear)" : "CLEAR"}</span>;
+        return <span className="iotBadge clear"><ShieldCheck size={14} /> {lang === "hi" ? "सुरक्षित" : "CLEAR"}</span>;
       default:
         return <span className="iotBadge none"><Info size={14} /> {lang === "hi" ? "कोई रीडिंग नहीं" : "NO READING"}</span>;
     }
@@ -424,7 +424,7 @@ export default function IoTMonitorPage() {
           </div>
 
           <div className="iotTroubleshootSteps">
-            <strong>{lang === "hi" ? "त्वरित सेटअप चरण (Arduino IDE):" : "3-Step Setup in Arduino IDE:"}</strong>
+            <strong>{lang === "hi" ? "त्वरित सेटअप चरण:" : "3-Step Setup in Arduino IDE:"}</strong>
             <ol>
               <li>
                 {lang === "hi" ? (

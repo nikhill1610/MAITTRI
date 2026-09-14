@@ -119,7 +119,7 @@ export default function InsurancePlanningPage() {
           <h1>{lang === "hi" ? "कृषि बीमा योजना एवं निर्णय-सहायता" : "Agricultural Insurance Planning"}</h1>
           <p>
             {lang === "hi"
-              ? "अपनी फसल, राज्य और मौसम के अनुसार सरकारी फसल बीमा (PMFBY), प्रीमियम दर, 72 घंटे की क्लेम प्रक्रिया और आवश्यक दस्तावेजों की विस्तृत जानकारी।"
+              ? "अपनी फसल, राज्य और मौसम के अनुसार प्रधानमंत्री फसल बीमा योजना, प्रीमियम दर, 72 घंटे की क्लेम प्रक्रिया और आवश्यक दस्तावेजों की विस्तृत जानकारी।"
               : "Intelligent decision-support for PMFBY, statutory farmer premium caps, 72-hour claim notification workflow, and document checklists tailored to your crop and land."}
           </p>
         </div>
@@ -212,7 +212,7 @@ export default function InsurancePlanningPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "राज्य (State)" : "State"}</label>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "राज्य" : "State"}</label>
             <input
               type="text"
               value={stateName}
@@ -222,7 +222,7 @@ export default function InsurancePlanningPage() {
           </div>
 
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "जिला (District)" : "District"}</label>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "जिला" : "District"}</label>
             <input
               type="text"
               value={district}
@@ -232,7 +232,7 @@ export default function InsurancePlanningPage() {
           </div>
 
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "फसल (Crop)" : "Crop"}</label>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "फसल" : "Crop"}</label>
             <input
               type="text"
               value={crop}
@@ -242,21 +242,21 @@ export default function InsurancePlanningPage() {
           </div>
 
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "मौसम (Season)" : "Season"}</label>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "मौसम" : "Season"}</label>
             <select
               value={season}
               onChange={e => setSeason(e.target.value)}
               style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", marginTop: "4px" }}
             >
-              <option value="rabi">{lang === "hi" ? "रबी (Rabi)" : "Rabi"}</option>
-              <option value="kharif">{lang === "hi" ? "खरीफ (Kharif)" : "Kharif"}</option>
-              <option value="zaid">{lang === "hi" ? "जायद (Zaid)" : "Zaid"}</option>
-              <option value="commercial">{lang === "hi" ? "वार्षिक / व्यावसायिक (Commercial)" : "Annual Commercial"}</option>
+              <option value="rabi">{lang === "hi" ? "रबी" : "Rabi"}</option>
+              <option value="kharif">{lang === "hi" ? "खरीफ" : "Kharif"}</option>
+              <option value="zaid">{lang === "hi" ? "जायद" : "Zaid"}</option>
+              <option value="commercial">{lang === "hi" ? "वार्षिक / व्यावसायिक" : "Annual Commercial"}</option>
             </select>
           </div>
 
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "खेत का क्षेत्रफल (Acres)" : "Farm Area (Acres)"}</label>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "खेत का क्षेत्रफल (एकड़)" : "Farm Area (Acres)"}</label>
             <input
               type="number"
               step="0.1"
@@ -267,14 +267,14 @@ export default function InsurancePlanningPage() {
           </div>
 
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "भू-स्वामित्व (Land Type)" : "Land Ownership"}</label>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>{lang === "hi" ? "भू-स्वामित्व" : "Land Ownership"}</label>
             <select
               value={farmType}
               onChange={e => setFarmType(e.target.value)}
               style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", marginTop: "4px" }}
             >
-              <option value="Owner">{lang === "hi" ? "भूमि स्वामी (Owner Cultivator)" : "Owner Cultivator"}</option>
-              <option value="Tenant">{lang === "hi" ? "बटाईदार / पट्टेदार (Tenant / Sharecropper)" : "Tenant / Sharecropper"}</option>
+              <option value="Owner">{lang === "hi" ? "भूमि स्वामी" : "Owner Cultivator"}</option>
+              <option value="Tenant">{lang === "hi" ? "बटाईदार / पट्टेदार" : "Tenant / Sharecropper"}</option>
             </select>
           </div>
         </div>
@@ -451,7 +451,7 @@ export default function InsurancePlanningPage() {
           {/* SECTION J: REQUIRED DOCUMENTS CHECKLIST */}
           <div className="card" style={{ marginBottom: "24px" }}>
             <h2 style={{ fontSize: "18px", margin: "0 0 8px 0", color: "#1e293b" }}>
-              <span>[J]</span> {lang === "hi" ? "आवश्यक दस्तावेज चेकलिस्ट (Dynamic Checklist)" : "Required Documents Checklist"}
+              <span>[J]</span> {lang === "hi" ? "आवश्यक दस्तावेज चेकलिस्ट" : "Required Documents Checklist"}
             </h2>
             <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 16px 0" }}>
               {analysis.section_J_required_documents.document_rule_disclaimer}
@@ -511,8 +511,8 @@ export default function InsurancePlanningPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", textAlign: "left" }}>
                 <thead>
                   <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #cbd5e1" }}>
-                    <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "योजना (Scheme)" : "Scheme"}</th>
-                    <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "मूल स्वरूप (Model)" : "Model"}</th>
+                    <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "योजना" : "Scheme"}</th>
+                    <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "मूल स्वरूप" : "Model"}</th>
                     <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "किसान प्रीमियम" : "Farmer Premium"}</th>
                     <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "क्लेम निपटान आधार" : "Claim Settlement Basis"}</th>
                     <th style={{ padding: "10px 12px", color: "#334155" }}>{lang === "hi" ? "सूचना समय-सीमा" : "Intimation Deadline"}</th>
@@ -536,7 +536,7 @@ export default function InsurancePlanningPage() {
           {/* PERSONALIZED ACTION PLAN */}
           <div className="card" style={{ background: "#f8fafc", border: "1px solid #cbd5e1", marginBottom: "24px" }}>
             <h3 style={{ fontSize: "16px", margin: "0 0 12px 0", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span>🚀</span> {lang === "hi" ? "मैत्री किसान कार्ययोजना (Personalized Action Plan)" : "MAITTRI Action Plan"}
+              <span>🚀</span> {lang === "hi" ? "मैत्री किसान कार्ययोजना" : "MAITTRI Action Plan"}
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {analysis.maittri_action_plan.map((step, idx) => (

@@ -1,8 +1,9 @@
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from app.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Device-Token": "test-iot-preshared-token-12345"})
 
 
 def test_get_iot_latest_default():
@@ -199,12 +200,13 @@ def test_config_endpoints():
 
 def test_simulate_endpoint():
     """Verify POST /api/iot/simulate returns complete synthetic radar sweep."""
-    response = client.post("/api/iot/simulate?device_id=MAITRI_SIM_NODE&controller_type=ESP32")
-    assert response.status_code == 200
-    res_data = response.json()
-    assert res_data["status"] == "success"
-    telemetry = res_data["data"]
-    assert telemetry["device_id"] == "MAITRI_SIM_NODE"
-    assert telemetry["controller_type"] == "ESP32"
-    assert len(telemetry["scan"]) == 15  # 20° to 160° in steps of 10°
-    assert telemetry["is_online"] is True
+    with patch.dict("os.environ", {"ENVIRONMENT": "development"}):
+        response = client.post("/api/iot/simulate?device_id=MAITRI_SIM_NODE&controller_type=ESP32")
+        assert response.status_code == 200
+        res_data = response.json()
+        assert res_data["status"] == "success"
+        telemetry = res_data["data"]
+        assert telemetry["device_id"] == "MAITRI_SIM_NODE"
+        assert telemetry["controller_type"] == "ESP32"
+        assert len(telemetry["scan"]) == 15  # 20° to 160° in steps of 10°
+        assert telemetry["is_online"] is True

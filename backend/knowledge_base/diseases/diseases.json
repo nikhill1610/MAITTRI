@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Yellow Rust (Stripe Rust) in Wheat",
+    "hindi_name": "गेहूं का पीला रतुआ",
+    "crops": ["Wheat"],
+    "symptoms": "Bright yellow pustules forming parallel narrow stripes along leaf veins. Dust rubs off on fingers as yellow powder. Thrives in cool (10-15°C) and moist/humid weather.",
+    "management": "Consult KVK / local agricultural officer immediately. Propiconazole 25% EC (1 ml/litre) or Tebuconazole 25.9% EC is commonly recommended by universities upon initial detection at ETL. Spray on calm days.",
+    "precautions": "Do not delay spraying once stripes are seen. Grow resistant varieties like HD-2967, HD-3086, DBW-187, DBW-222."
+  },
+  {
+    "name": "Leaf Blast in Rice",
+    "hindi_name": "धान का झुलसा / ब्लास्ट रोग",
+    "crops": ["Rice"],
+    "symptoms": "Spindle-shaped or diamond-shaped lesions with ash-grey centers and brownish-red borders on leaves. Lesions coalesce and kill the leaf blade.",
+    "management": "Avoid excess nitrogen fertilizer application. Recommended treatments include Tricyclazole 75% WP (0.6 g/litre) or Isoprothiolane 40% EC at first appearance.",
+    "precautions": "Drain standing water temporarily and maintain balanced potassium nutrition."
+  },
+  {
+    "name": "Aphids in Mustard",
+    "hindi_name": "सरसों का चेपा / माहू",
+    "crops": ["Mustard"],
+    "symptoms": "Tiny green or brown soft-bodied insects clustering in large colonies on growing tips, flowers, and developing pods. Excrete sticky honeydew causing sooty mold.",
+    "management": "Early sowing before Oct 20 reduces infestation. For biological control, encourage ladybird beetles. For chemical control at ETL (15-20 aphids/plant), Dimethoate 30% EC or Thiamethoxam 25% WG under KVK guidance.",
+    "precautions": "Spray during late afternoon to protect honeybee pollinators."
+  },
+  {
+    "name": "Late Blight in Potato and Tomato",
+    "hindi_name": "आलू / टमाटर का पछेती झुलसा",
+    "crops": ["Potato", "Tomato"],
+    "symptoms": "Water-soaked irregular blackish-brown spots on leaf tips and margins. White cottony fungal growth visible on underside of leaves in morning under high humidity (>90%) and cool weather (12-18°C).",
+    "management": "Prophylactic spray of Mancozeb 75% WP (2-2.5 g/litre) before disease onset. After symptoms appear, systemic fungicides like Metalaxyl + Mancozeb (2 g/litre) or Cymoxanil + Mancozeb.",
+    "precautions": "Avoid overhead sprinkler irrigation; burn or bury infected haulms."
+  },
+  {
+    "name": "Fall Armyworm in Maize",
+    "hindi_name": "मक्के का फॉल आर्मीवर्म",
+    "crops": ["Maize"],
+    "symptoms": "Pinholes in young leaves, skeletonized leaf whorls, large chunks eaten, accompanied by coarse brown fecal pellets (frass) inside leaf whorls.",
+    "management": "Apply dry sand or neem cake (5 g/plant) inside whorls in early stages. Biological: Bacillus thuringiensis (Bt) or Metarhizium anisopliae. Chemical: Emamectin Benzoate 5% SG (0.4 g/litre) or Chlorantraniliprole 18.5% SC directed into the whorl.",
+    "precautions": "Use pheromone traps (5/acre) for monitoring."
+  }
+]

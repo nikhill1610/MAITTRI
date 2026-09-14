@@ -24,9 +24,10 @@ from app.services.farmer_planning_service import (
 
 client = TestClient(app)
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def setup_db():
-    Base.metadata.create_all(bind=engine)
+    if engine.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
     yield
 
 
@@ -87,15 +88,18 @@ def test_api_crop_calendar_endpoints():
     assert invalid.status_code in [200, 404]
 
 
+import uuid
+
 def test_farmer_plan_flow_with_farm():
     # 1. Register a user & create a farm
-    email = f"farmer_{date.today().isoformat()}@maittri.com"
+    email = f"farmer_{date.today().isoformat()}_{uuid.uuid4().hex[:6]}@maittri.com"
     reg_res = client.post("/api/auth/register", json={
         "email": email,
         "password": "FarmerPassword123",
         "language": "hi"
     })
     token = reg_res.json().get("access_token")
+
     if not token:
         # If already registered, login
         login_res = client.post("/api/auth/login", json={

@@ -907,6 +907,18 @@ def get_farm_diary_history(db: Session, farm_plan_id: int) -> List[Dict[str, Any
     ).order_by(desc(FarmPlanCompletion.completed_at)).all()
 
     records = []
+    def _safe_json_load(val):
+        if val is None:
+            return None
+        if isinstance(val, (dict, list)):
+            return val
+        if isinstance(val, (str, bytes)):
+            try:
+                return json.loads(val)
+            except Exception:
+                return None
+        return None
+
     for c in completions:
         records.append({
             "id": c.id,
@@ -919,7 +931,8 @@ def get_farm_diary_history(db: Session, farm_plan_id: int) -> List[Dict[str, Any
             "completed_at": c.completed_at.isoformat() if c.completed_at else None,
             "completed_at_display": c.completed_at.strftime("%d/%m/%Y %I:%M %p") if c.completed_at else c.completion_date,
             "farmer_notes": c.farmer_notes,
-            "sensor_snapshot": json.loads(c.sensor_snapshot_json) if c.sensor_snapshot_json else None,
-            "weather_snapshot": json.loads(c.weather_snapshot_json) if c.weather_snapshot_json else None
+            "sensor_snapshot": _safe_json_load(c.sensor_snapshot_json),
+            "weather_snapshot": _safe_json_load(c.weather_snapshot_json)
         })
     return records
+

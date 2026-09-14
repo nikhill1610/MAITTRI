@@ -1,0 +1,18 @@
+[
+  {
+    "topic": "Soil Moisture Thresholds & Sensor Guidelines",
+    "hindi_topic": "मृदा नमी स्तर एवं सिंचाई समय",
+    "guidelines": "For most field crops, optimal soil moisture is 50-70% of Field Capacity. If capacitive/resistive sensor reads below 30-35% moisture in the root zone, light irrigation should be initiated. For loamy soil, moisture levels between 40-60% ensure active root respiration without anaerobic waterlogging.",
+    "precautions": "Avoid heavy flood irrigation before forecasted rainfall to prevent root rot and lodging."
+  },
+  {
+    "topic": "Critical Irrigation Stages by Crop",
+    "hindi_topic": "फसलों में सिंचाई की प्रमुख अवस्थाएं",
+    "stages": "Wheat: Crown root initiation (20-25 days), flowering (80-85 days). Mustard: Rosette stage (30 days) and siliquae formation (60 days). Gram/Pulses: Pre-flowering and pod development (DO NOT irrigate during peak flowering as flowers drop). Rice: Tillering to grain filling. Potato: Tuber initiation and tuber bulking."
+  },
+  {
+    "topic": "Micro-Irrigation (Drip & Sprinkler)",
+    "hindi_topic": "ड्रिप एवं स्प्रिंकलर सिंचाई",
+    "benefits": "Drip irrigation delivers 90%+ water use efficiency with 30-40% fertilizer savings through fertigation. Sprinkler irrigation is ideal for closely spaced crops like mustard, wheat, and pulses on undulating terrain. PMKSY scheme offers up to 55% subsidy for small/marginal farmers."
+  }
+]

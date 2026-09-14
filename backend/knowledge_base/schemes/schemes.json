@@ -1,0 +1,25 @@
+[
+  {
+    "scheme": "PM-KISAN (Pradhan Mantri Kisan Samman Nidhi)",
+    "hindi_name": "पीएम-किसान सम्मान निधि योजना",
+    "benefit": "Financial income support of ₹6,000 per year in three equal 4-monthly installments of ₹2,000 directly transferred into the Aadhaar-linked bank accounts of landholding farmer families.",
+    "eligibility": "All landholding farmer families with cultivable land in their names. Requires e-KYC, Aadhaar seeded bank account, and land seeding."
+  },
+  {
+    "scheme": "PMFBY (Pradhan Mantri Fasal Bima Yojana)",
+    "hindi_name": "प्रधानमंत्री फसल बीमा योजना",
+    "benefit": "Comprehensive crop loss insurance coverage from pre-sowing to post-harvest against non-preventable natural risks (drought, flood, unseasonal rainfall, hailstorm, pest epidemics).",
+    "premium_rates": "Farmer pays minimal premium: maximum 2% of sum insured for Kharif food and oilseed crops, 1.5% for Rabi crops, and 5% for annual commercial/horticultural crops. Remaining actuarial premium is subsidized equally by Central and State Governments.",
+    "claim_procedure": "In case of localized disaster or post-harvest loss, farmer must report within 72 hours via Crop Insurance App, toll-free helpline, or bank/agriculture office."
+  },
+  {
+    "scheme": "Soil Health Card Scheme",
+    "hindi_name": "मृदा स्वास्थ्य कार्ड योजना",
+    "benefit": "Provides farmers with crop-wise nutrient status and dosage recommendations for 12 parameters (N, P, K, S, Zn, Fe, Cu, Mn, Bo, pH, EC, OC) every 3 years to curb over-fertilization."
+  },
+  {
+    "scheme": "PMKSY (Per Drop More Crop - Micro Irrigation)",
+    "hindi_name": "प्रधानमंत्री कृषि सिंचाई योजना",
+    "benefit": "Capital subsidy (up to 55% for small/marginal farmers, 45% for other farmers) for installation of Drip and Sprinkler irrigation systems."
+  }
+]

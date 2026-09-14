@@ -1,22 +1,79 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.types import CHAR, TypeDecorator
 from datetime import datetime, timezone
 from .database import Base
 
 def utcnow():
     return datetime.now(timezone.utc)
 
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    Uses PostgreSQL's UUID type (as string), otherwise uses CHAR(36).
+    """
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        val_str = str(value)
+        try:
+            import uuid as _u
+            return str(_u.UUID(val_str))
+        except (ValueError, AttributeError):
+            import uuid as _u
+            return str(_u.uuid5(_u.NAMESPACE_OID, val_str))
+
+    def process_result_value(self, value, dialect):
+        return str(value) if value is not None else None
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    role = Column(String(50), default="FARMER", index=True)  # FARMER, AUTHORIZED_OPERATOR
+    full_name = Column(String(120), nullable=True)
+    phone_number = Column(String(20), nullable=True, index=True)
     language = Column(String(10), default="en")
     created_at = Column(DateTime, default=utcnow)
+
+class Profile(Base):
+    __tablename__ = "profiles"
+    id = Column(GUID, primary_key=True)
+    role = Column(String(50), default="FARMER", index=True)
+    full_name = Column(String(120), nullable=True)
+    phone_number = Column(String(20), nullable=True)
+    preferred_language = Column(String(10), default="hi")
+    state = Column(String(80), nullable=True)
+    district = Column(String(80), nullable=True)
+    avatar_url = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    @property
+    def language(self):
+        return self.preferred_language
+
+    @property
+    def email(self):
+        return getattr(self, "_email", None)
+
+    @email.setter
+    def email(self, value):
+        self._email = value
 
 class Farm(Base):
     __tablename__ = "farms"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(GUID, nullable=False, index=True)
+    farmer_id = Column(Integer, nullable=True, index=True)
     name = Column(String(120), default="My Farm")
     latitude = Column(Float)
     longitude = Column(Float)
@@ -40,12 +97,36 @@ class Farm(Base):
     organic_carbon = Column(Float)
     sowing_date = Column(String(40), nullable=True)
     created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    @property
+    def size_acres(self):
+        return self.area
+
+    @size_acres.setter
+    def size_acres(self, value):
+        self.area = value
+
+    @property
+    def crop(self):
+        return self.current_crop
+
+    @crop.setter
+    def crop(self, value):
+        self.current_crop = value
+
+    def __init__(self, **kwargs):
+        if "size_acres" in kwargs and "area" not in kwargs:
+            kwargs["area"] = kwargs.pop("size_acres")
+        if "crop" in kwargs and "current_crop" not in kwargs:
+            kwargs["current_crop"] = kwargs.pop("crop")
+        super().__init__(**kwargs)
 
 class FarmPlan(Base):
     __tablename__ = "farm_plans"
     id = Column(Integer, primary_key=True)
-    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    farm_id = Column(Integer, ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(GUID, nullable=True, index=True)
     selected_crop = Column(String(80))
     sowing_date = Column(String(40), nullable=True)
     variety = Column(String(80), nullable=True)
@@ -94,14 +175,15 @@ class FarmPlanCompletion(Base):
 class NutrientAnalysisRecord(Base):
     __tablename__ = "nutrient_analyses"
     id = Column(Integer, primary_key=True)
-    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False)
+    farm_id = Column(Integer, ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(GUID, nullable=True, index=True)
     analysis_json = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
 
 class ParaliAnalysisRecord(Base):
     __tablename__ = "parali_analyses"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(GUID, nullable=True, index=True)
     farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
     crop = Column(String(80), nullable=False)
     residue_type = Column(String(80), nullable=False)
@@ -230,8 +312,8 @@ class PestObservation(Base):
 class FertilizerRecommendation(Base):
     __tablename__ = "fertilizer_recommendations"
     id = Column(Integer, primary_key=True)
-    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    farm_id = Column(Integer, ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(GUID, nullable=True, index=True)
     crop = Column(String(80), nullable=False)
     previous_crop = Column(String(80), nullable=True)
     stage = Column(String(80), nullable=True)
@@ -244,8 +326,8 @@ class FertilizerRecommendation(Base):
 class PesticideRecommendation(Base):
     __tablename__ = "pesticide_recommendations"
     id = Column(Integer, primary_key=True)
-    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    farm_id = Column(Integer, ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(GUID, nullable=True, index=True)
     crop = Column(String(80), nullable=False)
     pest_or_disease = Column(String(120), nullable=True)
     recommendation_json = Column(Text, nullable=False)
@@ -304,9 +386,11 @@ class IoTDevice(Base):
     __tablename__ = "iot_devices"
     id = Column(Integer, primary_key=True)
     device_id = Column(String(80), unique=True, index=True, nullable=False)
-    controller_type = Column(String(40), default="ESP8266")  # ESP8266, ESP32
-    name = Column(String(120), default="Field Telemetry Node")
+    user_id = Column(GUID, nullable=True, index=True)
     farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    name = Column(String(120), default="Field Telemetry Node")
+    controller_type = Column(String(40), default="ESP8266")  # ESP8266, ESP32
+    device_token_hash = Column(String(64), nullable=True, index=True)
     is_active = Column(Boolean, default=True)
     last_seen = Column(DateTime, default=utcnow)
     created_at = Column(DateTime, default=utcnow)
@@ -314,6 +398,7 @@ class IoTDevice(Base):
 class IoTSensorReading(Base):
     __tablename__ = "iot_sensor_readings"
     id = Column(Integer, primary_key=True)
+    device_table_id = Column(Integer, ForeignKey("iot_devices.id", ondelete="CASCADE"), nullable=True, index=True)
     device_id = Column(String(80), index=True, nullable=False)
     controller_type = Column(String(40), default="ESP8266")
     timestamp = Column(DateTime, default=utcnow, index=True)
@@ -326,4 +411,231 @@ class IoTSensorReading(Base):
     water_distance_cm = Column(Float, nullable=True)
     object_status = Column(String(40), nullable=True)  # CLEAR, OBJECT DETECTED, WARNING, VERY CLOSE, NO READING
     created_at = Column(DateTime, default=utcnow)
+
+# =============================================================================
+# Multi-Channel MAITTRI Platform Models
+# =============================================================================
+
+class Farmer(Base):
+    """
+    Central Farmer entity representing a registered farmer.
+    Supports self-registration (linked to user_id) or assisted registration
+    conducted by an Authorized Seva Operator (operator_id).
+    """
+    __tablename__ = "farmers"
+    id = Column(Integer, primary_key=True)
+    maittri_farmer_id = Column(String(30), unique=True, index=True, nullable=False)  # MT-FARM-XXXXXX
+    user_id = Column(GUID, nullable=True, index=True)
+    operator_id = Column(GUID, nullable=True, index=True)
+    name = Column(String(120), nullable=False)
+    mobile_number = Column(String(20), nullable=False, index=True)
+    alternate_mobile = Column(String(20), nullable=True)
+    state = Column(String(80), nullable=True, default="Uttar Pradesh")
+    district = Column(String(80), nullable=True, index=True)
+    block = Column(String(80), nullable=True)
+    village = Column(String(80), nullable=True)
+    farm_area = Column(Float, default=1.0)
+    area_unit = Column(String(20), default="acre")
+    land_ownership = Column(String(50), default="owner")  # owner, tenant, sharecropper
+    irrigation = Column(String(50), default="tubewell")  # canal, tubewell, rainfed, drip, none
+    soil_type = Column(String(80), default="Alluvial Soil")
+    soil_test_available = Column(Boolean, default=False)
+    current_crop = Column(String(80), nullable=True)
+    previous_crop = Column(String(80), nullable=True)
+    planned_crop = Column(String(80), nullable=True)
+    sowing_date = Column(String(40), nullable=True)
+    crop_variety = Column(String(80), nullable=True)
+    preferred_language = Column(String(10), default="hi")  # hi, en
+    sms_consent = Column(Boolean, default=True)
+    ivr_consent = Column(Boolean, default=True)
+    qr_code_data = Column(String(120), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    @property
+    def full_name(self):
+        return self.name
+
+    @full_name.setter
+    def full_name(self, value):
+        self.name = value
+
+    def __init__(self, **kwargs):
+        if "full_name" in kwargs and "name" not in kwargs:
+            kwargs["name"] = kwargs.pop("full_name")
+        if "mobile_number" not in kwargs:
+            import random
+            kwargs["mobile_number"] = f"98765{random.randint(10000, 99999)}"
+        super().__init__(**kwargs)
+
+
+class FarmerDocument(Base):
+    """
+    Document Vault for verified land records, certified soil reports, and subsidy docs.
+    """
+    __tablename__ = "farmer_documents"
+    id = Column(Integer, primary_key=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=False, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    document_name = Column(String(255), nullable=False)
+    category = Column(String(80), default="Land Record")  # Land Record, Soil Test Report, Crop Record, Insurance, Scheme Application, Other
+    file_path = Column(String(255), nullable=False)
+    storage_path = Column(String(255), nullable=True)
+    file_url = Column(Text, nullable=True)
+    file_type = Column(String(40), nullable=False)
+    file_size_bytes = Column(Integer, nullable=True)
+    uploaded_by_user_id = Column(GUID, nullable=True, index=True)
+    uploader_role = Column(String(50), default="FARMER")
+    status = Column(String(40), default="VERIFIED")  # VERIFIED, PENDING_REVIEW, ARCHIVED
+    created_at = Column(DateTime, default=utcnow)
+
+
+class SoilTestRequest(Base):
+    """
+    Lifecycle tracking for official laboratory soil testing bookings.
+    """
+    __tablename__ = "soil_test_requests"
+    id = Column(Integer, primary_key=True)
+    request_id = Column(String(30), unique=True, index=True, nullable=False)  # MT-STR-XXXXXX
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=False, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    location = Column(String(120), nullable=True)
+    crop = Column(String(80), nullable=True)
+    sample_date = Column(String(40), nullable=True)
+    status = Column(String(40), default="REQUESTED", index=True)  # REQUESTED, SCHEDULED, SAMPLE_COLLECTED, LAB_PROCESSING, REPORT_AVAILABLE, CANCELLED
+    lab_name = Column(String(120), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class SoilTestReport(Base):
+    """
+    Certified laboratory soil analysis report.
+    Explicitly marked certified (distinct from indicative IoT sensor readings).
+    """
+    __tablename__ = "soil_test_reports"
+    id = Column(Integer, primary_key=True)
+    request_id = Column(String(30), ForeignKey("soil_test_requests.request_id"), nullable=False, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=False, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    lab_name = Column(String(120), nullable=False)
+    test_date = Column(String(40), nullable=True)
+    report_file = Column(String(255), nullable=True)
+    nitrogen = Column(Float, nullable=True)
+    phosphorus = Column(Float, nullable=True)
+    potassium = Column(Float, nullable=True)
+    ph = Column(Float, nullable=True)
+    ec = Column(Float, nullable=True)
+    organic_carbon = Column(Float, nullable=True)
+    zinc = Column(Float, nullable=True)
+    iron = Column(Float, nullable=True)
+    boron = Column(Float, nullable=True)
+    sulphur = Column(Float, nullable=True)
+    is_certified_lab_test = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class ServiceRequest(Base):
+    """
+    General assistance/grievance service request tracked by Seva Operators and Farmers.
+    """
+    __tablename__ = "service_requests"
+    id = Column(Integer, primary_key=True)
+    request_id = Column(String(30), unique=True, index=True, nullable=False)  # MT-REQ-XXXXXX
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=False, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    operator_id = Column(GUID, nullable=True, index=True)
+    service_type = Column(String(60), nullable=False, index=True)  # SOIL_TEST, CROP_ADVISORY, PEST_ADVISORY, FERTILIZER_ADVISORY, DOCUMENT_ASSISTANCE, SCHEME_ASSISTANCE, INSURANCE_ASSISTANCE
+    status = Column(String(40), default="REQUESTED", index=True)  # REQUESTED, IN_PROGRESS, SCHEDULED, COMPLETED, CANCELLED
+    description = Column(Text, nullable=False)
+    resolution_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class CommunicationPreference(Base):
+    """
+    Farmer preferences for SMS and IVR voice broadcasts.
+    """
+    __tablename__ = "communication_preferences"
+    id = Column(Integer, primary_key=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), unique=True, nullable=False, index=True)
+    sms_enabled = Column(Boolean, default=True)
+    ivr_enabled = Column(Boolean, default=True)
+    preferred_language = Column(String(10), default="hi")
+    weather_alerts = Column(Boolean, default=True)
+    crop_alerts = Column(Boolean, default=True)
+    market_alerts = Column(Boolean, default=True)
+    scheme_alerts = Column(Boolean, default=True)
+    insurance_alerts = Column(Boolean, default=True)
+    promotional_opt_in = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class SMSLog(Base):
+    """
+    Audit log of outbound SMS messages dispatched or simulated.
+    """
+    __tablename__ = "sms_logs"
+    id = Column(Integer, primary_key=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=True, index=True)
+    mobile_number = Column(String(20), nullable=False)
+    message_content = Column(Text, nullable=False)
+    provider = Column(String(40), default="demo")  # demo, twilio, msg91
+    status = Column(String(40), default="SENT")  # SENT, FAILED, SIMULATED_DEMO
+    error_message = Column(Text, nullable=True)
+    is_demo_mode = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class IVRSession(Base):
+    """
+    Session logs for incoming or simulated IVR keypad interactions.
+    """
+    __tablename__ = "ivr_sessions"
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String(80), unique=True, index=True, nullable=False)
+    caller_number = Column(String(20), nullable=False, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=True, index=True)
+    language = Column(String(10), default="hi")
+    current_menu = Column(String(50), default="main")
+    digits_pressed = Column(String(20), nullable=True)
+    transcript_json = Column(Text, nullable=True)
+    is_demo_mode = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Notification(Base):
+    """
+    Multi-channel system notification.
+    """
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    category = Column(String(60), default="general")  # weather, crop, fertilizer, pest, market, scheme, soil_test, service
+    channel = Column(String(20), default="WEB")  # WEB, SMS, IVR
+    priority = Column(String(20), default="NORMAL")  # HIGH, MEDIUM, NORMAL
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class OperatorActivityLog(Base):
+    """
+    Audit trail for authorized operator actions.
+    """
+    __tablename__ = "operator_activity_logs"
+    id = Column(Integer, primary_key=True)
+    operator_id = Column(GUID, nullable=True, index=True)
+    action_type = Column(String(80), nullable=False, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=True, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    details_json = Column(Text, nullable=True)
+    ip_address = Column(String(60), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
 

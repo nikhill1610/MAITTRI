@@ -1,0 +1,47 @@
+[
+  {
+    "crop": "Wheat",
+    "hindi_name": "गेहूं",
+    "season": "Rabi (Oct-Dec sowing, Mar-Apr harvest)",
+    "soil": "Well-drained loam or clay loam, pH 6.0-7.5",
+    "water_requirement": "4-6 irrigations. Critical stages: Crown Root Initiation (CRI at 21 days), Tillering (40-45 days), Jointing (60-65 days), Flowering (80-85 days), Milking (100-105 days), Dough stage (115-120 days). CRI irrigation is most critical.",
+    "fertilizer_general": "120 kg N : 60 kg P2O5 : 40 kg K2O per hectare. Apply full P & K plus 1/3rd N as basal at sowing. Top dress remaining N in two equal splits at 1st and 2nd irrigations.",
+    "common_issues": "Yellow rust (Puccinia striiformis) appearing as yellow pustules in stripes on leaves; Zinc deficiency (khaira-like chlorosis on 3rd/4th leaf from top); Termite damage in sandy soils."
+  },
+  {
+    "crop": "Rice",
+    "hindi_name": "धान",
+    "season": "Kharif (June-July transplanting, Oct-Nov harvest)",
+    "soil": "Clayey or heavy loam soils capable of holding standing water, pH 5.5-7.0",
+    "water_requirement": "Needs standing water (2-5 cm) during early tillering and panicle initiation. Avoid deep submergence during flowering. Alternate Wetting and Drying (AWD) saves 25-30% water without yield reduction.",
+    "fertilizer_general": "100-120 kg N : 50-60 kg P2O5 : 40-50 kg K2O per hectare. Apply 25 kg/ha Zinc Sulphate in zinc-deficient soils. Top dress Urea in 3 splits.",
+    "common_issues": "Blast (Pyricularia oryzae) showing spindle-shaped spots with grey centers; Brown Plant Hopper (BPH) causing hopper burn; Bacterial Leaf Blight (BLB) showing wavy yellow-white margins on leaves."
+  },
+  {
+    "crop": "Mustard",
+    "hindi_name": "सरसों / राई",
+    "season": "Rabi (Late Sep-Oct sowing, Feb-Mar harvest)",
+    "soil": "Sandy loam to loamy soil, good drainage, pH 6.5-7.5",
+    "water_requirement": "2-3 irrigations. 1st at flowering (30-35 days), 2nd at pod development (60-65 days). Avoid heavy flooding.",
+    "fertilizer_general": "60-80 kg N : 40 kg P2O5 : 20-40 kg K2O per hectare. Crucially requires 20-30 kg/ha Sulphur (via Gypsum or Bentonite Sulphur) to enhance oil content.",
+    "common_issues": "Mustard aphid (Lipaphis erysimi) sucking sap from flowering buds and pods; White rust (Albugo candida) causing white pustules on underside of leaves."
+  },
+  {
+    "crop": "Maize",
+    "hindi_name": "मक्का",
+    "season": "Kharif & Rabi/Spring",
+    "soil": "Deep, fertile loam or silt loam, rich in organic matter, pH 6.0-7.5. Susceptible to waterlogging.",
+    "water_requirement": "Requires 500-600 mm water. Critical stages: Tasseling and Silking. Waterlogging for even 24 hours can reduce yield significantly.",
+    "fertilizer_general": "120 kg N : 60 kg P2O5 : 40-60 kg K2O per hectare. Split nitrogen: 1/4th at sowing, 1/2 at knee-high stage, 1/4th at tasseling.",
+    "common_issues": "Fall Armyworm (Spodoptera frugiperda) damaging central whorl leaves with pinholes and sawdust-like frass."
+  },
+  {
+    "crop": "Potato",
+    "hindi_name": "आलू",
+    "season": "Rabi (Oct sowing, Jan-Feb harvest)",
+    "soil": "Loose, friable sandy loam rich in organic matter, pH 5.2-6.5",
+    "water_requirement": "Frequent light irrigations (every 7-10 days). Never submerge the ridges. Stop irrigation 10-12 days before harvesting to allow skin curing.",
+    "fertilizer_general": "150-180 kg N : 80-100 kg P2O5 : 100-120 kg K2O per hectare. Potassium is vital for tuber size and starch quality.",
+    "common_issues": "Late blight (Phytophthora infestans) causing water-soaked dark lesions during foggy, cool, humid weather; Early blight causing concentric rings (target spots)."
+  }
+]

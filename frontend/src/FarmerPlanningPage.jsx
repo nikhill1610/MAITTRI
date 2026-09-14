@@ -66,15 +66,15 @@ export default function FarmerPlanningPage() {
 
   // Available Crops
   const availableCrops = [
-    { key: "Wheat", en: "Wheat", hi: "गेहूं (Wheat)" },
-    { key: "Rice", en: "Rice / Paddy", hi: "धान / चावल (Rice)" },
-    { key: "Mustard", en: "Mustard", hi: "सरसों (Mustard)" },
-    { key: "Maize", en: "Maize / Corn", hi: "मक्का (Maize)" },
-    { key: "Potato", en: "Potato", hi: "आलू (Potato)" },
-    { key: "Tomato", en: "Tomato", hi: "टमाटर (Tomato)" },
-    { key: "Gram", en: "Gram / Chickpea", hi: "चना (Gram)" },
-    { key: "Cotton", en: "Cotton", hi: "कपास (Cotton)" },
-    { key: "Sugarcane", en: "Sugarcane", hi: "गन्ना (Sugarcane)" },
+    { key: "Wheat", en: "Wheat", hi: "गेहूं" },
+    { key: "Rice", en: "Rice / Paddy", hi: "धान / चावल" },
+    { key: "Mustard", en: "Mustard", hi: "सरसों" },
+    { key: "Maize", en: "Maize / Corn", hi: "मक्का" },
+    { key: "Potato", en: "Potato", hi: "आलू" },
+    { key: "Tomato", en: "Tomato", hi: "टमाटर" },
+    { key: "Gram", en: "Gram / Chickpea", hi: "चना" },
+    { key: "Cotton", en: "Cotton", hi: "कपास" },
+    { key: "Sugarcane", en: "Sugarcane", hi: "गन्ना" },
   ];
 
   // Fetch Farms on mount
@@ -490,7 +490,7 @@ export default function FarmerPlanningPage() {
                 {/* 1. Farm Select */}
                 <div>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    {lang === "hi" ? "खेत चुनें (Farm)" : "Select Farm"}
+                    {lang === "hi" ? "खेत चुनें" : "Select Farm"}
                   </label>
                   <select
                     value={selectedFarmId}
@@ -508,7 +508,7 @@ export default function FarmerPlanningPage() {
                 {/* 2. Crop Select */}
                 <div>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    {lang === "hi" ? "फसल (Crop)" : "Select Crop"}
+                    {lang === "hi" ? "फसल चुनें" : "Select Crop"}
                   </label>
                   <select
                     value={crop}
@@ -581,7 +581,7 @@ export default function FarmerPlanningPage() {
                     {lang === "hi" ? "10 दिन पहले" : "10 days ago"}
                   </button>
                   <button type="button" onClick={() => setQuickDate(22)} style={{ border: "1px solid #cbd5e1", background: "#f8fafc", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>
-                    {lang === "hi" ? "22 दिन पहले (CRI/टिलरिंग)" : "22 days ago (CRI)"}
+                    {lang === "hi" ? "22 दिन पहले (टिलरिंग अवस्था)" : "22 days ago (Tillering)"}
                   </button>
                   <button type="button" onClick={() => setQuickDate(45)} style={{ border: "1px solid #cbd5e1", background: "#f8fafc", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>
                     {lang === "hi" ? "45 दिन पहले" : "45 days ago"}
@@ -637,7 +637,7 @@ export default function FarmerPlanningPage() {
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
                       <span style={{ background: "#dc2626", color: "#ffffff", fontSize: "12px", fontWeight: "800", padding: "3px 8px", borderRadius: "4px", textTransform: "uppercase" }}>
-                        TODAY · {planData.reference_date_display}
+                        {lang === "hi" ? "आज" : "TODAY"} · {planData.reference_date_display}
                       </span>
                       <span style={{ background: "#166534", color: "#ffffff", fontSize: "12px", fontWeight: "700", padding: "3px 8px", borderRadius: "4px" }}>
                         {translateCrop(planData.crop, lang)}
@@ -891,7 +891,7 @@ export default function FarmerPlanningPage() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", borderBottom: "1px solid rgba(0,0,0,0.06)", paddingBottom: "6px" }}>
                         <div>
                           <div style={{ fontSize: "14px", fontWeight: "800", color: idx === 0 ? "#166534" : "#1e293b" }}>
-                            {idx === 0 ? (lang === "hi" ? "आज (Today)" : "Today") : (lang === "hi" ? day.day_name_hi : day.day_name_en)}
+                            {idx === 0 ? (lang === "hi" ? "आज" : "Today") : (lang === "hi" ? day.day_name_hi : day.day_name_en)}
                           </div>
                           <div style={{ fontSize: "12px", color: "#64748b" }}>
                             {day.date_display} · {lang === "hi" ? `दिन ${day.crop_age_day}` : `Day ${day.crop_age_day}`}
@@ -964,7 +964,7 @@ export default function FarmerPlanningPage() {
                     >
                       {st.is_current && (
                         <span style={{ position: "absolute", top: "-10px", right: "8px", background: "#166534", color: "#ffffff", padding: "1px 6px", borderRadius: "10px", fontSize: "10px", fontWeight: "800" }}>
-                          CURRENT
+                          {lang === "hi" ? "वर्तमान" : "CURRENT"}
                         </span>
                       )}
                       <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "4px" }}>

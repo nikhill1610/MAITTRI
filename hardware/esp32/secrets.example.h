@@ -13,6 +13,9 @@
 
 #define SECRET_WIFI_SSID     "YOUR_WIFI_SSID"
 #define SECRET_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+// For Local Lab Testing (Windows Mobile Hotspot):
 #define SECRET_SERVER_URL    "http://192.168.137.1:8000/api/iot/sensor-data"
+// For Public Cloud Deployment (Remote Field Stations):
+// #define SECRET_SERVER_URL "https://maitri-api.onrender.com/api/iot/sensor-data"
 
 #endif // MAITRI_SECRETS_H

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 import requests
+from ..schemas import SoilEstimateRequest
 
 router = APIRouter()
 
@@ -145,14 +146,10 @@ def reverse_geocode(
     }
 
 @router.post("/soil-estimate")
-def get_soil_estimate_post(payload: dict):
-    from ..soil_estimation_service import estimate_soil_type
-    lat = payload.get("latitude")
-    lon = payload.get("longitude")
-    if lat is None or lon is None:
-        raise HTTPException(400, "Latitude and longitude are required")
+def get_soil_estimate_post(payload: SoilEstimateRequest):
+    from ..services.soil_estimation_service import estimate_soil_type
     try:
-        return estimate_soil_type(float(lat), float(lon))
+        return estimate_soil_type(payload.latitude, payload.longitude)
     except Exception as e:
         raise HTTPException(500, f"Error estimating soil type: {str(e)}")
 
@@ -161,7 +158,7 @@ def get_soil_estimate_get(
     latitude: float = Query(..., ge=-90.0, le=90.0),
     longitude: float = Query(..., ge=-180.0, le=180.0)
 ):
-    from ..soil_estimation_service import estimate_soil_type
+    from ..services.soil_estimation_service import estimate_soil_type
     try:
         return estimate_soil_type(latitude, longitude)
     except Exception as e:

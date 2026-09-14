@@ -13,7 +13,7 @@ const CROPS_CONFIG = [
   {
     key: "rice",
     name: "Rice / Paddy",
-    nameHi: "धान / चावल (Paddy)",
+    nameHi: "धान / चावल",
     residue: "Paddy Straw / Rice Straw",
     residueHi: "धान की पराली / पुआल",
     icon: "🌾",
@@ -22,7 +22,7 @@ const CROPS_CONFIG = [
   {
     key: "wheat",
     name: "Wheat",
-    nameHi: "गेहूं (Wheat)",
+    nameHi: "गेहूं",
     residue: "Wheat Straw (Bhusa / Turi)",
     residueHi: "गेहूं का भूसा / तूड़ी",
     icon: "🌾",
@@ -31,7 +31,7 @@ const CROPS_CONFIG = [
   {
     key: "maize",
     name: "Maize",
-    nameHi: "मक्का (Maize)",
+    nameHi: "मक्का",
     residue: "Maize Stover (Stalks & Leaves)",
     residueHi: "मक्के की कड़बी / डंठल",
     icon: "🌽",
@@ -40,7 +40,7 @@ const CROPS_CONFIG = [
   {
     key: "sugarcane",
     name: "Sugarcane",
-    nameHi: "गन्ना (Sugarcane)",
+    nameHi: "गन्ना",
     residue: "Sugarcane Trash & Dry Leaves",
     residueHi: "गन्ने की सूखी पत्तियां (ट्रैश)",
     icon: "🎋",
@@ -49,7 +49,7 @@ const CROPS_CONFIG = [
   {
     key: "cotton",
     name: "Cotton",
-    nameHi: "कपास (Cotton)",
+    nameHi: "कपास",
     residue: "Cotton Stalks (Woody Residue)",
     residueHi: "कपास के डंठल / छड़ियां",
     icon: "☁️",
@@ -58,7 +58,7 @@ const CROPS_CONFIG = [
   {
     key: "mustard",
     name: "Mustard",
-    nameHi: "सरसों / राई (Mustard)",
+    nameHi: "सरसों / राई",
     residue: "Mustard Stover & Pod Husk",
     residueHi: "सरसों का डंठल एवं भूसा",
     icon: "🌼",
@@ -67,7 +67,7 @@ const CROPS_CONFIG = [
   {
     key: "soybean",
     name: "Soybean",
-    nameHi: "सोयाबीन (Soybean)",
+    nameHi: "सोयाबीन",
     residue: "Soybean Straw & Pod Shells",
     residueHi: "सोयाबीन का भूसा एवं छिलका",
     icon: "🌱",
@@ -85,7 +85,7 @@ const CROPS_CONFIG = [
   {
     key: "other",
     name: "Other Harvested Crop",
-    nameHi: "अन्य फसल (Other Crop)",
+    nameHi: "अन्य फसल",
     residue: "Crop Residue / Stubble",
     residueHi: "फसल अवशेष / पराली",
     icon: "🌾",
@@ -94,11 +94,11 @@ const CROPS_CONFIG = [
 ];
 
 const AREA_UNITS = [
-  { key: "acre", labelEn: "Acre", labelHi: "एकड़ (Acre)", factorToAcres: 1.0 },
-  { key: "hectare", labelEn: "Hectare", labelHi: "हेक्टेयर (Hectare)", factorToAcres: 2.471 },
-  { key: "bigha", labelEn: "Bigha", labelHi: "बीघा (Bigha)", factorToAcres: 0.62 },
-  { key: "sq_m", labelEn: "Square Meter", labelHi: "वर्ग मीटर (m²)", factorToAcres: 0.000247 },
-  { key: "sq_ft", labelEn: "Square Feet", labelHi: "वर्ग फीट (sq ft)", factorToAcres: 0.0000229 },
+  { key: "acre", labelEn: "Acre", labelHi: "एकड़", factorToAcres: 1.0 },
+  { key: "hectare", labelEn: "Hectare", labelHi: "हेक्टेयर", factorToAcres: 2.471 },
+  { key: "bigha", labelEn: "Bigha", labelHi: "बीघा", factorToAcres: 0.62 },
+  { key: "sq_m", labelEn: "Square Meter", labelHi: "वर्ग मीटर", factorToAcres: 0.000247 },
+  { key: "sq_ft", labelEn: "Square Feet", labelHi: "वर्ग फीट", factorToAcres: 0.0000229 },
 ];
 
 const GOAL_OPTIONS = [
@@ -166,8 +166,8 @@ const MACHINERY_OPTIONS = [
   { id: "Straw Management System / Super SMS", label: "Super SMS (Combine)", labelHi: "सुपर एसएमएस (कंबाइन)" },
   { id: "Mulcher", label: "Tractor Mulcher", labelHi: "ट्रैक्टर मल्चर" },
   { id: "Rotavator", label: "Rotavator", labelHi: "रोटावेटर" },
-  { id: "Baler", label: "Straw Baler (Round/Square)", labelHi: "बेलिंग मशीन (Baler)" },
-  { id: "Rake", label: "Straw Rake", labelHi: "स्ट्रॉ रेक (Rake)" },
+  { id: "Baler", label: "Straw Baler (Round/Square)", labelHi: "बेलिंग मशीन" },
+  { id: "Rake", label: "Straw Rake", labelHi: "स्ट्रॉ रेक" },
   { id: "Chopper/Shredder", label: "Chopper / Shredder", labelHi: "चॉपर / श्रेडर" },
   { id: "MB Plough", label: "Reversible MB Plough", labelHi: "एम.बी. प्लाऊ" },
   { id: "Chaff Cutter", label: "Chaff Cutter", labelHi: "कुट्टी मशीन" },
@@ -633,7 +633,7 @@ export default function ParaliManagementPage() {
               <div className="estNumBox mid highlight">
                 <span className="estNumLabel">{lang === "hi" ? "अनुमानित औसत" : "Likely Estimate"}</span>
                 <span className="estNumValue">~{liveEstimateRange.mid}</span>
-                <span className="estNumUnit">{lang === "hi" ? "टन (Tonnes)" : "tonnes"}</span>
+                <span className="estNumUnit">{lang === "hi" ? "टन" : "tonnes"}</span>
               </div>
               <div className="estNumBox high">
                 <span className="estNumLabel">{lang === "hi" ? "अधिकतम" : "High Range"}</span>
@@ -774,7 +774,7 @@ export default function ParaliManagementPage() {
             <h2>{lang === "hi" ? "🚜 क्या आपके पास कृषि मशीनरी उपलब्ध है?" : "🚜 Do you have access to farm machinery?"}</h2>
             <p className="stepSubtext">
               {lang === "hi"
-                ? "निजी या किराए (Custom Hiring Center) पर उपलब्ध मशीनें चुनें ताकि व्यवहार्य सिफारिशें मिलें।"
+                ? "निजी या कस्टम हायरिंग केंद्र पर उपलब्ध मशीनें चुनें ताकि व्यवहार्य सिफारिशें मिलें।"
                 : "Select machinery you own or can hire locally. Recommendations will prioritize accessible equipment."}
             </p>
           </div>
@@ -1027,7 +1027,7 @@ export default function ParaliManagementPage() {
             <div className="burnNutrientLossSection">
               <span className="lossTitle">
                 {lang === "hi"
-                  ? "🔥 पराली जलाने पर होने वाला संभावित पोषक तत्व नुकसान (ICAR/PAU मानक):"
+                  ? "🔥 पराली जलाने पर होने वाला संभावित पोषक तत्व नुकसान:"
                   : "🔥 Potential Soil Nutrient Losses if Burned (ICAR/IARI & PAU Benchmarks):"}
               </span>
 
@@ -1085,7 +1085,7 @@ export default function ParaliManagementPage() {
               <div className="emissionTag">
                 <ShieldAlert size={15} />
                 <span>
-                  {lang === "hi" ? "बचाया गया जहरीला धुआं (PM2.5/PM10): " : "Prevented Particulate Matter: "}
+                  {lang === "hi" ? "बचाया गया जहरीला धुआं (कणिका तत्व): " : "Prevented Particulate Matter (PM): "}
                   <strong>~{analysisResult.burning_warning.emissions_released.particulate_matter_pm_kg} kg</strong>
                 </span>
               </div>
@@ -1323,7 +1323,7 @@ export default function ParaliManagementPage() {
                   <span>{lang === "hi" ? "मार्गदर्शिका" : "FIELD IMPLEMENTATION"}</span>
                 </span>
                 <h3>
-                  {lang === "hi" ? "🌾 आपकी मैत्री कार्य योजना (Action Plan)" : "🌾 Your MAITTRI Action Plan"}
+                  {lang === "hi" ? "🌾 आपकी मैत्री कार्य योजना" : "🌾 Your MAITTRI Action Plan"}
                 </h3>
                 <span className="activePlanMethodName">
                   {lang === "hi" ? activeActionPlan?.method_name_hi : activeActionPlan?.method_name}

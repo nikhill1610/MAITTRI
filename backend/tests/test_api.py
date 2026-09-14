@@ -25,7 +25,8 @@ def test_root_and_health():
 
     res_health = client.get("/api/health")
     assert res_health.status_code == 200
-    assert res_health.json() == {"status": "ok"}
+    assert res_health.json()["status"] == "healthy"
+    assert res_health.json()["database"] == "connected"
 
 
 def test_email_validator_enforcement():

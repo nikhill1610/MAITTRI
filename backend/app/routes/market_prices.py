@@ -6,7 +6,7 @@ multi-crop comparisons, historical trends, and farm profit estimations.
 
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional, List
-from ..market_price_service import (
+from ..services.market_price_service import (
     get_all_states,
     get_districts_for_state,
     get_mandis_for_district,

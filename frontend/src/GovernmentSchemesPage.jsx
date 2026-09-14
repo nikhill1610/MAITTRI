@@ -175,7 +175,7 @@ export default function GovernmentSchemesPage() {
             <Clock size={24} />
           </div>
           <div className="metricBody">
-            <span className="metricLabel">{lang === "hi" ? "जल्द समाप्त (Closing Soon)" : "Closing Soon"}</span>
+            <span className="metricLabel">{lang === "hi" ? "जल्द समाप्त" : "Closing Soon"}</span>
             <strong className="metricValue" style={{ fontSize: "20px", color: "#d97706" }}>{closingCount}</strong>
             <span className="metricSubtext">{lang === "hi" ? "अंतिम तिथि निकट है" : "Quota or Deadline Alert"}</span>
           </div>
@@ -186,7 +186,7 @@ export default function GovernmentSchemesPage() {
             <Calendar size={24} />
           </div>
           <div className="metricBody">
-            <span className="metricLabel">{lang === "hi" ? "आगामी योजनाएं (Upcoming)" : "Upcoming Schemes"}</span>
+            <span className="metricLabel">{lang === "hi" ? "आगामी योजनाएं" : "Upcoming Schemes"}</span>
             <strong className="metricValue" style={{ fontSize: "20px", color: "#9333ea" }}>{upcomingCount}</strong>
             <span className="metricSubtext">{lang === "hi" ? "अगले सीजन के लिए तैयार रहें" : "Next Season Openings"}</span>
           </div>
@@ -199,7 +199,7 @@ export default function GovernmentSchemesPage() {
           {/* State Selector */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>
-              📍 {lang === "hi" ? "राज्य चुनें (State Isolation)" : "Select State"}
+              📍 {lang === "hi" ? "राज्य चुनें" : "Select State"}
             </label>
             <select
               value={selectedState}
@@ -216,7 +216,7 @@ export default function GovernmentSchemesPage() {
           {/* Search Box */}
           <div style={{ gridColumn: "span 2" }}>
             <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>
-              🔍 {lang === "hi" ? "योजना खोजें (Search Schemes)" : "Search Schemes"}
+              🔍 {lang === "hi" ? "योजना खोजें" : "Search Schemes"}
             </label>
             <div style={{ position: "relative", marginTop: "4px" }}>
               <input
@@ -249,10 +249,10 @@ export default function GovernmentSchemesPage() {
               style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", marginTop: "4px" }}
             >
               <option value="all">{lang === "hi" ? "सभी स्थितियां" : "All Statuses"}</option>
-              <option value="Open">{lang === "hi" ? "खुला है (Open)" : "Open"}</option>
-              <option value="Closing Soon">{lang === "hi" ? "जल्द समाप्त (Closing Soon)" : "Closing Soon"}</option>
-              <option value="Upcoming">{lang === "hi" ? "आगामी (Upcoming)" : "Upcoming"}</option>
-              <option value="Closed">{lang === "hi" ? "बंद है (Closed)" : "Closed"}</option>
+              <option value="Open">{lang === "hi" ? "खुला है" : "Open"}</option>
+              <option value="Closing Soon">{lang === "hi" ? "जल्द समाप्त" : "Closing Soon"}</option>
+              <option value="Upcoming">{lang === "hi" ? "आगामी" : "Upcoming"}</option>
+              <option value="Closed">{lang === "hi" ? "बंद है" : "Closed"}</option>
             </select>
           </div>
         </div>
@@ -383,7 +383,7 @@ export default function GovernmentSchemesPage() {
                   {elig && elig.eligibility_status === "Potentially Eligible" && (
                     <div style={{ background: "#dcfce7", border: "1px solid #86efac", color: "#166534", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
                       <CheckCircle2 size={14} />
-                      <span>{lang === "hi" ? "🟢 आपकी प्रोफाइल से संभावित उपयुक्त (Match: " : "🟢 Potentially Suitable (Match: "}{elig.match_percentage}%)</span>
+                      <span>{lang === "hi" ? "🟢 आपकी प्रोफाइल से संभावित उपयुक्त (मिलान: " : "🟢 Potentially Suitable (Match: "}{elig.match_percentage}%)</span>
                     </div>
                   )}
 
@@ -470,7 +470,7 @@ export default function GovernmentSchemesPage() {
       {/* PERSONALIZED FARMER ACTION PLAN */}
       <div className="card" style={{ background: "#f8fafc", border: "1px solid #cbd5e1", marginBottom: "24px" }}>
         <h3 style={{ fontSize: "16px", margin: "0 0 12px 0", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>🚀</span> {lang === "hi" ? "मैत्री सरकारी योजना कार्ययोजना (Step-by-Step Action Plan)" : "MAITTRI Scheme Action Plan"}
+          <span>🚀</span> {lang === "hi" ? "मैत्री सरकारी योजना कार्ययोजना" : "MAITTRI Scheme Action Plan"}
         </h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
           <div style={{ fontSize: "13px", color: "#334155" }}>
@@ -486,7 +486,7 @@ export default function GovernmentSchemesPage() {
             <b>4. {lang === "hi" ? "आधिकारिक पोर्टल पर आवेदन:" : "Apply on Official Portal:"}</b> {lang === "hi" ? "केवल सरकारी वेबसाइट या सीएससी केंद्र से आवेदन करें।" : "Submit application directly on verified official portals."}
           </div>
           <div style={{ fontSize: "13px", color: "#334155" }}>
-            <b>5. {lang === "hi" ? "रसीद सुरक्षित रखें:" : "Keep Receipt:"}</b> {lang === "hi" ? "आवेदन संख्या (Application / Registration ID) सुरक्षित रखें।" : "Save application acknowledgement docket for tracking."}
+            <b>5. {lang === "hi" ? "रसीद सुरक्षित रखें:" : "Keep Receipt:"}</b> {lang === "hi" ? "आवेदन संख्या सुरक्षित रखें।" : "Save application acknowledgement docket for tracking."}
           </div>
           <div style={{ fontSize: "13px", color: "#334155" }}>
             <b>6. {lang === "hi" ? "स्थिति ट्रैक करें:" : "Track Status:"}</b> {lang === "hi" ? "कृषि अधिकारी या पोर्टल पर समय-समय पर स्थिति जांचें।" : "Monitor approval and DBT disbursement updates."}

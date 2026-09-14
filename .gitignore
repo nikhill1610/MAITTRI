@@ -7,13 +7,17 @@
 # ------------------------------------------------------------------------------
 .env
 .env.*
+*.env
 !.env.example
+!backend/.env.example
+!frontend/.env.example
 *.pem
 *.key
 secrets/
 credentials/
 config/secrets.*
 secrets.h
+!hardware/esp32/secrets.example.h
 
 # ------------------------------------------------------------------------------
 # 2. Python & Bytecode
@@ -64,7 +68,7 @@ env.bak/
 venv.bak/
 
 # ------------------------------------------------------------------------------
-# 4. Databases & SQLite Files
+# 4. Databases & SQLite Files (Local Development / Backups)
 # ------------------------------------------------------------------------------
 *.sqlite
 *.sqlite3
@@ -125,7 +129,21 @@ temp/
 *.tmp
 
 # ------------------------------------------------------------------------------
-# 9. Hardware & Embedded Build Artifacts (ESP32 / Arduino / PlatformIO)
+# 9. Scratch & Local Migration Scaffolding
+# ------------------------------------------------------------------------------
+scratch/
+supabase/.temp/
+
+# ------------------------------------------------------------------------------
+# 10. Runtime Uploads & Generated Media
+# ------------------------------------------------------------------------------
+uploads/**
+!uploads/.gitkeep
+backend/uploads/**
+!backend/uploads/.gitkeep
+
+# ------------------------------------------------------------------------------
+# 11. Hardware & Embedded Build Artifacts (ESP32 / Arduino / PlatformIO)
 # ------------------------------------------------------------------------------
 .pio/
 .pioenvs/

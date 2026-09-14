@@ -1,9 +1,12 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
+    role: Optional[str] = "FARMER"  # FARMER, AUTHORIZED_OPERATOR
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
     language: str = "en"
 
 class LoginRequest(BaseModel):
@@ -13,6 +16,10 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: Optional[str] = "FARMER"
+    user_id: Optional[Union[str, int]] = None
+    email: Optional[str] = None
+    full_name: Optional[str] = None
 
 class FarmCreate(BaseModel):
     name: str = "My Farm"
@@ -251,13 +258,14 @@ class NearestObject(BaseModel):
     status: str
 
 class IoTSensorDataCreate(BaseModel):
-    device_id: Optional[str] = Field(default=None, max_length=80, example="MAITRI_ESP32_01")
-    device: Optional[str] = Field(default=None, max_length=80, example="ESP32")
-    controller_type: Optional[str] = Field(default="ESP32", example="ESP32")
+    device_id: Optional[str] = Field(default=None, max_length=80, examples=["MAITRI_ESP32_01"])
+    device: Optional[str] = Field(default=None, max_length=80, examples=["ESP32"])
+    controller_type: Optional[str] = Field(default="ESP32", examples=["ESP32"])
     temperature: Optional[float] = Field(default=None, description="DHT22 ambient temperature in °C")
     humidity: Optional[float] = Field(default=None, description="DHT22 ambient humidity in %")
     soil_moisture: Optional[float] = Field(default=None, description="Analog soil moisture percentage 0-100%")
     water_distance_cm: Optional[float] = Field(default=None, description="HC-SR04 ultrasonic distance in cm")
+    farm_id: Optional[int] = Field(default=None, description="Optional associated farm ID")
     scan: List[RadarScanPoint] = Field(default_factory=list, description="Array of servo angle and ultrasonic distance pairs")
 
     @model_validator(mode='before')
@@ -378,5 +386,212 @@ class TaskStatusUpdateRequest(BaseModel):
 
 class FarmerNoteRequest(BaseModel):
     notes: str = Field(..., min_length=1)
+
+
+# ========================================================
+# Multi-Channel MAITTRI Platform Schemas
+# ========================================================
+
+class FarmerCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    mobile_number: str = Field(..., min_length=10, max_length=20)
+    alternate_mobile: Optional[str] = None
+    state: Optional[str] = "Uttar Pradesh"
+    district: Optional[str] = "Varanasi"
+    block: Optional[str] = None
+    village: Optional[str] = None
+    farm_area: float = Field(default=1.0, gt=0)
+    area_unit: str = "acre"
+    land_ownership: Optional[str] = "owner"
+    irrigation: Optional[str] = "tubewell"
+    soil_type: Optional[str] = "Alluvial Soil"
+    soil_test_available: bool = False
+    current_crop: Optional[str] = None
+    previous_crop: Optional[str] = None
+    planned_crop: Optional[str] = None
+    sowing_date: Optional[str] = None
+    crop_variety: Optional[str] = None
+    preferred_language: str = "hi"
+    sms_consent: bool = True
+    ivr_consent: bool = True
+
+class FarmerUpdate(BaseModel):
+    name: Optional[str] = None
+    mobile_number: Optional[str] = None
+    alternate_mobile: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    block: Optional[str] = None
+    village: Optional[str] = None
+    farm_area: Optional[float] = None
+    area_unit: Optional[str] = None
+    land_ownership: Optional[str] = None
+    irrigation: Optional[str] = None
+    soil_type: Optional[str] = None
+    soil_test_available: Optional[bool] = None
+    current_crop: Optional[str] = None
+    previous_crop: Optional[str] = None
+    planned_crop: Optional[str] = None
+    sowing_date: Optional[str] = None
+    crop_variety: Optional[str] = None
+    preferred_language: Optional[str] = None
+    sms_consent: Optional[bool] = None
+    ivr_consent: Optional[bool] = None
+
+class FarmerResponse(FarmerCreate):
+    id: int
+    maittri_farmer_id: str
+    mobile_number: Optional[str] = None
+    user_id: Optional[Union[str, int]] = None
+    operator_id: Optional[Union[str, int]] = None
+    qr_code_data: Optional[str] = None
+    created_at: Optional[Any] = None
+    updated_at: Optional[Any] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+class SoilTestRequestCreate(BaseModel):
+    farmer_id: int
+    farm_id: Optional[int] = None
+    location: Optional[str] = None
+    crop: Optional[str] = None
+    sample_date: Optional[str] = None
+    notes: Optional[str] = None
+
+class SoilTestRequestUpdate(BaseModel):
+    status: str = Field(..., pattern="^(REQUESTED|SCHEDULED|SAMPLE_COLLECTED|LAB_PROCESSING|REPORT_AVAILABLE|CANCELLED)$")
+    lab_name: Optional[str] = None
+    notes: Optional[str] = None
+
+class SoilTestRequestResponse(BaseModel):
+    id: int
+    request_id: str
+    farmer_id: int
+    farm_id: Optional[int] = None
+    location: Optional[str] = None
+    crop: Optional[str] = None
+    sample_date: Optional[str] = None
+    status: str
+    lab_name: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: Optional[Any] = None
+    updated_at: Optional[Any] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SoilTestReportCreate(BaseModel):
+    request_id: str
+    farmer_id: int
+    farm_id: Optional[int] = None
+    lab_name: str = Field(..., min_length=2)
+    test_date: Optional[str] = None
+    nitrogen: Optional[float] = None
+    phosphorus: Optional[float] = None
+    potassium: Optional[float] = None
+    ph: Optional[float] = None
+    ec: Optional[float] = None
+    organic_carbon: Optional[float] = None
+    zinc: Optional[float] = None
+    iron: Optional[float] = None
+    boron: Optional[float] = None
+    sulphur: Optional[float] = None
+
+class SoilTestReportResponse(SoilTestReportCreate):
+    id: int
+    report_file: Optional[str] = None
+    is_certified_lab_test: bool = True
+    created_at: Optional[Any] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ServiceRequestCreate(BaseModel):
+    farmer_id: int
+    farm_id: Optional[int] = None
+    service_type: str = Field(..., pattern="^(SOIL_TEST|CROP_ADVISORY|PEST_ADVISORY|FERTILIZER_ADVISORY|DOCUMENT_ASSISTANCE|SCHEME_ASSISTANCE|INSURANCE_ASSISTANCE)$")
+    description: str = Field(..., min_length=5)
+
+class ServiceRequestUpdate(BaseModel):
+    status: str = Field(..., pattern="^(REQUESTED|IN_PROGRESS|SCHEDULED|COMPLETED|CANCELLED)$")
+    resolution_notes: Optional[str] = None
+
+class ServiceRequestResponse(BaseModel):
+    id: int
+    request_id: str
+    farmer_id: int
+    farm_id: Optional[int] = None
+    operator_id: Optional[Union[str, int]] = None
+    service_type: str
+    status: str
+    description: str
+    resolution_notes: Optional[str] = None
+    created_at: Optional[Any] = None
+    updated_at: Optional[Any] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+class CommunicationPreferenceUpdate(BaseModel):
+    sms_enabled: Optional[bool] = None
+    ivr_enabled: Optional[bool] = None
+    preferred_language: Optional[str] = None
+    weather_alerts: Optional[bool] = None
+    crop_alerts: Optional[bool] = None
+    market_alerts: Optional[bool] = None
+    scheme_alerts: Optional[bool] = None
+    insurance_alerts: Optional[bool] = None
+    promotional_opt_in: Optional[bool] = None
+
+class CommunicationPreferenceResponse(BaseModel):
+    farmer_id: int
+    sms_enabled: bool
+    ivr_enabled: bool
+    preferred_language: str
+    weather_alerts: bool
+    crop_alerts: bool
+    market_alerts: bool
+    scheme_alerts: bool
+    insurance_alerts: bool
+    promotional_opt_in: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SMSBroadcastRequest(BaseModel):
+    farmer_ids: Optional[List[int]] = None
+    mobile_numbers: Optional[List[str]] = None
+    message: str = Field(..., min_length=5, max_length=500)
+    category: Optional[str] = "weather_warning"
+
+class SMSLogResponse(BaseModel):
+    id: int
+    farmer_id: Optional[int] = None
+    mobile_number: str
+    message_content: str
+    provider: str
+    status: str
+    error_message: Optional[str] = None
+    is_demo_mode: bool
+    created_at: Optional[Any] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IVRSimulateRequest(BaseModel):
+    farmer_id: Optional[int] = None
+    phone_number: str = "9876543210"
+    digits_pressed: Optional[str] = None
+    current_menu: str = "main"
+    language: str = "hi"
+    diagnostic_step: Optional[int] = 0
+    diagnostic_answers: Optional[Dict[str, Any]] = None
+
+class IVRSimulateResponse(BaseModel):
+    session_id: str
+    current_menu: str
+    audio_text_hi: str
+    audio_text_en: str
+    options: List[Dict[str, str]]
+    status: str
+    is_demo_mode: bool = True
+
 
 

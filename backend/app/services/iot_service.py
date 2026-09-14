@@ -1,13 +1,16 @@
+import os
 import json
 import math
 import random
 import socket
+import hashlib
+import hmac
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ..models import IoTDevice, IoTSensorReading, utcnow
+from ..models import IoTDevice, IoTSensorReading, Farm, utcnow
 from ..schemas import (
     IoTSensorDataCreate,
     RadarScanPoint,
@@ -32,12 +35,216 @@ _latest_telemetry: Dict[str, Dict[str, Any]] = {}
 _latest_overall: Optional[Dict[str, Any]] = None
 
 
+def check_device_access(db: Session, device_id: str, user: Optional[Any] = None) -> None:
+    """
+    Enforces that user can only access devices they own, or devices linked to their farms.
+    Operators and Admins can access all devices.
+    Unclaimed devices (user_id is None) can be viewed by anyone for prototyping.
+    """
+    if not user or not device_id:
+        return
+    role = (getattr(user, "role", None) or "FARMER").upper()
+    if role in ("AUTHORIZED_OPERATOR", "ADMIN"):
+        return
+
+    device = db.query(IoTDevice).filter(IoTDevice.device_id == device_id).first()
+    if device and device.user_id and str(device.user_id) != str(user.id):
+        # Check if linked to one of user's farms
+        if device.farm_id:
+            farm = db.query(Farm).filter(Farm.id == device.farm_id, Farm.user_id == user.id).first()
+            if farm:
+                return
+        raise PermissionError(f"Access denied: Device '{device_id}' is registered to another user.")
+
+
+def hash_device_token(token: str) -> str:
+    """Computes deterministic SHA-256 digest of device preshared token."""
+    return hashlib.sha256(token.strip().encode("utf-8")).hexdigest()
+
+
+def process_incoming_sensor_data(
+    db: Session,
+    data: Any,
+    user: Optional[Any] = None,
+    device_token: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Processes incoming sensor telemetry from ESP8266 or ESP32:
+    - Authenticates hardware device via preshared X-Device-Token
+    - Validates / re-classifies scan points
+    - Computes nearest object and overall alert status
+    - Upserts device registration in DB (linking user_id if authenticated)
+    - Stores historical reading in DB linked to device_table_id
+    - Updates in-memory fast cache
+    """
+    if isinstance(data, dict):
+        data = IoTSensorDataCreate(**data)
+
+    if not data.device_id or len(data.device_id.strip()) < 3:
+        raise ValueError("Invalid device_id. Minimum 3 characters required.")
+
+    now = datetime.now(timezone.utc)
+    env = os.getenv("ENVIRONMENT", "production").lower()
+
+    # 1. Device authentication and status verification
+    device = db.query(IoTDevice).filter(IoTDevice.device_id == data.device_id).first()
+    if device:
+        if not device.is_active:
+            raise PermissionError(f"Access denied: Device '{data.device_id}' is revoked or deactivated.")
+
+        if device.device_token_hash:
+            if not device_token or not hmac.compare_digest(hash_device_token(device_token), device.device_token_hash):
+                raise PermissionError(f"Access denied: Invalid or missing device token for '{data.device_id}'.")
+        elif env == "production":
+            if not device_token:
+                raise PermissionError(f"Access denied: Device '{data.device_id}' requires an X-Device-Token in production.")
+            device.device_token_hash = hash_device_token(device_token)
+    else:
+        if env == "production" and not device_token:
+            raise PermissionError(f"Access denied: Unregistered device '{data.device_id}' requires an X-Device-Token in production.")
+
+        token_hash = hash_device_token(device_token) if device_token else None
+        device = IoTDevice(
+            device_id=data.device_id,
+            user_id=user.id if user else None,
+            farm_id=getattr(data, "farm_id", None),
+            controller_type=data.controller_type or "ESP32",
+            name=f"MAITRI {data.controller_type or 'ESP'} Node",
+            device_token_hash=token_hash,
+            is_active=True,
+            last_seen=now,
+            created_at=now
+        )
+        db.add(device)
+        db.flush()
+
+    # Check ownership conflict: if device is owned by User A, User B cannot claim/push to it
+    if device.user_id and user and str(device.user_id) != str(user.id):
+        role = (getattr(user, "role", None) or "FARMER").upper()
+        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
+            raise PermissionError(f"Device '{data.device_id}' is registered to another user.")
+
+    if not device.user_id and user:
+        device.user_id = user.id
+
+    farm_id = getattr(data, "farm_id", None)
+    if not device.farm_id and farm_id:
+        device.farm_id = farm_id
+
+    device.controller_type = data.controller_type or device.controller_type
+    device.last_seen = now
+    device.is_active = True
+    db.flush()
+
+    # 2. Normalize, sanitize and re-classify scan points with current thresholds
+    processed_scan: List[Dict[str, Any]] = []
+    for pt in data.scan:
+        raw_dist = pt.distance
+        # Safe cleanup: treat negative distance or > 450cm as no echo
+        if raw_dist is not None and (raw_dist <= 0.0 or raw_dist > 450.0):
+            clean_dist = None
+        else:
+            clean_dist = round(float(raw_dist), 1) if raw_dist is not None else None
+
+        det, st = classify_distance(clean_dist)
+        processed_scan.append({
+            "angle": int(pt.angle),
+            "distance": clean_dist,
+            "object_detected": det,
+            "status": st
+        })
+
+    # 3. Calculate nearest obstacle
+    nearest_obj, overall_status = calculate_nearest_object(processed_scan)
+    if not nearest_obj and data.water_distance_cm is not None and data.water_distance_cm > 0:
+        det, st = classify_distance(data.water_distance_cm)
+        nearest_obj = {
+            "angle": 90,
+            "distance": round(float(data.water_distance_cm), 1),
+            "status": st
+        }
+        overall_status = st
+
+    # 4. Save reading to DB with device_table_id foreign key
+    reading = IoTSensorReading(
+        device_table_id=device.id,
+        device_id=data.device_id,
+        controller_type=data.controller_type or "ESP32",
+        timestamp=now,
+        temperature=round(float(data.temperature), 1) if data.temperature is not None else None,
+        humidity=round(float(data.humidity), 1) if data.humidity is not None else None,
+        soil_moisture=round(float(data.soil_moisture), 1) if data.soil_moisture is not None else None,
+        water_distance_cm=round(float(data.water_distance_cm), 1) if data.water_distance_cm is not None else None,
+        scan_json=json.dumps(processed_scan),
+        nearest_distance=nearest_obj["distance"] if nearest_obj else None,
+        nearest_angle=nearest_obj["angle"] if nearest_obj else None,
+        object_status=overall_status,
+        created_at=now
+    )
+    db.add(reading)
+    db.commit()
+    db.refresh(reading)
+
+    lan_list, rec_url = get_host_lan_ips()
+
+    # 5. Build telemetry payload
+    telemetry = {
+        "status": "ONLINE",
+        "device_id": data.device_id,
+        "controller_type": data.controller_type or "ESP32",
+        "is_online": True,
+        "temperature": reading.temperature,
+        "humidity": reading.humidity,
+        "soil_moisture": reading.soil_moisture,
+        "water_distance_cm": reading.water_distance_cm,
+        "scan": processed_scan,
+        "nearest_object": nearest_obj,
+        "object_status": overall_status,
+        "timestamp": now.isoformat(),
+        "last_seen": now.strftime("%H:%M:%S UTC"),
+        "time_diff_seconds": 0.0,
+        "thresholds": get_current_thresholds(),
+        "lan_ips": lan_list,
+        "recommended_url": rec_url
+    }
+
+    # 6. Update in-memory cache
+    global _latest_overall
+    _latest_telemetry[data.device_id] = telemetry
+    _latest_overall = telemetry
+
+    return telemetry
+
+
 def get_host_lan_ips(port: int = 8000) -> Tuple[List[Dict[str, Any]], str]:
     """
     Returns list of host LAN IPv4 endpoints and recommended URL for ESP32/ESP8266.
+    In cloud/production deployment, checks for PUBLIC_API_URL or IOT_SERVER_URL.
     """
     endpoints: List[Dict[str, Any]] = []
     recommended = f"http://192.168.137.1:{port}/api/iot/sensor-data"
+
+    # Prioritize public production cloud endpoint if configured
+    public_url = os.getenv("IOT_SERVER_URL") or os.getenv("PUBLIC_API_URL")
+    if public_url:
+        p_clean = public_url.rstrip("/")
+        if not p_clean.endswith("/api/iot/sensor-data"):
+            if p_clean.endswith("/api"):
+                public_endpoint = f"{p_clean}/iot/sensor-data"
+            else:
+                public_endpoint = f"{p_clean}/api/iot/sensor-data"
+        else:
+            public_endpoint = p_clean
+
+        endpoints.append({
+            "ip": "Cloud Server",
+            "label": "Production Cloud Backend (Field Stations)",
+            "url": public_endpoint,
+            "is_hotspot": False,
+            "is_cloud": True
+        })
+        recommended = public_endpoint
+
     try:
         hostname = socket.gethostname()
         _, _, ips = socket.gethostbyname_ex(hostname)
@@ -45,18 +252,19 @@ def get_host_lan_ips(port: int = 8000) -> Tuple[List[Dict[str, Any]], str]:
             if ip.startswith("127."):
                 continue
             is_hotspot = ip.startswith("192.168.137.")
-            label = "Windows Hotspot (Recommended)" if is_hotspot else ("Local Wi-Fi Network" if ip.startswith("192.168.") or ip.startswith("10.") else "LAN Interface")
+            label = "Windows Hotspot (Local Lab)" if is_hotspot else ("Local Wi-Fi Network" if ip.startswith("192.168.") or ip.startswith("10.") else "LAN Interface")
             url = f"http://{ip}:{port}/api/iot/sensor-data"
             item = {"ip": ip, "label": label, "url": url, "is_hotspot": is_hotspot}
             endpoints.append(item)
-            if is_hotspot:
+            if is_hotspot and not public_url:
                 recommended = url
     except Exception:
         pass
 
     if not endpoints:
         endpoints.append({"ip": "192.168.137.1", "label": "Windows Hotspot", "url": f"http://192.168.137.1:{port}/api/iot/sensor-data", "is_hotspot": True})
-        recommended = f"http://192.168.137.1:{port}/api/iot/sensor-data"
+        if not public_url:
+            recommended = f"http://192.168.137.1:{port}/api/iot/sensor-data"
 
     return endpoints, recommended
 
@@ -208,117 +416,16 @@ def get_default_demo_telemetry(device_id: str = "MAITRI_ESP32_01", controller_ty
     }
 
 
-def process_incoming_sensor_data(db: Session, data: IoTSensorDataCreate) -> Dict[str, Any]:
-    """
-    Processes incoming sensor telemetry from ESP8266 or ESP32:
-    - Validates / re-classifies scan points
-    - Computes nearest object and overall alert status
-    - Upserts device registration in DB
-    - Stores historical reading in DB
-    - Updates in-memory fast cache
-    """
-    now = datetime.now(timezone.utc)
-
-    # 1. Normalize, sanitize and re-classify scan points with current thresholds
-    processed_scan: List[Dict[str, Any]] = []
-    for pt in data.scan:
-        raw_dist = pt.distance
-        # Safe cleanup: treat negative distance or > 450cm as no echo
-        if raw_dist is not None and (raw_dist <= 0.0 or raw_dist > 450.0):
-            clean_dist = None
-        else:
-            clean_dist = round(float(raw_dist), 1) if raw_dist is not None else None
-
-        det, st = classify_distance(clean_dist)
-        processed_scan.append({
-            "angle": int(pt.angle),
-            "distance": clean_dist,
-            "object_detected": det,
-            "status": st
-        })
-
-    # 2. Calculate nearest obstacle
-    nearest_obj, overall_status = calculate_nearest_object(processed_scan)
-    if not nearest_obj and data.water_distance_cm is not None and data.water_distance_cm > 0:
-        det, st = classify_distance(data.water_distance_cm)
-        nearest_obj = {
-            "angle": 90,
-            "distance": round(float(data.water_distance_cm), 1),
-            "status": st
-        }
-        overall_status = st
-
-    # 3. Upsert device in DB
-    device = db.query(IoTDevice).filter(IoTDevice.device_id == data.device_id).first()
-    if not device:
-        device = IoTDevice(
-            device_id=data.device_id,
-            controller_type=data.controller_type or "ESP32",
-            name=f"MAITRI {data.controller_type or 'ESP'} Node",
-            is_active=True,
-            last_seen=now,
-            created_at=now
-        )
-        db.add(device)
-    else:
-        device.controller_type = data.controller_type or device.controller_type
-        device.last_seen = now
-        device.is_active = True
-
-    # 4. Save reading to DB
-    reading = IoTSensorReading(
-        device_id=data.device_id,
-        controller_type=data.controller_type or "ESP32",
-        timestamp=now,
-        temperature=round(float(data.temperature), 1) if data.temperature is not None else None,
-        humidity=round(float(data.humidity), 1) if data.humidity is not None else None,
-        soil_moisture=round(float(data.soil_moisture), 1) if data.soil_moisture is not None else None,
-        water_distance_cm=round(float(data.water_distance_cm), 1) if data.water_distance_cm is not None else None,
-        scan_json=json.dumps(processed_scan),
-        nearest_distance=nearest_obj["distance"] if nearest_obj else None,
-        nearest_angle=nearest_obj["angle"] if nearest_obj else None,
-        object_status=overall_status,
-        created_at=now
-    )
-    db.add(reading)
-    db.commit()
-
-    lan_list, rec_url = get_host_lan_ips()
-
-    # 5. Build telemetry payload
-    telemetry = {
-        "device_id": data.device_id,
-        "controller_type": data.controller_type or "ESP32",
-        "status": "ONLINE",
-        "is_online": True,
-        "temperature": reading.temperature,
-        "humidity": reading.humidity,
-        "soil_moisture": reading.soil_moisture,
-        "water_distance_cm": reading.water_distance_cm,
-        "scan": processed_scan,
-        "nearest_object": nearest_obj,
-        "object_status": overall_status,
-        "timestamp": now.isoformat(),
-        "last_seen": now.strftime("%H:%M:%S UTC"),
-        "time_diff_seconds": 0.0,
-        "thresholds": get_current_thresholds(),
-        "lan_ips": lan_list,
-        "recommended_url": rec_url
-    }
-
-    # 6. Update in-memory cache
-    global _latest_overall
-    _latest_telemetry[data.device_id] = telemetry
-    _latest_overall = telemetry
-
-    return telemetry
 
 
-def get_latest_telemetry(db: Session, device_id: Optional[str] = None) -> Dict[str, Any]:
+def get_latest_telemetry(db: Session, device_id: Optional[str] = None, user: Optional[Any] = None) -> Dict[str, Any]:
     """
     Returns the latest sensor reading and live status for the requested device
-    (or any active device if none specified).
+    (or any active device if none specified). Enforces ownership isolation.
     """
+    if device_id:
+        check_device_access(db, device_id, user)
+
     now = datetime.now(timezone.utc)
     timeout_sec = _current_thresholds["offline_timeout_seconds"]
     lan_list, rec_url = get_host_lan_ips()
@@ -367,7 +474,11 @@ def get_latest_telemetry(db: Session, device_id: Optional[str] = None) -> Dict[s
                 "status": last_reading.object_status or "CLEAR"
             }
 
-        diff_sec = max(0.0, (now - last_reading.timestamp.replace(tzinfo=timezone.utc if last_reading.timestamp.tzinfo is None else None)).total_seconds())
+        if last_reading.timestamp.tzinfo is None:
+            ts_aware = last_reading.timestamp.replace(tzinfo=timezone.utc)
+        else:
+            ts_aware = last_reading.timestamp
+        diff_sec = max(0.0, (now - ts_aware).total_seconds())
         is_online = diff_sec <= timeout_sec
 
         result = {
@@ -398,14 +509,26 @@ def get_latest_telemetry(db: Session, device_id: Optional[str] = None) -> Dict[s
     )
 
 
-def list_registered_devices(db: Session) -> List[Dict[str, Any]]:
+def list_registered_devices(db: Session, user: Optional[Any] = None) -> List[Dict[str, Any]]:
     """
     Returns list of all known IoT devices with online/offline status.
+    If authenticated as farmer, filters to devices owned by farmer or farmer's farms.
     """
     now = datetime.now(timezone.utc)
     timeout_sec = _current_thresholds["offline_timeout_seconds"]
 
-    devices = db.query(IoTDevice).order_by(desc(IoTDevice.last_seen)).all()
+    query = db.query(IoTDevice)
+    if user:
+        role = (getattr(user, "role", None) or "FARMER").upper()
+        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
+            user_farm_ids = [f.id for f in db.query(Farm).filter(Farm.user_id == user.id).all()]
+            query = query.filter(
+                (IoTDevice.user_id == user.id) |
+                (IoTDevice.farm_id.in_(user_farm_ids)) |
+                (IoTDevice.user_id.is_(None))
+            )
+
+    devices = query.order_by(desc(IoTDevice.last_seen)).all()
     results = []
 
     # If no devices in DB, provide standard defaults
@@ -426,7 +549,10 @@ def list_registered_devices(db: Session) -> List[Dict[str, Any]]:
         ]
 
     for d in devices:
-        last_seen_aware = d.last_seen.replace(tzinfo=timezone.utc if d.last_seen.tzinfo is None else None)
+        if d.last_seen.tzinfo is None:
+            last_seen_aware = d.last_seen.replace(tzinfo=timezone.utc)
+        else:
+            last_seen_aware = d.last_seen
         diff_sec = max(0.0, (now - last_seen_aware).total_seconds())
         is_online = diff_sec <= timeout_sec
 
@@ -449,13 +575,25 @@ def list_registered_devices(db: Session) -> List[Dict[str, Any]]:
     return results
 
 
-def get_telemetry_history(db: Session, device_id: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
+def get_telemetry_history(db: Session, device_id: Optional[str] = None, limit: int = 40, user: Optional[Any] = None) -> List[Dict[str, Any]]:
     """
-    Returns recent historical readings for telemetry graphs.
+    Returns recent historical readings for telemetry graphs. Enforces ownership isolation.
     """
+    if device_id:
+        check_device_access(db, device_id, user)
+
     query = db.query(IoTSensorReading)
     if device_id:
         query = query.filter(IoTSensorReading.device_id == device_id)
+    elif user:
+        role = (getattr(user, "role", None) or "FARMER").upper()
+        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
+            user_farm_ids = [f.id for f in db.query(Farm).filter(Farm.user_id == user.id).all()]
+            owned_device_ids = [d.device_id for d in db.query(IoTDevice).filter(
+                (IoTDevice.user_id == user.id) | (IoTDevice.farm_id.in_(user_farm_ids)) | (IoTDevice.user_id.is_(None))
+            ).all()]
+            query = query.filter(IoTSensorReading.device_id.in_(owned_device_ids))
+
     readings = query.order_by(desc(IoTSensorReading.timestamp)).limit(limit).all()
 
     results = []

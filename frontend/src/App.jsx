@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { Routes, Route, Navigate, Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Sprout, LayoutDashboard, MapPinned, CloudSun, Tractor, TreePine,
@@ -6,9 +6,9 @@ import {
   AlertTriangle, CheckCircle2, Droplets, ThermometerSun, Wind,
   Compass, Sun, CloudRain, Search, Navigation, Calendar, ShieldAlert, Shield, Landmark,
   Check, RefreshCw, Eye, Pencil, Trash2, FlaskConical, HelpCircle, ArrowRight,
-  ChevronDown, Wheat, Radio
+  ChevronDown, Wheat, Radio, Bot, QrCode, FileText, Phone, Clock, AlertCircle
 } from "lucide-react";
-import api from "./api";
+import api, { clearAuthSession } from "./api";
 import Logo from "./Logo";
 import { LanguageProvider, useLang } from "./LanguageContext";
 import {
@@ -36,6 +36,8 @@ import InsurancePlanningPage from "./InsurancePlanningPage";
 import GovernmentSchemesPage from "./GovernmentSchemesPage";
 import IoTMonitorPage from "./IoTMonitorPage";
 import FarmerPlanningPage from "./FarmerPlanningPage";
+import KrishiAssistantPage from "./KrishiAssistantPage";
+import OperatorPortal from "./OperatorPortal";
 
 
 const soilTypes = [
@@ -66,7 +68,9 @@ function PageTitleManager() {
   useEffect(() => {
     const path = location.pathname;
     let title = "MAITTRI | Smart Agriculture Platform";
-    if (path.startsWith("/dashboard")) {
+    if (path.startsWith("/operator")) {
+      title = "MAITTRI | Authorized Agriculture / Seva Operator Portal";
+    } else if (path.startsWith("/dashboard")) {
       title = "MAITTRI | Dashboard";
     } else if (path.startsWith("/crop-farming/soil-nutrients") || path.startsWith("/nutrient-analysis")) {
       title = "MAITTRI | Soil & Nutrient Intelligence";
@@ -96,7 +100,8 @@ function PageTitleManager() {
       title = "MAITTRI | Horticulture";
     } else if (path.startsWith("/iot-monitor") || path.startsWith("/iot")) {
       title = "MAITTRI | IoT Field Monitor";
-
+    } else if (path.startsWith("/krishi-assistant") || path.startsWith("/chat")) {
+      title = "MAITTRI | Krishi Assistant AI";
     } else if (path.startsWith("/login")) {
       title = "MAITTRI | Login";
     } else if (path.startsWith("/register")) {
@@ -216,23 +221,26 @@ function LocationSearchInput({ onSelect, placeholder, defaultValue = "" }) {
  * 3. SPLASH / STARTUP SCREEN (MAITTRI Brand)
  */
 function Splash({ onDone }) {
-  const [lang] = useLang();
+  const [lang, , t] = useLang();
   
   useEffect(() => {
     const timer = setTimeout(onDone, 1800);
     return () => clearTimeout(timer);
   }, [onDone]);
 
+  const taglineText = t?.tagline || (lang === "hi" ? "किसान का साथी, समृद्धि की शुरुआत" : "Farmer's Companion, Beginning of Prosperity");
+  const subTaglineText = t?.subTagline || (lang === "hi" ? "सटीक कृषि परामर्श • बेहतर निर्णय • समृद्ध खेती" : "Intelligent Agriculture • Better Decisions • Better Farming");
+
   return (
-    <div className="splash">
+    <div className="splash" onClick={onDone} style={{ cursor: "pointer" }} title={lang === "hi" ? "आगे बढ़ने के लिए क्लिक करें" : "Click to continue"}>
       <div className="splashBrandContainer">
         <div className="splashLogoGlow">
           <Logo size="splash" variant="icon" />
         </div>
         <h1 className="splashBrandTitle">MAITTRI</h1>
         <div className="splashBrandHindi">मैत्री</div>
-        <p className="splashTagline">"किसान का साथी, समृद्धि की शुरुआत"</p>
-        <p className="splashSubtext">Intelligent Agriculture • Better Decisions • Better Farming</p>
+        <p className="splashTagline">"{taglineText}"</p>
+        <p className="splashSubtext">{subTaglineText}</p>
         
         <div className="splashLoadingContainer">
           <div className="splashLoadingBar">
@@ -245,7 +253,7 @@ function Splash({ onDone }) {
 }
 
 function Language({ onDone }) {
-  const [, setLang, t] = useLang();
+  const [lang, setLang, t] = useLang();
   return (
     <div className="centerPage">
       <div className="card languageCard">
@@ -255,11 +263,13 @@ function Language({ onDone }) {
         <h1 style={{ margin: "6px 0 2px", color: "#14532d" }}>MAITTRI</h1>
         <div style={{ fontSize: 18, color: "#16a34a", fontWeight: 700, marginBottom: 6 }}>मैत्री</div>
         <p style={{ margin: "4px 0 16px", color: "#64748b", fontSize: 13, fontWeight: 600 }}>
-          "किसान का साथी, समृद्धि की शुरुआत"
+          "{t.tagline}"
         </p>
-        <p style={{ fontWeight: 600, color: "#334155", margin: "12px 0 8px" }}>{t.language}</p>
-        <button className="button" onClick={() => { setLang("en"); onDone(); }}>English</button>
-        <button className="button secondary" onClick={() => { setLang("hi"); onDone(); }}>हिन्दी</button>
+        <p style={{ fontWeight: 600, color: "#334155", margin: "12px 0 8px" }}>{t.language || "Language / भाषा"}</p>
+        <div className="langSelectBtnGroup">
+          <button className={`button ${lang === "en" ? "" : "secondary"}`} onClick={() => { setLang("en"); onDone(); }}>English</button>
+          <button className={`button ${lang === "hi" ? "" : "secondary"}`} onClick={() => { setLang("hi"); onDone(); }}>हिन्दी</button>
+        </div>
       </div>
     </div>
   );
@@ -267,9 +277,13 @@ function Language({ onDone }) {
 
 /**
  * 4. LOGIN & REGISTRATION PAGE (MAITTRI Brand)
+ * Supports both Farmer Portal and Authorized Agriculture / Seva Operator Login
  */
 function Auth({ mode = "login", onAuth }) {
   const [lang, setLang, t] = useLang();
+  const [role, setRole] = useState("FARMER");
+  const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -282,17 +296,35 @@ function Auth({ mode = "login", onAuth }) {
     if (detail && typeof detail === "object") return detail.msg || JSON.stringify(detail);
     if (err.response?.status >= 500) return lang === "hi" ? "सर्वर त्रुटि। कृपया थोड़ी देर बाद पुनः प्रयास करें।" : "Server error. Please try again later.";
     if (!err.response && err.message) return lang === "hi" ? "नेटवर्क त्रुटि। कृपया इंटरनेट कनेक्शन जांचें।" : "Network error. Please check your connection.";
-    return lang === "hi" ? "कुछ त्रुटि हुई। कृपया पुनः प्रयास करें।" : "Something went wrong";
+    return lang === "hi" ? "कुछ त्रुटि हुई। कृपया पुनः प्रयास करें।" : "Something went wrong. Please try again.";
   };
 
   const submit = async e => {
     e.preventDefault(); setError("");
     try {
       const url = mode === "login" ? "/auth/login" : "/auth/register";
-      const { data } = await api.post(url, { email: email.trim(), password, language: lang });
+      const payload = {
+        email: email.trim(),
+        password,
+        language: lang,
+        role: role,
+        full_name: fullName.trim() || undefined,
+        phone_number: phoneNumber.trim() || undefined
+      };
+      const { data } = await api.post(url, payload);
       localStorage.setItem("token", data.access_token);
+      const assignedRole = data.role || role || "FARMER";
+      localStorage.setItem("role", assignedRole);
+      if (data.user_id) localStorage.setItem("user_id", data.user_id);
+      if (data.full_name) localStorage.setItem("full_name", data.full_name);
+      if (data.email) localStorage.setItem("email", data.email);
       if (onAuth) onAuth();
-      nav("/dashboard");
+
+      if (assignedRole === "AUTHORIZED_OPERATOR") {
+        nav("/operator");
+      } else {
+        nav("/dashboard");
+      }
     } catch(err) {
       setError(getErrorMessage(err));
     }
@@ -312,7 +344,25 @@ function Auth({ mode = "login", onAuth }) {
           <h1 className="authTitle">MAITTRI</h1>
           <div className="authHindiTitle">मैत्री</div>
           <div className="authPlatformSub">{t.platformDesc || "Smart Agriculture Platform"}</div>
-          <div className="authTagline">"किसान का साथी, समृद्धि की शुरुआत"</div>
+          <div className="authTagline">"{t.tagline}"</div>
+        </div>
+
+        {/* Portal / Role Toggle */}
+        <div className="authRoleToggle">
+          <button
+            type="button"
+            className={`authRoleBtn ${role === "FARMER" ? "active" : ""}`}
+            onClick={() => setRole("FARMER")}
+          >
+            🌾 {lang === "hi" ? "किसान पोर्टल" : "Farmer Portal"}
+          </button>
+          <button
+            type="button"
+            className={`authRoleBtn ${role === "AUTHORIZED_OPERATOR" ? "active" : ""}`}
+            onClick={() => setRole("AUTHORIZED_OPERATOR")}
+          >
+            🏛️ {lang === "hi" ? "अधिकृत सेवा केंद्र" : "Official / Seva"}
+          </button>
         </div>
 
         <div className="authLangToggle">
@@ -332,10 +382,40 @@ function Auth({ mode = "login", onAuth }) {
           </button>
         </div>
 
-        <h2 className="authFormHeader">{mode === "login" ? t.login : t.register}</h2>
+        <h2 className="authFormHeader">
+          {mode === "login" 
+            ? (role === "AUTHORIZED_OPERATOR" 
+                ? (lang === "hi" ? "अधिकृत सेवा ऑपरेटर लॉगिन" : "Seva Operator Login")
+                : (t.login || (lang === "hi" ? "लॉगिन" : "Login")))
+            : (role === "AUTHORIZED_OPERATOR"
+                ? (lang === "hi" ? "सेवा ऑपरेटर पंजीकरण" : "Register Operator")
+                : (t.register || (lang === "hi" ? "पंजीकरण" : "Register")))}
+        </h2>
         {error && <div className="error">{error}</div>}
+
+        {mode === "register" && (
+          <>
+            <label className="authLabel">{lang === "hi" ? "पूरा नाम" : "Full Name"}</label>
+            <input
+              className="authInput"
+              type="text"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              placeholder={lang === "hi" ? "उदा. राम प्रसाद" : "e.g. Ram Prasad"}
+            />
+
+            <label className="authLabel">{lang === "hi" ? "मोबाइल नंबर" : "Mobile Number (for SMS/IVR)"}</label>
+            <input
+              className="authInput"
+              type="tel"
+              value={phoneNumber}
+              onChange={e => setPhoneNumber(e.target.value)}
+              placeholder="9876543210"
+            />
+          </>
+        )}
         
-        <label className="authLabel">{t.email}</label>
+        <label className="authLabel">{t.email || (lang === "hi" ? "ईमेल" : "Email")}</label>
         <input
           className="authInput"
           type="email"
@@ -345,7 +425,7 @@ function Auth({ mode = "login", onAuth }) {
           placeholder={lang === "hi" ? "अपना ईमेल दर्ज करें" : "Enter your email"}
         />
         
-        <label className="authLabel">{t.password}</label>
+        <label className="authLabel">{t.password || (lang === "hi" ? "पासवर्ड" : "Password")}</label>
         <input
           className="authInput"
           type="password"
@@ -358,7 +438,7 @@ function Auth({ mode = "login", onAuth }) {
         />
         
         <button type="submit" className="button authSubmitBtn">
-          {mode === "login" ? t.login : t.register}
+          {mode === "login" ? (t.login || (lang === "hi" ? "लॉगिन करें" : "Login")) : (t.register || (lang === "hi" ? "खाता बनाएं" : "Create Account"))}
         </button>
         
         <div className="authSwitchRow">
@@ -384,7 +464,7 @@ function Layout({ children }) {
   const [sidebarWeather, setSidebarWeather] = useState(null);
   const location = useLocation();
   const nav = useNavigate();
-  const logout = () => { localStorage.removeItem("token"); nav("/login"); };
+  const logout = () => { clearAuthSession(); nav("/login"); };
 
   // Current route tracking for parent and child active states
   const currentPath = location.pathname;
@@ -419,18 +499,34 @@ function Layout({ children }) {
     }).catch(() => {});
   }, []);
 
-  const item = (to, icon, label) => {
-    const isActive = currentPath === to;
+  const item = (to, icon, label, aliases = []) => {
+    const isActive = currentPath === to || aliases.some(alias => currentPath === alias || currentPath.startsWith(alias + "/"));
+    let displayContent;
+    if (React.isValidElement(label)) {
+      displayContent = label;
+    } else if (typeof label === "object" && label !== null) {
+      displayContent = label.title || label.name || "";
+    } else {
+      displayContent = label;
+    }
     return (
       <Link onClick={() => setOpen(false)} to={to} className={`navItem ${isActive ? "active" : ""}`}>
         {icon}
-        <span>{label}</span>
+        {React.isValidElement(displayContent) ? displayContent : <span>{displayContent}</span>}
       </Link>
     );
   };
 
   const subItem = (to, icon, label, aliases = []) => {
     const isSubActive = currentPath === to || aliases.some(alias => currentPath === alias || currentPath.startsWith(alias + "/"));
+    let displayContent;
+    if (React.isValidElement(label)) {
+      displayContent = label;
+    } else if (typeof label === "object" && label !== null) {
+      displayContent = label.title || label.name || "";
+    } else {
+      displayContent = label;
+    }
     return (
       <Link
         to={to}
@@ -441,7 +537,7 @@ function Layout({ children }) {
         className={`navSubItem ${isSubActive ? "active" : ""}`}
       >
         <span className="navSubItemIcon">{icon}</span>
-        <span>{label}</span>
+        {React.isValidElement(displayContent) ? displayContent : <span>{displayContent}</span>}
       </Link>
     );
   };
@@ -460,11 +556,22 @@ function Layout({ children }) {
             <span className="sidebarTitle">MAITTRI</span>
             <span className="sidebarSubtitle">मैत्री</span>
           </div>
-          <div className="sidebarTagline">किसान का साथी, समृद्धि की शुरुआत</div>
+          <div className="sidebarTagline">{t.tagline}</div>
         </div>
 
         <nav className="sidebarNav">
-          {item("/dashboard", <LayoutDashboard size={20}/>, t.dashboard)}
+          {localStorage.getItem("role") === "AUTHORIZED_OPERATOR" && (
+            <Link
+              to="/operator"
+              onClick={() => setOpen(false)}
+              className="navItem"
+              style={{ background: "#ecfdf5", color: "#065f46", fontWeight: 700, border: "1px solid #a7f3d0", marginBottom: 6 }}
+            >
+              <Landmark size={20} />
+              <span>{lang === "hi" ? "🏛️ सेवा ऑपरेटर केंद्र" : "🏛️ Seva Operator Portal"}</span>
+            </Link>
+          )}
+          {item("/dashboard", <LayoutDashboard size={20}/>, t("nav.dashboard") || (lang === "hi" ? "डैशबोर्ड" : "Dashboard"))}
 
           {/* CROP FARMING EXPANDABLE PARENT (APPEARS ONLY ONCE) */}
           <div className="navParentGroup">
@@ -488,38 +595,38 @@ function Layout({ children }) {
                 {subItem(
                   "/crop-farming/soil-nutrients",
                   <FlaskConical size={15}/>,
-                  t.soilNutrientDepletion || (lang === "hi" ? "मृदा एवं पोषक तत्व ह्रास विश्लेषण" : "Soil & Nutrient Depletion Intelligence"),
+                  t.soilNutrients || (lang === "hi" ? "मिट्टी और पोषक तत्व जानकारी" : "Soil & Nutrient Intelligence"),
                   ["/nutrient-analysis"]
-                )}
-                {subItem(
-                  "/crop-farming/recommendation",
-                  <Leaf size={15}/>,
-                  t.cropRecommendation || (lang === "hi" ? "फसल सिफारिश" : "Crop Recommendation"),
-                  ["/recommend"]
                 )}
                 {subItem(
                   "/crop-farming/fertilizer",
                   <Sprout size={15}/>,
-                  t.fertilizerRecommendation || (lang === "hi" ? "उर्वरक सिफारिश" : "Fertilizer Recommendation"),
+                  t.fertilizerRecommendation || (lang === "hi" ? "उर्वरक सुझाव" : "Fertilizer Recommendation"),
                   ["/fertilizer"]
+                )}
+                {subItem(
+                  "/crop-farming/recommendation",
+                  <Leaf size={15}/>,
+                  t.cropRecommendation || (lang === "hi" ? "फसल सुझाव" : "Crop Recommendation"),
+                  ["/recommend"]
                 )}
                 {subItem(
                   "/crop-farming/calendar",
                   <Calendar size={15}/>,
-                  t.cropCalendar || (lang === "hi" ? "फसल कैलेंडर एवं योजना" : "Crop Calendar"),
+                  t.cropCalendar || (lang === "hi" ? "फसल कैलेंडर एवं कार्य योजना" : "Crop Calendar & Planning"),
                   ["/plan"]
                 )}
                 {subItem(
                   "/crop-farming/parali-management",
                   <span style={{ fontSize: "14px", lineHeight: 1 }}>🌾</span>,
-                  lang === "hi" ? "पराली प्रबंधन" : "Parali Management",
+                  t.paraliManagement || (lang === "hi" ? "पराली प्रबंधन" : "Parali Management"),
                   ["/parali", "/parali-management"]
                 )}
 
                 {subItem(
                   "/crop-farming/market-price",
                   <IndianRupee size={15}/>,
-                  t.marketPrice || (lang === "hi" ? "मंडी भाव एवं बाज़ार विश्लेषण" : "Market Price"),
+                  t.marketPrice || (lang === "hi" ? "बाजार भाव" : "Market Price Intelligence"),
                   ["/market-price"]
                 )}
                 {subItem(
@@ -528,33 +635,47 @@ function Layout({ children }) {
                   t.weatherImpact || (lang === "hi" ? "मौसम प्रभाव एवं चेतावनी" : "Weather Impact / Alerts"),
                   ["/weather"]
                 )}
+                {subItem(
+                  "/crop-farming/live-soil",
+                  <Radio size={15}/>,
+                  t("nav.liveSoilMonitoring") || (lang === "hi" ? "लाइव मिट्टी एवं खेत निगरानी" : "Live Soil Monitoring"),
+                  ["/crop-farming/live-soil", "/crop-farming/iot-monitor", "/iot-monitor", "/iot"]
+                )}
               </div>
-
             </div>
           </div>
 
           {item(
             "/insurance-planning",
             <Shield size={20}/>,
-            <span>🛡️ {lang === "hi" ? "कृषि बीमा योजना" : "Insurance Planning"}</span>,
-            ["/insurance"]
+            t("nav.insurancePlanning") || (lang === "hi" ? "बीमा योजना" : "Insurance Planning"),
+            ["/insurance", "/insurance-planning"]
           )}
           {item(
             "/government-schemes",
             <Landmark size={20}/>,
-            <span>🏛️ {lang === "hi" ? "सरकारी योजनाएं" : "Government Schemes"}</span>,
-            ["/schemes"]
+            t("nav.governmentSchemes") || (lang === "hi" ? "सरकारी योजनाएँ" : "Government Schemes"),
+            ["/schemes", "/government-schemes"]
           )}
           {item(
             "/iot-monitor",
             <Radio size={20}/>,
-            <span>📡 {lang === "hi" ? "आईओटी फील्ड मॉनिटर" : "IoT Field Monitor"}</span>,
-            ["/iot", "/crop-farming/iot-monitor"]
+            t("nav.iotFieldMonitor") || (lang === "hi" ? "स्मार्ट खेत निगरानी" : "IoT Field Monitor"),
+            ["/iot", "/iot-monitor"]
+          )}
+          {item(
+            "/krishi-assistant",
+            <Bot size={20}/>,
+            <span className="navItemWithBadge">
+              <span>{t("nav.krishiAssistant") || (lang === "hi" ? "कृषि सहायक AI" : "Krishi Assistant AI")}</span>
+              <span className="navAiBadge">AI</span>
+            </span>,
+            ["/chat", "/assistant", "/krishi-assistant"]
           )}
 
-          {item("/horticulture", <TreePine size={20}/>, t.horticulture)}
-          <div className="navItem disabled"><Bird size={20}/><span>🐔 {lang === "hi" ? "मुर्गी पालन" : "Poultry"}</span><small>{t.coming}</small></div>
-          <div className="navItem disabled"><Beef size={20}/><span>🐄 {lang === "hi" ? "पशुपालन" : "Cattle"}</span><small>{t.coming}</small></div>
+          {item("/horticulture", <TreePine size={20}/>, t.horticulture || (lang === "hi" ? "बागवानी" : "Horticulture"))}
+          <div className="navItem disabled"><Bird size={20}/><span>{t("nav.poultry") || (lang === "hi" ? "मुर्गी पालन" : "Poultry")}</span><small>{t.comingSoon || t.coming}</small></div>
+          <div className="navItem disabled"><Beef size={20}/><span>{t("nav.cattle") || (lang === "hi" ? "पशुपालन एवं डेयरी" : "Cattle / Dairy")}</span><small>{t.comingSoon || t.coming}</small></div>
         </nav>
 
         <div className="sidebarBottom">
@@ -563,7 +684,7 @@ function Layout({ children }) {
             to="/weather"
             className="lowerLeftWeatherLogo"
             onClick={() => setOpen(false)}
-            title={lang === "hi" ? "मौसम सेवा (Weather)" : "Weather Service"}
+            title={typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम सेवा" : "Weather Service"))}
             aria-label="Weather"
           >
             <div className="lowerLeftWeatherIconWrap">
@@ -571,7 +692,7 @@ function Layout({ children }) {
               <span className="lowerLeftWeatherPulseDot"></span>
             </div>
             <div className="lowerLeftWeatherContent">
-              <span className="lowerLeftWeatherTitle">{t.weather}</span>
+              <span className="lowerLeftWeatherTitle">{typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम" : "Weather"))}</span>
               {sidebarWeather ? (
                 <span className="lowerLeftWeatherTemp">
                   {sidebarWeather.current.temperature_2m}°C · {translateWeatherCondition(sidebarWeather.current.condition, lang)}
@@ -582,10 +703,22 @@ function Layout({ children }) {
             </div>
           </Link>
 
-          <select value={lang} onChange={e => setLang(e.target.value)}>
-            <option value="en">English</option>
-            <option value="hi">हिन्दी</option>
-          </select>
+          <div className="sidebarLangToggle">
+            <button
+              type="button"
+              className={`sidebarLangBtn ${lang === "en" ? "active" : ""}`}
+              onClick={() => setLang("en")}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              className={`sidebarLangBtn ${lang === "hi" ? "active" : ""}`}
+              onClick={() => setLang("hi")}
+            >
+              हिन्दी
+            </button>
+          </div>
           <button className="logout" onClick={logout}><LogOut size={16}/> {t.logout}</button>
         </div>
       </aside>
@@ -594,14 +727,14 @@ function Layout({ children }) {
       <Link
         to="/weather"
         className="mobileLowerLeftWeatherBtn"
-        title={lang === "hi" ? "मौसम सेवा" : "Weather"}
+        title={typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम सेवा" : "Weather"))}
         aria-label="Weather"
       >
         <CloudSun size={20} />
         {sidebarWeather ? (
           <span className="mobileWeatherBadge">{sidebarWeather.current.temperature_2m}°C</span>
         ) : (
-          <span>{t.weather}</span>
+          <span>{typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम" : "Weather"))}</span>
         )}
       </Link>
 
@@ -621,10 +754,44 @@ function Layout({ children }) {
             </div>
           </div>
           <div className="topbarRight">
-            <span className="topbarTagline">"किसान का साथी, समृद्धि की शुरुआत"</span>
+            {localStorage.getItem("role") === "AUTHORIZED_OPERATOR" && (
+              <Link to="/operator" className="operatorSwitchLink" style={{ marginRight: 10 }}>
+                🏛️ {lang === "hi" ? "सेवा ऑपरेटर कंसोल" : "Seva Operator Console"}
+              </Link>
+            )}
+            <div className="topbarLangToggle">
+              <button
+                type="button"
+                className={`topbarLangBtn ${lang === "en" ? "active" : ""}`}
+                onClick={() => setLang("en")}
+                title="Switch to English"
+              >
+                English
+              </button>
+              <button
+                type="button"
+                className={`topbarLangBtn ${lang === "hi" ? "active" : ""}`}
+                onClick={() => setLang("hi")}
+                title="हिन्दी में बदलें"
+              >
+                हिन्दी
+              </button>
+            </div>
+            <span className="topbarTagline">"{t.tagline}"</span>
           </div>
         </header>
         {children}
+        {currentPath !== "/krishi-assistant" && currentPath !== "/chat" && currentPath !== "/assistant" && (
+          <Link
+            to="/krishi-assistant"
+            className="floatingChatLauncher"
+            title={lang === "hi" ? "मैत्री कृषि सहायक AI से पूछें" : "Ask Maitri Krishi Assistant AI"}
+            aria-label="Maitri Krishi Assistant"
+          >
+            <Bot size={20} />
+            <span>{lang === "hi" ? "कृषि सहायक AI" : "Krishi Assistant AI"}</span>
+          </Link>
+        )}
       </main>
     </div>
   );
@@ -637,6 +804,20 @@ function Dashboard() {
   const [weather, setWeather] = useState(null);
   const [feedback, setFeedback] = useState("");
   const [iotData, setIotData] = useState(null);
+
+  // MAITTRI Central Farm Brain & Pass State
+  const [farmBrain, setFarmBrain] = useState(null);
+  const [farmerProfile, setFarmerProfile] = useState(null);
+  const [soilTests, setSoilTests] = useState([]);
+  const [showSoilModal, setShowSoilModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [speakingAdvisory, setSpeakingAdvisory] = useState(false);
+  const [soilBookingForm, setSoilBookingForm] = useState({
+    lab_name: "District Agricultural Soil Testing Lab",
+    sample_date: new Date().toISOString().split("T")[0],
+    notes: ""
+  });
 
   useEffect(() => {
     api.get("/iot/latest").then(r => setIotData(r.data)).catch(() => {});
@@ -657,6 +838,7 @@ function Dashboard() {
 
   useEffect(() => {
     loadFarms();
+    api.get("/farmer-profile/me").then(r => setFarmerProfile(r.data)).catch(() => {});
   }, []);
 
   const f = farms.find(farm => String(farm.id) === String(selectedFarmId)) || farms[0];
@@ -671,7 +853,54 @@ function Dashboard() {
     } else {
       setWeather(null);
     }
+
+    if (f?.id) {
+      api.get(`/farm-brain/today/${f.id}`).then(r => setFarmBrain(r.data)).catch(() => {});
+      api.get(`/soil-tests?farm_id=${f.id}`).then(r => setSoilTests(r.data)).catch(() => {});
+    }
   }, [f]);
+
+  const handleBookSoilTest = async (e) => {
+    e.preventDefault();
+    if (!f?.id) return;
+    setBookingLoading(true);
+    try {
+      const { data } = await api.post("/soil-tests", {
+        farm_id: f.id,
+        lab_name: soilBookingForm.lab_name,
+        sample_date: soilBookingForm.sample_date,
+        crop: f.current_crop || f.crop,
+        notes: soilBookingForm.notes
+      });
+      setShowSoilModal(false);
+      setFeedback(lang === "hi" ? `सॉइल टेस्ट अनुरोध सफलतापूर्वक दर्ज (ID: ${data.request_id})` : `Soil test request booked successfully (ID: ${data.request_id})`);
+      setTimeout(() => setFeedback(""), 4500);
+      api.get(`/soil-tests?farm_id=${f.id}`).then(r => setSoilTests(r.data)).catch(() => {});
+    } catch (err) {
+      alert(lang === "hi" ? "सॉइल टेस्ट अनुरोध दर्ज करने में त्रुटि।" : "Failed to submit soil test request.");
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  const playVoiceAdvisory = (text) => {
+    if (!("speechSynthesis" in window) || !text) {
+      alert(text);
+      return;
+    }
+    if (speakingAdvisory) {
+      window.speechSynthesis.cancel();
+      setSpeakingAdvisory(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang === "hi" ? "hi-IN" : "en-IN";
+    utterance.rate = 0.95;
+    utterance.onend = () => setSpeakingAdvisory(false);
+    utterance.onerror = () => setSpeakingAdvisory(false);
+    setSpeakingAdvisory(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleDeleteFarm = async (farmId, farmName) => {
     if (window.confirm(`${t.confirmDelete}\n\n${farmName}`)) {
@@ -697,7 +926,7 @@ function Dashboard() {
       <div className="hero">
         <div>
           <span className="eyebrow">{lang === "hi" ? "मैत्री कृषि डैशबोर्ड" : "MAITTRI AGRONOMY PLATFORM"}</span>
-          <h1>{t.dashboard}</h1>
+          <h1>{t("dashboard.title") || (lang === "hi" ? "डैशबोर्ड" : "Dashboard")}</h1>
           <p>{lang === "hi" ? "अपने खेत का विश्लेषण करें, फसलों की तुलना करें, पोषक तत्वों का प्रबंधन करें और मौसम पर नज़र रखें।" : "Analyze your farm, compare crops, manage nutrients and monitor weather."}</p>
         </div>
         <Link className="button" to="/farm"><Plus size={16}/> {t.addFarm}</Link>
@@ -721,7 +950,7 @@ function Dashboard() {
                 <div className="weatherUpperHeader">
                   <div className="weatherUpperTitleGroup">
                     <CloudSun size={22}/>
-                    <h3>{t.weather}</h3>
+                    <h3>{typeof t.weather === "string" ? t.weather : (t("weather.title") || t("nav.weather") || (lang === "hi" ? "मौसम" : "Weather"))}</h3>
                   </div>
                   <span className="weatherLivePulseBadge">
                     <span className="liveDot"></span>
@@ -812,15 +1041,15 @@ function Dashboard() {
 
                 <div className="farmActionGroup">
                   <Link to={`/farm/edit/${f.id}`} className="button secondary" style={{padding: "8px 14px", fontSize: 13}}>
-                    <Pencil size={15}/> {t.editFarm}
+                    <Pencil size={15}/> {t.editFarm || (lang === "hi" ? "खेत विवरण बदलें" : "Edit Farm")}
                   </Link>
                   <button
                     className="button danger"
                     style={{padding: "8px 14px", fontSize: 13}}
                     onClick={() => handleDeleteFarm(f.id, f.name)}
-                    title={t.deleteFarm}
+                    title={t.deleteFarm || (lang === "hi" ? "खेत हटाएं" : "Delete Farm")}
                   >
-                    <Trash2 size={15}/> {t.deleteFarm}
+                    <Trash2 size={15}/> {t.deleteFarm || (lang === "hi" ? "खेत हटाएं" : "Delete Farm")}
                   </button>
                 </div>
               </div>
@@ -860,12 +1089,333 @@ function Dashboard() {
                     {t.nextStepDesc || (lang === "hi" ? "अपने खेत के विवरण के आधार पर उपयुक्त फसलों की सिफारिश देखें।" : "Run the crop recommendation engine using your farm profile.")}
                   </p>
                 </div>
-                <Link className="button" style={{whiteSpace: "nowrap", flexShrink: 0}} to="/recommend">
-                  {t.recommend} <ArrowRight size={16}/>
+                <Link className="button" to="/recommend">
+                  {t.recommend || (lang === "hi" ? "फसल सिफारिशें प्राप्त करें" : "Get Recommendations")} <ArrowRight size={16}/>
                 </Link>
               </div>
             </div>
           </div>
+
+          {/* 1. CENTRAL MAITTRI FARMER DIGITAL PASS & VERIFIED PROFILE */}
+          <div className="farmerPassCard">
+            <div className="farmerPassHeader">
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Sprout size={20} color="#bbf7d0" />
+                  <strong style={{ fontSize: 16, letterSpacing: "0.5px" }}>
+                    {lang === "hi" ? "MAITTRI किसान पहचान पत्र" : "MAITTRI Farmer Digital Pass"}
+                  </strong>
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>
+                  {lang === "hi" ? "एकल किसान प्रोफ़ाइल · केंद्रीय फार्म डेटा इंजन से जुड़ी डिजिटल पहचान" : "Single Central Farmer Profile · Unified Across All Access Channels"}
+                </div>
+              </div>
+              <div className="farmerIdBadge">
+                {farmerProfile?.farmer_id || (f.farmer_id || `MT-FARM-${String(f.id).padStart(6, "0")}`)}
+              </div>
+            </div>
+
+            <div className="farmerPassGrid">
+              <div className="farmerPassMetric">
+                <span>{lang === "hi" ? "किसान का नाम" : "Farmer Name"}</span>
+                <strong>{farmerProfile?.name || localStorage.getItem("full_name") || (lang === "hi" ? "पंजीकृत कृषक" : "Registered Farmer")}</strong>
+              </div>
+              <div className="farmerPassMetric">
+                <span>{lang === "hi" ? "मोबाइल नंबर" : "Mobile (SMS/IVR)"}</span>
+                <strong>{farmerProfile?.mobile_number || (lang === "hi" ? "एसएमएस/कॉल सक्रिय" : "SMS/IVR Active")}</strong>
+              </div>
+              <div className="farmerPassMetric">
+                <span>{lang === "hi" ? "भूमि क्षेत्रफल व मिट्टी" : "Land & Soil"}</span>
+                <strong>{f.area} {f.area_unit} · {translateSoil(f.soil_type, lang)}</strong>
+              </div>
+              <div className="farmerPassMetric">
+                <span>{lang === "hi" ? "प्रमाणित सॉइल टेस्ट" : "Certified Soil Tests"}</span>
+                <strong>
+                  {soilTests.length > 0 
+                    ? (lang === "hi" ? `✅ ${soilTests.length} लैब रिपोर्ट` : `✅ ${soilTests.length} Lab Report(s)`)
+                    : (lang === "hi" ? "⚠️ केवल सांकेतिक सेंसर" : "⚠️ Indicative sensor only")}
+                </strong>
+              </div>
+            </div>
+
+            <div className="farmerPassActions">
+              <button 
+                type="button" 
+                className="digitalActionBtn" 
+                onClick={() => setShowSoilModal(true)}
+              >
+                <FlaskConical size={15} />
+                <span>{lang === "hi" ? "प्रयोगशाला सॉइल टेस्ट बुक करें" : "Book Lab Soil Test"}</span>
+              </button>
+
+              <button 
+                type="button" 
+                className="digitalActionBtn secondary"
+                onClick={() => setShowQrModal(true)}
+              >
+                <QrCode size={15} />
+                <span>{lang === "hi" ? "डिजिटल QR पास देखें" : "View Digital QR Pass"}</span>
+              </button>
+
+              <Link 
+                to="/crop-farming/soil-nutrients" 
+                className="digitalActionBtn secondary"
+                style={{ textDecoration: "none" }}
+              >
+                <FileText size={15} />
+                <span>{lang === "hi" ? "पोषक तत्व विश्लेषण" : "Nutrient Intelligence"}</span>
+              </Link>
+            </div>
+
+            <div style={{ fontSize: 11.5, opacity: 0.85, borderTop: "1px solid rgba(255,255,255,0.2)", paddingTop: 8 }}>
+              ℹ️ {lang === "hi" 
+                ? "नोट: आईओटी सेंसर डेटा सांकेतिक है। उर्वरक सब्सिडी व सटीक संस्तुति हेतु प्रमाणित लैब टेस्ट करवाएं।" 
+                : "Note: In-field IoT telemetry provides indicative readings. Book a certified lab test for statutory soil health card recommendations."}
+            </div>
+          </div>
+
+          {/* 2. MAITTRI FARM BRAIN — WHAT SHOULD I DO TODAY? */}
+          <div className="farmBrainSection">
+            <div className="farmBrainHeaderBar">
+              <div className="farmBrainTitleGroup">
+                <span style={{ fontSize: 24 }}>🧠</span>
+                <div>
+                  <h3>
+                    {lang === "hi" ? "आज मुझे क्या करना चाहिए? (MAITTRI फार्म ब्रेन)" : "WHAT SHOULD I DO TODAY? (MAITTRI Farm Brain)"}
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#64748b" }}>
+                    {lang === "hi" 
+                      ? "मौसम, मृदा स्वास्थ्य, आईओटी टेलीमेट्री व फसल अवस्था का समन्वित दैनिक निर्णय इंजन"
+                      : "Actionable daily agronomical decisions synthesizing weather, soil tests, indicative IoT & crop stage"}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span className="farmBrainBadge">
+                  {farmBrain?.confidence_overall === "HIGH" ? (lang === "hi" ? "उच्च विश्वसनीयता" : "HIGH CONFIDENCE") : (lang === "hi" ? "मध्यम विश्वसनीयता" : "MEDIUM CONFIDENCE")}
+                </span>
+                {farmBrain?.voice_text && (
+                  <button 
+                    className="operatorBtn secondary"
+                    onClick={() => playVoiceAdvisory(farmBrain.voice_text)}
+                    title={lang === "hi" ? "IVR वॉयस एडवाइजरी सुनें" : "Listen to Voice Advisory (IVR Preview)"}
+                  >
+                    <Phone size={14} />
+                    <span>{speakingAdvisory ? (lang === "hi" ? "वॉयस रोकें" : "Stop Voice") : (lang === "hi" ? "वॉयस सलाह" : "Voice Advisory (IVR)")}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="priorityActionGrid">
+              {farmBrain?.today_actions && farmBrain.today_actions.length > 0 ? (
+                farmBrain.today_actions.map((act, idx) => {
+                  const prio = (act.priority || "NORMAL").toLowerCase();
+                  return (
+                    <div key={idx} className={`priorityActionCard ${prio}`}>
+                      <div className="priorityHeaderRow">
+                        <span className={`priorityBadge ${prio}`}>
+                          {prio === "high" ? (lang === "hi" ? "🔴 अति आवश्यक (उच्च प्राथमिकता)" : "🔴 HIGH PRIORITY") : prio === "medium" ? (lang === "hi" ? "🟠 मध्यम प्राथमिकता" : "🟠 MEDIUM PRIORITY") : (lang === "hi" ? "🟢 सामान्य (नियमित कार्य)" : "🟢 NORMAL PRIORITY")}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>
+                          {act.confidence === "HIGH" ? (lang === "hi" ? "उच्च विश्वसनीयता" : "HIGH CONFIDENCE") : (lang === "hi" ? "मध्यम विश्वसनीयता" : "MEDIUM CONFIDENCE")}
+                        </span>
+                      </div>
+
+                      <h4 className="actionTitle">{act.action}</h4>
+                      {act.stage && (
+                        <div style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
+                          🌱 {lang === "hi" ? "फसल अवस्था" : "Stage"}: {translateStage(act.stage, lang)}
+                        </div>
+                      )}
+
+                      <div className="explainBox">
+                        <div className="explainItem">
+                          <span className="explainLabel">❓ {lang === "hi" ? "क्यों?" : "WHY?"}</span>
+                          <span className="explainValue">{act.reason}</span>
+                        </div>
+                        <div className="explainItem">
+                          <span className="explainLabel">⚠️ {lang === "hi" ? "जोखिम क्या है?" : "RISK?"}</span>
+                          <span className="explainValue" style={{ color: prio === "high" ? "#b91c1c" : "#92400e" }}>
+                            {act.risk}
+                          </span>
+                        </div>
+                        <div className="explainItem">
+                          <span className="explainLabel">📊 {lang === "hi" ? "समर्थक डेटा:" : "DATA USED:"}</span>
+                          <span className="explainValue">
+                            {Array.isArray(act.data_used) ? act.data_used.join(", ") : act.data_used}
+                          </span>
+                        </div>
+                        {act.missing_info && (
+                          <div className="explainItem">
+                            <span className="explainLabel">ℹ️ {lang === "hi" ? "अनुपलब्ध डेटा:" : "MISSING INFO:"}</span>
+                            <span className="explainValue" style={{ color: "#64748b", fontStyle: "italic" }}>
+                              {act.missing_info}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="actionFooter">
+                        <span>🏛️ {act.source || (lang === "hi" ? "आईसीएआर कृषि संस्तुति" : "ICAR Advisory Guidelines")}</span>
+                        <span>🕒 {new Date(act.timestamp || Date.now()).toLocaleTimeString(lang === "hi" ? "hi-IN" : [], { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="priorityActionCard normal" style={{ gridColumn: "1 / -1" }}>
+                  <div className="priorityHeaderRow">
+                    <span className="priorityBadge normal">🟢 {lang === "hi" ? "सामान्य" : "NORMAL"}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>{lang === "hi" ? "उच्च विश्वसनीयता" : "HIGH CONFIDENCE"}</span>
+                  </div>
+                  <h4 className="actionTitle">{lang === "hi" ? "आज कोई आपातकालीन कृषि जोखिम नहीं है" : "No urgent risks detected for today"}</h4>
+                  <div className="explainBox">
+                    <div className="explainItem">
+                      <span className="explainLabel">❓ {lang === "hi" ? "क्यों?" : "WHY?"}</span>
+                      <span className="explainValue">{lang === "hi" ? "मौसम और मिट्टी की स्थिति सामान्य सीमा में है।" : "Weather conditions and indicative soil moisture are within normal ranges."}</span>
+                    </div>
+                  </div>
+                  <div className="actionFooter">
+                    <span>🏛️ {lang === "hi" ? "MAITTRI कृषि निर्णय इंजन" : "MAITTRI Rule Engine"}</span>
+                    <span>🕒 {new Date().toLocaleDateString(lang === "hi" ? "hi-IN" : [])}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* This Week Actions Summary */}
+            {farmBrain?.this_week_actions && farmBrain.this_week_actions.length > 0 && (
+              <div className="card" style={{ padding: "16px 20px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <strong style={{ fontSize: 14, color: "#0f2e17", display: "flex", alignItems: "center", gap: 8 }}>
+                  <Calendar size={16} color="#15803d" />
+                  <span>{lang === "hi" ? "इस सप्ताह मुझे क्या करना चाहिए?" : "What Should I Do This Week?"}</span>
+                </strong>
+                <ul style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 13, color: "#334155", lineHeight: 1.6 }}>
+                  {farmBrain.this_week_actions.map((wa, wIdx) => (
+                    <li key={wIdx}>
+                      <strong>{wa.action}</strong>: {wa.reason} {wa.timing && <span style={{ color: "#166534" }}>({wa.timing})</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* 3. SOIL TEST BOOKING MODAL */}
+          {showSoilModal && (
+            <div className="modalOverlay" onClick={() => setShowSoilModal(false)}>
+              <div className="modalCard" onClick={e => e.stopPropagation()}>
+                <div className="modalHeader">
+                  <h3>🧪 {lang === "hi" ? "प्रयोगशाला सॉइल टेस्ट बुक करें" : "Book Laboratory Soil Test"}</h3>
+                  <button className="modalCloseBtn" onClick={() => setShowSoilModal(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleBookSoilTest} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, color: "#64748b" }}>
+                    {lang === "hi" 
+                      ? "अधिकृत कृषि/सेवा केंद्र के माध्यम से मिट्टी का नमूना संकलन व प्रामाणिक प्रयोगशाला परीक्षण।"
+                      : "Book an authorized soil sample collection and laboratory test through Seva / Krishi network."}
+                  </p>
+
+                  <div className="operatorFormGroup">
+                    <label>{lang === "hi" ? "खेत" : "Farm"}</label>
+                    <input className="operatorInput" disabled value={`${f.name} (${f.area} ${f.area_unit})`} />
+                  </div>
+
+                  <div className="operatorFormGroup">
+                    <label>{lang === "hi" ? "लक्षित फसल" : "Target Crop"}</label>
+                    <input className="operatorInput" disabled value={translateCrop(f.current_crop || f.crop || "Wheat", lang)} />
+                  </div>
+
+                  <div className="operatorFormGroup">
+                    <label>{lang === "hi" ? "परीक्षण प्रयोगशाला का नाम" : "Testing Laboratory"}</label>
+                    <input 
+                      className="operatorInput" 
+                      required 
+                      value={soilBookingForm.lab_name}
+                      onChange={e => setSoilBookingForm({ ...soilBookingForm, lab_name: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="operatorFormGroup">
+                    <label>{lang === "hi" ? "नमूना संकलन दिनांक" : "Sample Collection Date"}</label>
+                    <input 
+                      type="date"
+                      className="operatorInput" 
+                      required 
+                      value={soilBookingForm.sample_date}
+                      onChange={e => setSoilBookingForm({ ...soilBookingForm, sample_date: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="operatorFormGroup">
+                    <label>{lang === "hi" ? "विशेष निर्देश / टिप्पणियां" : "Special Instructions / Notes"}</label>
+                    <textarea 
+                      className="operatorTextarea"
+                      rows={2}
+                      placeholder={lang === "hi" ? "उदा. पिछली फसल में यूरिया अधिक दिया गया था" : "e.g. Higher urea was used in last harvest"}
+                      value={soilBookingForm.notes}
+                      onChange={e => setSoilBookingForm({ ...soilBookingForm, notes: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                    <button type="button" className="operatorBtn secondary" onClick={() => setShowSoilModal(false)}>
+                      {lang === "hi" ? "रद्द करें" : "Cancel"}
+                    </button>
+                    <button type="submit" className="operatorBtn primary" disabled={bookingLoading}>
+                      {bookingLoading ? (lang === "hi" ? "दर्ज हो रहा है..." : "Submitting...") : (lang === "hi" ? "अनुरोध दर्ज करें" : "Confirm Booking")}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* 4. DIGITAL QR VERIFICATION MODAL */}
+          {showQrModal && (
+            <div className="modalOverlay" onClick={() => setShowQrModal(false)}>
+              <div className="modalCard" style={{ maxWidth: 440, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+                <div className="modalHeader">
+                  <h3>🌾 {lang === "hi" ? "MAITTRI डिजिटल किसान पास" : "MAITTRI FARM PASS"}</h3>
+                  <button className="modalCloseBtn" onClick={() => setShowQrModal(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div style={{ padding: "16px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                  <div style={{ padding: 16, background: "#ffffff", border: "2px solid #bbf7d0", borderRadius: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" }}>
+                    <QrCode size={160} color="#14532d" />
+                  </div>
+
+                  <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 900, color: "#14532d", letterSpacing: 1 }}>
+                    {farmerProfile?.farmer_id || (f.farmer_id || `MT-FARM-${String(f.id).padStart(6, "0")}`)}
+                  </div>
+
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+                    {farmerProfile?.name || localStorage.getItem("full_name") || (lang === "hi" ? "पंजीकृत किसान" : "Registered Farmer")}
+                  </div>
+
+                  <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                    📍 {f.location_name || f.name} · {f.area} {f.area_unit}<br />
+                    🌾 {translateCrop(f.current_crop || f.crop || "Wheat", lang)} ({translateSoil(f.soil_type, lang)})
+                  </div>
+
+                  <div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: 8, fontSize: 11.5, color: "#166534" }}>
+                    🔒 {lang === "hi" ? "अस्पष्ट पहचान कोड — कोई संवेदनशील निजी डेटा उजागर नहीं।" : "Opaque Tokenized Identifier — Protected for Seva Operator Lookup"}
+                  </div>
+                </div>
+
+                <button className="operatorBtn primary" style={{ width: "100%", justifyContent: "center" }} onClick={() => setShowQrModal(false)}>
+                  {lang === "hi" ? "बंद करें" : "Close"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* LIVE IOT FIELD TELEMETRY & RADAR PREVIEW WIDGET */}
           <div className="card iotDashboardPreviewCard">
@@ -881,7 +1431,7 @@ function Dashboard() {
                     <span className="chipTag small">{iotData?.controller_type || "ESP32"}</span>
                   </h3>
                   <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#64748b" }}>
-                    {iotData?.is_online ? "🟢 Telemetry active" : "🔴 Device offline"} · {t.nearestObject || "Nearest"}: {iotData?.nearest_object?.distance != null ? `${iotData.nearest_object.distance} cm @ ${iotData.nearest_object.angle}°` : "Clear"}
+                    {iotData?.is_online ? (lang === "hi" ? "🟢 टेलीमेट्री सक्रिय" : "🟢 Telemetry active") : (lang === "hi" ? "🔴 उपकरण ऑफ़लाइन" : "🔴 Device offline")} · {lang === "hi" ? "निकटतम अवरोध" : "Nearest Obstacle"}: {iotData?.nearest_object?.distance != null ? `${iotData.nearest_object.distance} cm @ ${iotData.nearest_object.angle}°` : (lang === "hi" ? "स्पष्ट / सुरक्षित" : "Clear")}
                   </p>
                 </div>
               </div>
@@ -1550,10 +2100,10 @@ function FarmForm() {
               <div className="inline">
                 <input type="number" min="0.01" step="0.01" required value={form.area} onChange={e => set("area", e.target.value)}/>
                 <select value={form.area_unit} onChange={e => set("area_unit", e.target.value)}>
-                  <option value="acre">{lang === "hi" ? "एकड़ (acre)" : "acre"}</option>
-                  <option value="hectare">{lang === "hi" ? "हेक्टेयर (hectare)" : "hectare"}</option>
-                  <option value="bigha">{lang === "hi" ? "बीघा (bigha)" : "bigha"}</option>
-                  <option value="sqm">{lang === "hi" ? "वर्ग मीटर (sqm)" : "sqm"}</option>
+                  <option value="acre">{lang === "hi" ? "एकड़" : "acre"}</option>
+                  <option value="hectare">{lang === "hi" ? "हेक्टेयर" : "hectare"}</option>
+                  <option value="bigha">{lang === "hi" ? "बीघा" : "bigha"}</option>
+                  <option value="sqm">{lang === "hi" ? "वर्ग मीटर" : "sqm"}</option>
                 </select>
               </div>
             </Field>
@@ -1647,7 +2197,7 @@ function FarmForm() {
 
             {showDeterminedInfo && (
               <div className="soilDeterminedBox">
-                <p><strong>{lang === "hi" ? "पद्धति (Methodology):" : "Methodology:"}</strong> {soilEstimate?.methodology || (lang === "hi" ? "आपके चयनित अक्षांश और देशांतर से जुड़े क्षेत्रीय कृषि-पारिस्थितिक मिट्टी वर्गीकरण से प्राप्त।" : "Derived from regional agro-ecological soil classification associated with your selected latitude & longitude.")}</p>
+                <p><strong>{lang === "hi" ? "पद्धति:" : "Methodology:"}</strong> {soilEstimate?.methodology || (lang === "hi" ? "आपके चयनित अक्षांश और देशांतर से जुड़े क्षेत्रीय कृषि-पारिस्थितिक मिट्टी वर्गीकरण से प्राप्त।" : "Derived from regional agro-ecological soil classification associated with your selected latitude & longitude.")}</p>
                 <p><strong>{lang === "hi" ? "भौगोलिक संदर्भ:" : "Geographic Context:"}</strong> {soilEstimate?.explanation || (lang === "hi" ? "इंडो-गंगा और दक्कन कृषि-पारिस्थितिक क्षेत्र आईसीएआर और सॉइल-ग्रिड्स डेटा के आधार पर मिट्टी की बनावट को कैलिब्रेट करते हैं।" : "Indo-Gangetic and Deccan agro-ecological zones calibrate soil texture based on ICAR and SoilGrids data.")}</p>
                 <p style={{ margin: 0, fontSize: 11.5, color: "#64748b" }}>
                   <em>{soilEstimate?.disclaimer || (lang === "hi" ? "क्षेत्रीय भू-स्थानिक आंकड़ों पर आधारित; वास्तविक खेत की मिट्टी की स्थिति भिन्न हो सकती है। आप ऊपर अपनी सटीक मिट्टी चुन सकते हैं।" : "Based on regional geospatial data; local field soil conditions may vary. You can select your actual soil type above.")}</em>
@@ -1683,7 +2233,7 @@ function FarmForm() {
             </Field>
 
             {/* Optional Soil pH */}
-            <Field label={t.soilPhOptional || (lang === "hi" ? "मिट्टी का pH (वैकल्पिक)" : "Soil pH (optional)")}>
+            <Field label={t.soilPhOptional || (lang === "hi" ? "मिट्टी का पीएच मान (वैकल्पिक)" : "Soil pH (optional)")}>
               <input
                 type="number"
                 step="0.1"
@@ -1702,17 +2252,17 @@ function FarmForm() {
           <h3>{lang === "hi" ? "3. वैकल्पिक प्रयोगशाला मृदा परीक्षण आंकड़े" : "3. Optional Soil-Test Values"}</h3>
           <p style={{ fontSize: 12.5, color: "#64748b", margin: "-6px 0 12px" }}>
             {lang === "hi"
-              ? "केवल तभी दर्ज करें जब आपके पास वास्तविक मृदा स्वास्थ्य कार्ड (Soil Health Card) रिपोर्ट हो। यदि दर्ज किया गया, तो यह AI अनुमानों की जगह उच्च विश्वसनीयता के साथ लागू होगा।"
+              ? "केवल तभी दर्ज करें जब आपके पास वास्तविक मृदा स्वास्थ्य कार्ड रिपोर्ट हो। यदि दर्ज किया गया, तो यह एआई अनुमानों की जगह उच्च विश्वसनीयता के साथ लागू होगा।"
               : "Only enter if you have a physical Soil Health Card report. If provided, values will override AI estimates with High confidence."}
           </p>
           <div className="formGrid">
-            <Field label={lang === "hi" ? "नाइट्रोजन (N) [किग्रा/हेक्टेयर]" : "Nitrogen (N) [kg/ha]"}>
+            <Field label={lang === "hi" ? "नाइट्रोजन [किग्रा/हेक्टेयर]" : "Nitrogen (N) [kg/ha]"}>
               <input type="number" step="0.1" value={form.soil_n} onChange={e => set("soil_n", e.target.value)} placeholder="e.g. 65"/>
             </Field>
-            <Field label={lang === "hi" ? "फास्फोरस (P) [किग्रा/हेक्टेयर]" : "Phosphorus (P) [kg/ha]"}>
+            <Field label={lang === "hi" ? "फास्फोरस [किग्रा/हेक्टेयर]" : "Phosphorus (P) [kg/ha]"}>
               <input type="number" step="0.1" value={form.soil_p} onChange={e => set("soil_p", e.target.value)} placeholder="e.g. 30"/>
             </Field>
-            <Field label={lang === "hi" ? "पोटैशियम (K) [किग्रा/हेक्टेयर]" : "Potassium (K) [kg/ha]"}>
+            <Field label={lang === "hi" ? "पोटैशियम [किग्रा/हेक्टेयर]" : "Potassium (K) [kg/ha]"}>
               <input type="number" step="0.1" value={form.soil_k} onChange={e => set("soil_k", e.target.value)} placeholder="e.g. 40"/>
             </Field>
             <Field label={lang === "hi" ? "जैविक कार्बन (%)" : "Organic Carbon (%)"}>
@@ -1842,7 +2392,7 @@ function Recommend() {
       {data && (
         <>
           <div className="card">
-            <h3>{t.nutrients}</h3>
+            <h3>{typeof t.nutrients === "string" ? t.nutrients : (t("nutrients.title") || (lang === "hi" ? "पोषक तत्व विश्लेषण" : "Nutrient Analysis"))}</h3>
             <div className="nutrients">
               {data.nutrient_analysis.map(n => (
                 <div className="nutrient" key={n.nutrient}>
@@ -1910,7 +2460,7 @@ function Plan() {
         ))}
       </div>
       <div className="card">
-        <h3>{t.nutrients}</h3>
+        <h3>{typeof t.nutrients === "string" ? t.nutrients : (t("nutrients.title") || (lang === "hi" ? "पोषक तत्व विश्लेषण" : "Nutrient Analysis"))}</h3>
         {plan.nutrient_analysis.map(n => (
           <p key={n.nutrient}>
             <b>{translateNutrient(n.nutrient, lang)}:</b> {translateNutrientStatus(n.status, lang)} — {translateReason(n.suggestion, lang)}
@@ -1949,6 +2499,11 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Auth mode="login" onAuth={() => {}}/>}/>
         <Route path="/register" element={<Auth mode="register" onAuth={() => {}}/>}/>
+        <Route path="/operator/*" element={
+          <Protected>
+            <OperatorPortal />
+          </Protected>
+        }/>
         <Route path="*" element={
           <Protected>
             <Layout>
@@ -1967,6 +2522,7 @@ function AppContent() {
                 <Route path="/crop-farming/parali-management" element={<ParaliManagementPage/>}/>
                 <Route path="/crop-farming/market-price" element={<MarketPricePage/>}/>
                 <Route path="/crop-farming/weather" element={<WeatherPage/>}/>
+                <Route path="/crop-farming/live-soil" element={<IoTMonitorPage/>}/>
 
                 {/* Direct & Backward-Compatible Routes */}
                 <Route path="/fertilizer" element={<FertilizerRecommendationPage/>}/>
@@ -1991,6 +2547,11 @@ function AppContent() {
                 <Route path="/iot" element={<IoTMonitorPage/>}/>
                 <Route path="/crop-farming/iot-monitor" element={<IoTMonitorPage/>}/>
 
+                {/* Maitri Krishi Assistant AI Chatbot */}
+                <Route path="/krishi-assistant" element={<KrishiAssistantPage/>}/>
+                <Route path="/chat" element={<KrishiAssistantPage/>}/>
+                <Route path="/assistant" element={<KrishiAssistantPage/>}/>
+
                 <Route path="*" element={<Navigate to="/dashboard" replace/>}/>
               </Routes>
             </Layout>
@@ -2001,16 +2562,55 @@ function AppContent() {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("MAITTRI UI Error Caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", background: "#f8faf8", fontFamily: "sans-serif" }}>
+          <h2 style={{ color: "#14532d", margin: "0 0 8px" }}>MAITTRI | Application Notice</h2>
+          <p style={{ color: "#64748b", margin: "0 0 16px", maxWidth: 500 }}>
+            An unexpected error occurred while loading this view. Click below to reload.
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); window.location.href = "/"; }}
+            style={{ padding: "10px 20px", background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+          >
+            Reload MAITTRI
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(() => {
+    try { return sessionStorage.getItem("maittri_started") === "true"; } catch { return false; }
+  });
+
+  const handleDone = useCallback(() => {
+    try { sessionStorage.setItem("maittri_started", "true"); } catch {}
+    setStarted(true);
+  }, []);
 
   return (
-    <LanguageProvider>
+    <ErrorBoundary>
       {!started ? (
-        <Splash onDone={() => setStarted(true)} />
+        <Splash onDone={handleDone} />
       ) : (
         <AppContent />
       )}
-    </LanguageProvider>
+    </ErrorBoundary>
   );
 }

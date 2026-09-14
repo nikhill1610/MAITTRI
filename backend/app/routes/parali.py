@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import json
+import logging
 
 from ..database import get_db
 from ..models import Farm, ParaliAnalysisRecord
 from ..schemas import ParaliAnalyzeRequest, ParaliActionPlanRequest
 from ..deps import get_optional_current_user
-from ..parali_management_service import (
+from ..services.parali_management_service import (
     analyze_crop_residue,
     get_all_residue_methods,
     get_supported_parali_crops,
@@ -15,6 +16,7 @@ from ..parali_management_service import (
     CROP_RESIDUE_DATABASE,
 )
 
+logger = logging.getLogger("maitri.parali")
 router = APIRouter()
 
 @router.get("/crops")
@@ -44,10 +46,18 @@ def analyze_parali(
     """
     farm = None
     if payload.farm_id:
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to analyze a specific farm."
+            )
         farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-        if user:
+        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
             farm_query = farm_query.filter(Farm.user_id == user.id)
         farm = farm_query.first()
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
 
     # Precedence: Explicit payload > Associated Farm Profile > Defaults
     crop = payload.crop or (farm.current_crop if farm and farm.current_crop else "rice")
@@ -102,7 +112,8 @@ def analyze_parali(
             db.add(record)
             db.commit()
             analysis_result["analysis_id"] = record.id
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error persisting parali record to database: {e}")
             db.rollback()
 
     return analysis_result

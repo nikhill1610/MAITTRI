@@ -46,13 +46,16 @@
 const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
-// OPTION A (Active Windows Mobile Hotspot - Recommended):
+// OPTION A (Active Windows Mobile Hotspot - Lab Testing):
 // When ESP32 connects to your Windows Mobile Hotspot, the PC's IP is 192.168.137.1
 const char* SERVER_URL    = "http://192.168.137.1:8000/api/iot/sensor-data";
 
-// OPTION B (Home / Phone Wi-Fi 'vivo Y400 Pro 5G'):
-// When ESP32 connects to your Phone/Home Wi-Fi router, use your PC's Wi-Fi IP:
-// const char* SERVER_URL = "http://10.38.2.70:8000/api/iot/sensor-data";
+// OPTION B (Home / Local Wi-Fi Network):
+// const char* SERVER_URL = "http://192.168.1.100:8000/api/iot/sensor-data";
+
+// OPTION C (Production Cloud Deployment — Remote Field Stations):
+// Deploy ESP32 with internet access pointing directly to the public cloud backend:
+// const char* SERVER_URL = "https://maitri-api.onrender.com/api/iot/sensor-data";
 
 // Device Identification
 const char* DEVICE_ID       = "MAITRI_ESP32_01";

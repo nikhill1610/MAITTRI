@@ -804,7 +804,7 @@ export default function FertilizerRecommendationPage() {
             <div className="fertSectionHeader">
               <div className="fertSectionTitle">
                 <span className="fertSectionLetter">F</span>
-                {lang === "hi" ? "कीट एवं रोग प्रबंधन (IPM)" : "Pest & Disease Management"}
+                {lang === "hi" ? "कीट एवं रोग प्रबंधन" : "Integrated Pest Management (IPM)"}
               </div>
               <span className={`statusBadge ${recommendation.section_F_pest_disease_analysis.evidence_found ? "warning" : "adequate"}`}>
                 {recommendation.section_F_pest_disease_analysis.status}
@@ -880,7 +880,7 @@ export default function FertilizerRecommendationPage() {
                           🛡️ <b>{lang === "hi" ? "सुरक्षा एवं PPE चेतावनी:" : "PPE & Safety Warning:"}</b> {chem.ppe_warning}
                         </div>
                         <div style={{ fontSize: "12.5px", color: "#475569" }}>
-                          ⏳ <b>{lang === "hi" ? "कटाई पूर्व प्रतीक्षा अवधि (PHI):" : "Pre-Harvest Interval (PHI):"}</b> {chem.pre_harvest_interval}
+                          ⏳ <b>{lang === "hi" ? "कटाई पूर्व प्रतीक्षा अवधि:" : "Pre-Harvest Interval (PHI):"}</b> {chem.pre_harvest_interval}
                         </div>
                         <div style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>
                           {chem.important_disclaimer}
@@ -1080,7 +1080,7 @@ export default function FertilizerRecommendationPage() {
             <div style={{ maxHeight: "450px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#334155", marginBottom: "8px" }}>
-                  {lang === "hi" ? "पिछली सिफारिशें (Past Recommendations):" : "Past Recommendations:"}
+                  {lang === "hi" ? "पिछली सिफारिशें:" : "Past Recommendations:"}
                 </h4>
                 {historyRecords.length === 0 ? (
                   <p style={{ fontSize: "13px", color: "#64748b" }}>{lang === "hi" ? "कोई पूर्व सिफारिश रिकॉर्ड उपलब्ध नहीं।" : "No stored recommendations found."}</p>
@@ -1099,7 +1099,7 @@ export default function FertilizerRecommendationPage() {
 
               <div>
                 <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#334155", marginBottom: "8px" }}>
-                  {lang === "hi" ? "किसान द्वारा दर्ज किए गए प्रयोग (Logged Applications):" : "Logged Farmer Applications:"}
+                  {lang === "hi" ? "किसान द्वारा दर्ज किए गए प्रयोग:" : "Logged Applications:"}
                 </h4>
                 {loggedApplications.length === 0 ? (
                   <p style={{ fontSize: "13px", color: "#64748b" }}>{lang === "hi" ? "कोई उर्वरक प्रयोग दर्ज नहीं किया गया।" : "No farmer application logs found."}</p>

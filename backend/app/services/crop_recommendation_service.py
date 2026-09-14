@@ -38,6 +38,7 @@ def normalize_crop_name(name: str) -> str:
     if not name:
         return ""
     clean = name.strip().lower()
+    # If string contains parenthesis like 'गेहूं (Wheat)', extract sub-parts
     if "(" in clean:
         parts = clean.replace(")", "").split("(")
         for p in parts:
@@ -160,6 +161,7 @@ def make_plan(farm, crop_name):
     norm_name = normalize_crop_name(crop_name)
     crop = next((c for c in CROPS if c["name"].lower() == norm_name.lower()), None)
     if not crop:
+        # Fallback to direct substring match if needed
         clean = crop_name.strip().lower()
         crop = next((c for c in CROPS if c["name"].lower() in clean or clean in c["name"].lower()), None)
     if not crop:
@@ -179,3 +181,4 @@ def make_plan(farm, crop_name):
         "nutrient_analysis": nutrients,
         "note": "This prototype plan is a decision-support example and must be validated with local agricultural recommendations before real-world use."
     }
+

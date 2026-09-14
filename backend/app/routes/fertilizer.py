@@ -66,7 +66,18 @@ def analyze_fertilizer_endpoint(
     """
     farm = None
     if payload.farm_id:
-        farm = db.query(Farm).filter(Farm.id == payload.farm_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to analyze a specific farm."
+            )
+        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+        farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
+        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
+            farm_query = farm_query.filter(Farm.user_id == user.id)
+        farm = farm_query.first()
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
 
     lat = payload.latitude or (farm.latitude if farm else None)
     lon = payload.longitude or (farm.longitude if farm else None)
@@ -122,7 +133,18 @@ def recommend_fertilizer_endpoint(
     """
     farm = None
     if payload.farm_id:
-        farm = db.query(Farm).filter(Farm.id == payload.farm_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to generate recommendations for a specific farm."
+            )
+        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+        farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
+        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
+            farm_query = farm_query.filter(Farm.user_id == user.id)
+        farm = farm_query.first()
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
 
     lat = payload.latitude or (farm.latitude if farm else None)
     lon = payload.longitude or (farm.longitude if farm else None)
@@ -195,13 +217,26 @@ def get_fertilizer_history(
     query_apps = db.query(FertilizerApplication)
 
     if farm_id:
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to view farm fertilizer history."
+            )
+        farm = db.query(Farm).filter(Farm.id == farm_id).first()
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
+        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN") and str(farm.user_id) != str(user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this farm's records")
         query_recs = query_recs.filter(FertilizerRecommendation.farm_id == farm_id)
         query_apps = query_apps.filter(FertilizerApplication.farm_id == farm_id)
     elif user:
         # Get all farms of current user
         user_farm_ids = [f.id for f in db.query(Farm).filter(Farm.user_id == user.id).all()]
-        query_recs = query_recs.filter(FertilizerRecommendation.farm_id.in_(user_farm_ids))
+        query_recs = query_recs.filter((FertilizerRecommendation.farm_id.in_(user_farm_ids)) | (FertilizerRecommendation.user_id == user.id))
         query_apps = query_apps.filter(FertilizerApplication.farm_id.in_(user_farm_ids))
+    else:
+        return {"recommendations": [], "logged_applications": []}
 
     recs = query_recs.order_by(FertilizerRecommendation.created_at.desc()).limit(15).all()
     apps = query_apps.order_by(FertilizerApplication.applied_at.desc()).limit(20).all()
@@ -252,9 +287,18 @@ def log_fertilizer_application(
     """
     Logs a farmer's actual fertilizer application for historical tracking.
     """
-    farm = db.query(Farm).filter(Farm.id == payload.farm_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to log fertilizer applications."
+        )
+    user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+    farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
+    if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
+        farm_query = farm_query.filter(Farm.user_id == user.id)
+    farm = farm_query.first()
     if not farm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
 
     entry = FertilizerApplication(
         farm_id=farm.id,
@@ -287,7 +331,7 @@ def get_sensor_latest(
 ):
     """
     Retrieves the latest IoT sensor reading for a farm.
-    If no physical device is linked, returns an indicative calibrated profile.
+    If no physical device or observation is recorded, returns an honest unavailable response.
     """
     if farm_id:
         obs = db.query(NutrientObservation).filter(
@@ -297,6 +341,7 @@ def get_sensor_latest(
 
         if obs:
             return {
+                "available": True,
                 "source": "MAITTRI IoT Soil Sensor",
                 "type": "Sensor-based indicative reading",
                 "timestamp": obs.observed_at.isoformat(),
@@ -312,22 +357,13 @@ def get_sensor_latest(
                 "caveat": "Sensor reading reflects real-time in-situ electrical conductivity and optical responses. It does not replace a chemical laboratory extraction."
             }
 
-    # Default calibrated indicative reading for demonstration
     return {
-        "source": "MAITTRI Smart Sensor Module (Demo Calibration)",
+        "available": False,
         "type": "Sensor-based indicative reading",
-        "timestamp": datetime.now(timezone.utc).strftime("%H:%M UTC"),
-        "values": {
-            "nitrogen": 195.0,
-            "phosphorus": 18.5,
-            "potassium": 160.0,
-            "ph": 7.4,
-            "moisture": 42.0,
-            "temperature": 26.5,
-            "ec": 0.85
-        },
-        "caveat": "Sensor reading reflects real-time in-situ measurements. It does not replace a certified laboratory soil test."
+        "message": "No recent sensor reading available",
+        "values": None
     }
+
 
 
 # =====================================================================
@@ -374,7 +410,18 @@ def recommend_pest_endpoint(
         )
 
         if payload.farm_id:
-            farm = db.query(Farm).filter(Farm.id == payload.farm_id).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication required to generate recommendations for a specific farm."
+                )
+            user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+            farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
+            if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
+                farm_query = farm_query.filter(Farm.user_id == user.id)
+            farm = farm_query.first()
+            if not farm:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
             if farm:
                 rec_row = PesticideRecommendation(
                     farm_id=farm.id,
@@ -396,14 +443,24 @@ def recommend_pest_endpoint(
 @pest_router.post("/history")
 def log_pesticide_application(
     payload: PesticideApplicationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_current_user)
 ):
     """
     Logs farmer pesticide spray for record-keeping and PHI compliance.
     """
-    farm = db.query(Farm).filter(Farm.id == payload.farm_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to log pesticide applications."
+        )
+    user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
+    farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
+    if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
+        farm_query = farm_query.filter(Farm.user_id == user.id)
+    farm = farm_query.first()
     if not farm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
 
     entry = PesticideApplication(
         farm_id=farm.id,

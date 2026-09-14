@@ -252,14 +252,14 @@ export default function NutrientAnalysisPage() {
           <h4>{lang === "hi" ? "⚠️ महत्वपूर्ण मृदा परीक्षण सूचना" : "⚠️ Important Soil Testing Notice"}</h4>
           <p>
             {lang === "hi" ? (
-              <>यह फसल पोषक तत्व अवशोषण चक्र, फसल अनुक्रम और क्षेत्रीय मिट्टी की विशेषताओं पर आधारित एक <strong>एआई कृषि विज्ञान अनुमान</strong> है। यह वास्तविक भौतिक प्रयोगशाला <strong>मृदा स्वास्थ्य कार्ड (Soil Health Card)</strong> का विकल्प नहीं है।</>
+              <>यह फसल पोषक तत्व अवशोषण चक्र, फसल अनुक्रम और क्षेत्रीय मिट्टी की विशेषताओं पर आधारित एक <strong>एआई कृषि विज्ञान अनुमान</strong> है। यह वास्तविक भौतिक प्रयोगशाला <strong>मृदा स्वास्थ्य कार्ड</strong> का विकल्प नहीं है।</>
             ) : (
               <>This is an <strong>AI-based agronomic estimate</strong> utilizing crop nutrient extraction curves, cropping sequences, and regional soil characteristics. It does <strong>not</strong> substitute for an actual physical laboratory Soil Health Card measurement.</>
             )}
           </p>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#475569" }}>
             {lang === "hi"
-              ? "सटीक और प्रमाणित उर्वरक खुराक सिफारिशों के लिए, किसान अपने स्थानीय कृषि विज्ञान केंद्र (KVK) या सरकारी मृदा परीक्षण प्रयोगशाला से जांच अवश्य कराएं।"
+              ? "सटीक और प्रमाणित उर्वरक खुराक सिफारिशों के लिए, किसान अपने स्थानीय कृषि विज्ञान केंद्र (केवीके) या सरकारी मृदा परीक्षण प्रयोगशाला से जांच अवश्य कराएं।"
               : "For accurate, certified fertilizer dosage recommendations, farmers should obtain a laboratory soil test from their local Krishi Vigyan Kendra (KVK) or government soil testing laboratory."}
           </p>
         </div>
@@ -268,7 +268,7 @@ export default function NutrientAnalysisPage() {
       {/* Section 1: Macronutrients */}
       <div className="nutrientCategorySection">
         <div className="categoryHeader">
-          <h2>{lang === "hi" ? "1. प्राथमिक मुख्य पोषक तत्व (N, P, K)" : "1. Primary Macronutrients (N, P, K)"}</h2>
+          <h2>{lang === "hi" ? "1. प्राथमिक मुख्य पोषक तत्व (नाइट्रोजन, फास्फोरस, पोटाश)" : "1. Primary Macronutrients (N, P, K)"}</h2>
           <p>{lang === "hi" ? "फसल की वृद्धि, जड़ों के विकास और उपज के लिए सबसे बड़ी मात्रा में आवश्यक पोषक तत्व।" : "Essential nutrients absorbed in largest quantities for crop growth, rooting, and yield."}</p>
         </div>
         <div className="nutrientCardsGrid">
@@ -281,7 +281,7 @@ export default function NutrientAnalysisPage() {
       {/* Section 2: Secondary Nutrients */}
       <div className="nutrientCategorySection">
         <div className="categoryHeader">
-          <h2>{lang === "hi" ? "2. द्वितीयक पोषक तत्व (S, Ca, Mg)" : "2. Secondary Nutrients (S, Ca, Mg)"}</h2>
+          <h2>{lang === "hi" ? "2. द्वितीयक पोषक तत्व (सल्फर, कैल्शियम, मैग्नीशियम)" : "2. Secondary Nutrients (S, Ca, Mg)"}</h2>
           <p>{lang === "hi" ? "क्लोरोफिल निर्माण, कोशिका भित्ति की मजबूती और तिलहन उत्पादन के लिए महत्वपूर्ण।" : "Vital for chlorophyll synthesis, cell wall strength, and oilseed production."}</p>
         </div>
         <div className="nutrientCardsGrid">
@@ -294,7 +294,7 @@ export default function NutrientAnalysisPage() {
       {/* Section 3: Micronutrients */}
       <div className="nutrientCategorySection">
         <div className="categoryHeader">
-          <h2>{lang === "hi" ? "3. आवश्यक सूक्ष्म पोषक तत्व (Zn, Fe, B, Mn, Cu)" : "3. Essential Micronutrients (Zn, Fe, B, Mn, Cu)"}</h2>
+          <h2>{lang === "hi" ? "3. आवश्यक सूक्ष्म पोषक तत्व (जिंक, लोहा, बोरॉन, मैंगनीज, तांबा)" : "3. Essential Micronutrients (Zn, Fe, B, Mn, Cu)"}</h2>
           <p>{lang === "hi" ? "सूक्ष्म मात्रा में आवश्यक तत्व जो महत्वपूर्ण जैव रासायनिक एंजाइम उत्प्रेरक के रूप में कार्य करते हैं।" : "Trace elements required in small quantities that act as critical biochemical enzyme activators."}</p>
         </div>
         <div className="nutrientCardsGrid">
@@ -354,7 +354,7 @@ function NutrientCard({ item, lang, getStatusBadge, getConfidenceBadge }) {
       </div>
 
       <div className="cardWhySection">
-        <span className="whyLabel">{lang === "hi" ? "कारण (Why?):" : "Why?"}</span>
+        <span className="whyLabel">{lang === "hi" ? "कारण:" : "Why?"}</span>
         <p className="whyText">{translateReason(item.reason, lang)}</p>
       </div>
 

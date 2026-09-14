@@ -1,3 +1,4 @@
+
 # MAITRI IoT Hardware Prototype Integration Guide
 
 Welcome to the **MAITRI Smart Agriculture IoT Subsystem**. This guide details how to wire, configure, flash, and operate the IoT edge hardware nodes (**ESP8266 NodeMCU** and **ESP32**) to stream live environmental telemetry and servo-mounted ultrasonic radar sweeps into the MAITRI platform.

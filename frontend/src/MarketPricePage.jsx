@@ -667,7 +667,7 @@ export default function MarketPricePage() {
             >
               <option value="modal_desc">{lang === "hi" ? "उच्चतम भाव पहले" : "Highest Price First"}</option>
               <option value="modal_asc">{lang === "hi" ? "न्यूनतम भाव पहले" : "Lowest Price First"}</option>
-              <option value="alpha">{lang === "hi" ? "वर्णानुक्रम (A-Z)" : "Alphabetical"}</option>
+              <option value="alpha">{lang === "hi" ? "वर्णानुक्रम" : "Alphabetical"}</option>
               <option value="trend">{lang === "hi" ? "रुझान के अनुसार" : "By Price Trend"}</option>
             </select>
           </div>
@@ -948,25 +948,25 @@ export default function MarketPricePage() {
         <div className="factorsGrid">
           <div className="factorCard">
             <span className="factorNumber">1</span>
-            <strong>{lang === "hi" ? "नमी की मात्रा (Moisture)" : "Moisture Content"}</strong>
+            <strong>{lang === "hi" ? "नमी की मात्रा" : "Moisture Content"}</strong>
             <p>{lang === "hi" ? "मानक से अधिक नमी होने पर मंडी व्यापारी मूल्य में कटौती करते हैं।" : "Grain with moisture above specified standards receives price deductions."}</p>
           </div>
 
           <div className="factorCard">
             <span className="factorNumber">2</span>
-            <strong>{lang === "hi" ? "ग्रेड व दाने का आकार (Grading)" : "Grade & Grain Quality"}</strong>
+            <strong>{lang === "hi" ? "ग्रेड व दाने का आकार" : "Grade & Grain Quality"}</strong>
             <p>{lang === "hi" ? "बोल्ड व एकसमान दाने को मॉडल भाव से अधिक, जबकि मिश्रित को कम मूल्य मिलता है।" : "Bold, uniform grains fetch premium prices; shriveled grains sell lower."}</p>
           </div>
 
           <div className="factorCard">
             <span className="factorNumber">3</span>
-            <strong>{lang === "hi" ? "परिवहन व आढ़त (Logistics)" : "Transport & Mandi Fee"}</strong>
+            <strong>{lang === "hi" ? "परिवहन व आढ़त" : "Transport & Mandi Fee"}</strong>
             <p>{lang === "hi" ? "खेत से मंडी तक ढुलाई, तुलाई और आढ़त किसान के शुद्ध लाभ को प्रभावित करते हैं।" : "Freight, weighing, loading, and market cess deduct from net realization."}</p>
           </div>
 
           <div className="factorCard">
             <span className="factorNumber">4</span>
-            <strong>{lang === "hi" ? "सीजन व दैनिक आवक (Supply Glut)" : "Peak Seasonal Arrivals"}</strong>
+            <strong>{lang === "hi" ? "सीजन व दैनिक आवक" : "Peak Seasonal Arrivals"}</strong>
             <p>{lang === "hi" ? "कटाई के तुरंत बाद अत्यधिक आवक होने पर हाजिर भाव गिर सकते हैं।" : "Heavy arrivals immediately post-harvest can temporarily depress spot prices."}</p>
           </div>
         </div>

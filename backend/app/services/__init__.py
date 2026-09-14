@@ -4,7 +4,7 @@ Combines legacy crop planning / recommendation services with the new
 intelligent evidence-based fertilizer & pest decision engine.
 """
 
-from .legacy_services import (
+from .crop_recommendation_service import (
     CROP_ALIASES,
     SEASON_ALIASES,
     SOIL_ALIASES,
