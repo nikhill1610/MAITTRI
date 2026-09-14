@@ -6,8 +6,10 @@ services:
   - type: web
     name: maitri-api
     runtime: python
-    buildCommand: "cd backend && pip install -r requirements.txt"
-    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend"
+    branch: production-hardening
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -35,8 +37,10 @@ services:
   # 2. React + Vite Frontend Static Site
   - type: static_site
     name: maitri-web
-    buildCommand: "cd frontend && npm install && npm run build"
-    staticPublishPath: "./frontend/dist"
+    branch: production-hardening
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: "./dist"
     pullRequestPreviewsEnabled: true
     routes:
       - type: rewrite
