@@ -60,8 +60,9 @@ export function LanguageProvider({ children }) {
           return target[prop];
         }
         if (prop === "t") return translate;
-        if (prop in dict) return dict[prop];
-        return translate(prop, "");
+        if (prop in dict && dict[prop] !== undefined) return dict[prop];
+        const val = translate(prop, undefined);
+        return (val !== undefined && val !== "") ? val : undefined;
       },
       apply(target, thisArg, args) {
         return translate(args[0], args[1]);
@@ -105,8 +106,9 @@ export function useLang() {
           return target[prop];
         }
         if (prop === "t") return translate;
-        if (prop in dict) return dict[prop];
-        return translate(prop, "");
+        if (prop in dict && dict[prop] !== undefined) return dict[prop];
+        const val = translate(prop, undefined);
+        return (val !== undefined && val !== "") ? val : undefined;
       },
       apply(target, thisArg, args) {
         return translate(args[0], args[1]);

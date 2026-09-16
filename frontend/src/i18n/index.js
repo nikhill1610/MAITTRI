@@ -77,7 +77,8 @@ export function t(key, fallback = "", lang = "en") {
     if (enFlat[key] != null && typeof enFlat[key] === "string") return enFlat[key];
   }
 
-  return fallback || key;
+  if (fallback !== undefined) return fallback;
+  return "";
 }
 
 // -------------------------------------------------------------

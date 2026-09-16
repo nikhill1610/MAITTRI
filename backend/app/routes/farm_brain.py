@@ -15,7 +15,7 @@ from ..database import get_db
 from ..models import (
     User, Farm, Farmer, SoilTestReport, IoTSensorReading, FarmPlan, FarmPlanTask
 )
-from ..deps import get_current_user
+from ..deps import get_current_user, is_same_user
 from ..services.farm_brain_service import (
     generate_today_decisions, generate_weekly_outlook
 )
@@ -54,7 +54,7 @@ def get_farm_brain_today(
 
     user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
     is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and str(farm.user_id) != str(current_user.id):
+    if not is_elevated and not is_same_user(farm.user_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot view Farm Brain intelligence for another user's farm."
@@ -125,7 +125,7 @@ def get_farm_brain_week(
 
     user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
     is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and str(farm.user_id) != str(current_user.id):
+    if not is_elevated and not is_same_user(farm.user_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot view Farm Brain intelligence for another user's farm."

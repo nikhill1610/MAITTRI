@@ -15,7 +15,7 @@ from ..schemas import (
     PestAnalyzeRequest, PestRecommendRequest,
     FertilizerApplicationCreate, PesticideApplicationCreate
 )
-from ..deps import get_optional_current_user, get_current_user
+from ..deps import get_optional_current_user, get_current_user, is_same_user
 from ..services.fertilizer_recommendation_service import (
     generate_comprehensive_recommendation,
     analyze_crop,
@@ -226,7 +226,7 @@ def get_fertilizer_history(
         if not farm:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
         user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN") and str(farm.user_id) != str(user.id):
+        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN") and not is_same_user(farm.user_id, user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this farm's records")
         query_recs = query_recs.filter(FertilizerRecommendation.farm_id == farm_id)
         query_apps = query_apps.filter(FertilizerApplication.farm_id == farm_id)

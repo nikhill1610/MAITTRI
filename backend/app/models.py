@@ -23,6 +23,8 @@ class GUID(TypeDecorator):
         if value is None:
             return None
         val_str = str(value)
+        if dialect.name != "postgresql":
+            return val_str
         try:
             import uuid as _u
             return str(_u.UUID(val_str))

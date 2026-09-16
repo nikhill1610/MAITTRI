@@ -50,6 +50,27 @@ class AuthenticatedUser:
         return f"<AuthenticatedUser id={self.id} email={self.email} role={self.role}>"
 
 
+def is_same_user(uid1: Any, uid2: Any) -> bool:
+    """
+    Safely checks if two user IDs represent the same user.
+    Handles raw equality, string equality, integer equality, and legacy uuid5 mapped values.
+    """
+    if uid1 is None or uid2 is None:
+        return False
+    s1, s2 = str(uid1), str(uid2)
+    if s1 == s2:
+        return True
+    try:
+        import uuid as _u
+        if not s1.isdigit() and s2.isdigit():
+            return s1 == str(_u.uuid5(_u.NAMESPACE_OID, s2))
+        if not s2.isdigit() and s1.isdigit():
+            return s2 == str(_u.uuid5(_u.NAMESPACE_OID, s1))
+    except Exception:
+        pass
+    return False
+
+
 def _resolve_user_from_token(token: str, db: Session) -> Any:
     """
     Resolves user from bearer token:

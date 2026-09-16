@@ -410,6 +410,9 @@ def call_openrouter(
                     raw_content = str(raw_content).strip()
                     cleaned_content = clean_model_output(raw_content)
                     if cleaned_content and len(cleaned_content) > 15:
+                        if cleaned_content.lower().startswith("user safety:"):
+                            logger.warning(f"OpenRouter model '{m}' returned safety check artifact instead of conversational completion: {cleaned_content}")
+                            continue
                         used_model = data.get("model", m)
                         return True, cleaned_content, used_model
 

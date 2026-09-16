@@ -232,8 +232,8 @@ export default function KrishiAssistantPage() {
           </div>
           <div>
             <div className="krishiTitleWrap">
-              <h1 className="krishiTitle">Maitri Krishi Assistant</h1>
-              <span className="krishiSubBadge">मैत्री कृषि सहायक</span>
+              <h1 className="krishiTitle">{lang === "hi" ? "मैत्री कृषि सहायक" : "MAITTRI Krishi Assistant"}</h1>
+              <span className="krishiSubBadge">{lang === "hi" ? "किसान का साथी, समृद्धि की शुरुआत" : "Farmer's Companion, Beginning of Prosperity"}</span>
               {statusInfo?.openrouter_configured ? (
                 <span className="krishiAiBadge" title={`Powered by ${statusInfo.active_model}`}>
                   <Sparkles size={12} /> OpenRouter AI

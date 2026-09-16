@@ -44,6 +44,66 @@ button {
 }
 
 /* =============================================================
+   MAITTRI GLOBAL TYPOGRAPHY HIERARCHY & CONTRAST TOKENS
+   ============================================================= */
+h1, .h1 {
+  font-size: 30px;
+  font-weight: 800;
+  color: #14532d;
+  line-height: 1.25;
+  margin: 6px 0 10px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h2, .h2, .sectionTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  margin: 16px 0 8px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h3, .h3, .cardTitle {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.4;
+  margin: 0 0 6px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h4, .h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+  line-height: 1.4;
+  margin: 0 0 4px;
+}
+
+p, .bodyText {
+  font-size: 15px;
+  line-height: 1.55;
+  color: #334155;
+  margin: 0 0 8px;
+}
+
+small, .textMuted, .metadata {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+/* Hindi Devanagari Line-Height & Readability */
+html[lang="hi"] h1, body[data-lang="hi"] h1,
+html[lang="hi"] h2, body[data-lang="hi"] h2,
+html[lang="hi"] h3, body[data-lang="hi"] h3,
+html[lang="hi"] p, body[data-lang="hi"] p {
+  line-height: 1.6;
+  letter-spacing: 0.1px;
+}
+
+/* =============================================================
    1. SPLASH / STARTUP SCREEN (MAITTRI Clean Agricultural Design)
    ============================================================= */
 .splash {
@@ -315,18 +375,44 @@ button {
 
 .authSubmitBtn {
   width: 100%;
-  padding: 13px;
-  margin-top: 8px;
-  background: #15803d;
+  padding: 13px 18px;
+  margin-top: 10px;
+  background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+  border: 1px solid #14532d;
   border-radius: 11px;
+  color: #ffffff;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  transition: background 0.2s ease;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.authSubmitBtn:hover {
-  background: #166534;
+.authSubmitBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  box-shadow: 0 6px 16px rgba(21, 128, 61, 0.32);
+  transform: translateY(-1px);
+}
+
+.authSubmitBtn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.2);
+}
+
+.authSubmitBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.45);
+}
+
+.authSubmitBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .authSwitchRow {
@@ -810,17 +896,66 @@ button {
   text-transform: uppercase;
 }
 
-.hero h1, .pageTitle h1 {
-  font-size: 32px;
-  font-weight: 800;
-  color: #14532d;
-  margin: 6px 0;
+/* 1. Light Hero Typography (Default: Dashboard, Soil, Crop Rec, Schemes, Insurance, Weather) */
+.hero:not(.darkHero):not(.fertHero):not(.iotHero) h1,
+.lightHero h1,
+.lightHeroTitle,
+.pageTitle h1 {
+  font-size: 32px !important;
+  font-weight: 800 !important;
+  color: #14532d !important;
+  margin: 6px 0 8px !important;
+  line-height: 1.25 !important;
+  -webkit-font-smoothing: antialiased;
 }
 
-.hero p, .pageTitle p {
-  color: #64748b;
-  font-size: 14px;
-  margin: 0;
+.hero:not(.darkHero):not(.fertHero):not(.iotHero) p,
+.lightHero p,
+.lightHeroSubtitle,
+.pageTitle p,
+.heroDescription {
+  color: #334155 !important;
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+  margin: 0 !important;
+  font-weight: 500 !important;
+  max-width: 800px;
+}
+
+/* 2. Dark Hero Typography (Personal Farm Planner, IoT, Fertilizer) */
+.darkHero, .hero.darkHero {
+  background: linear-gradient(135deg, #0f2e17 0%, #166534 60%, #14532d 100%) !important;
+  color: #ffffff !important;
+  border-radius: 16px;
+  padding: 28px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 25px -5px rgba(22, 101, 52, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.darkHero h1, .hero.darkHero h1, .darkHeroTitle,
+.fertHero h1, .fertHeroTitle,
+.iotHero h1, .iotHeroTitleBlock h1 {
+  color: #ffffff !important;
+  font-size: 32px !important;
+  font-weight: 800 !important;
+  margin: 6px 0 8px !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.5px !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  -webkit-font-smoothing: antialiased;
+}
+
+.darkHero p, .hero.darkHero p, .darkHeroSubtitle,
+.fertHero p, .fertHeroSubtitle,
+.iotHero p, .iotHeroTitleBlock p {
+  color: #f0fdf4 !important;
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+  margin: 0 0 16px 0 !important;
+  max-width: 780px;
+  opacity: 1 !important;
 }
 
 .button, .languageCard button {
@@ -832,20 +967,69 @@ button {
   border-radius: 11px;
   padding: 12px 18px;
   background: #15803d;
-  color: white;
+  color: #ffffff;
   text-decoration: none;
   font-weight: 700;
   font-size: 14px;
-  transition: all 0.2s ease;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.2);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-font-smoothing: antialiased;
 }
 
-.button:hover {
+.button:hover:not(:disabled) {
   background: #166534;
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.3);
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: 0 1px 3px rgba(21, 128, 61, 0.2);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.45);
 }
 
 .button:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.resultsHeaderBlock {
+  margin: 28px 0 16px 0;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-left: 5px solid #16a34a;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.08);
+}
+
+.resultsEyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #15803d;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.resultsHeading {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f2e17;
+  letter-spacing: 0.5px;
+  margin: 0;
+  line-height: 1.25;
+  text-transform: uppercase;
+  -webkit-font-smoothing: antialiased;
 }
 
 .secondary {
@@ -1789,13 +1973,13 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   padding: 6px 14px;
   border-radius: 30px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   width: max-content;
-  backdrop-filter: blur(6px);
 }
 
 .weatherMetricsGrid {
@@ -1806,13 +1990,13 @@ button {
 }
 
 .weatherMetricPill {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 12px 16px;
   border-radius: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
-  backdrop-filter: blur(6px);
 }
 
 .weatherMetricPill svg {
@@ -4320,53 +4504,59 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+  border: 1px solid #bbf7d0 !important;
   padding: 4px 12px;
   border-radius: 9999px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 8px;
 }
 
-.marketHeader h1 {
-  font-size: 26px;
-  font-weight: 800;
-  color: #f1f5f9;
-  margin: 0 0 6px 0;
-  letter-spacing: -0.02em;
+.marketHeader h1, .marketHeader .lightHeroTitle {
+  font-size: 32px !important;
+  font-weight: 800 !important;
+  color: #14532d !important;
+  margin: 0 0 8px 0 !important;
+  letter-spacing: -0.5px !important;
+  line-height: 1.25 !important;
+  -webkit-font-smoothing: antialiased;
 }
 
-.marketSubtitle {
-  color: #94a3b8;
-  font-size: 14px;
-  margin: 0;
-  line-height: 1.5;
+.marketSubtitle, .marketHeader .lightHeroSubtitle {
+  color: #334155 !important;
+  font-size: 15px !important;
+  margin: 0 !important;
+  line-height: 1.55 !important;
+  font-weight: 500 !important;
+  max-width: 800px;
 }
 
 .marketFarmPill {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(15, 34, 25, 0.7);
-  border: 1px solid rgba(34, 197, 94, 0.25);
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
   padding: 8px 16px;
   border-radius: 12px;
-  color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .marketFarmPill small {
   display: block;
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b !important;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
 .marketFarmPill strong {
   font-size: 13.5px;
-  color: #22c55e;
+  color: #0f172a !important;
+  font-weight: 700;
 }
 
 /* Toolbar & Selectors */
@@ -5379,7 +5569,8 @@ button {
   }
 
   .marketHeader h1 {
-    font-size: 22px;
+    font-size: 24px;
+    color: #14532d;
   }
 
   .marketPriceBig .priceNumber {
@@ -6258,12 +6449,10 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.22);
   padding: 6px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
@@ -6284,7 +6473,7 @@ button {
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  opacity: 0.85;
+  color: #dcfce7;
 }
 
 .iotConnectedDeviceName {
@@ -6322,11 +6511,10 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.22);
   padding: 6px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   color: #ffffff;
 }
 

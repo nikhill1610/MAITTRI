@@ -25,7 +25,7 @@ from sqlalchemy import text
 
 from ..database import get_db
 from ..models import User, Farmer, Farm, FarmerDocument
-from ..deps import get_current_user, require_farmer_or_operator
+from ..deps import get_current_user, require_farmer_or_operator, is_same_user
 from ..supabase_client import get_supabase_admin_client, get_supabase_anon_client
 
 logger = logging.getLogger("maitri.documents")
@@ -67,7 +67,7 @@ async def upload_document(
 
     # Tenant isolation: Farmers can only upload to their own vault
     if not is_elevated:
-        if farmer.user_id and str(farmer.user_id) != str(current_user.id):
+        if farmer.user_id and not is_same_user(farmer.user_id, current_user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access forbidden: You can only upload documents to your own vault."
@@ -77,7 +77,7 @@ async def upload_document(
         farm = db.query(Farm).filter(Farm.id == farm_id).first()
         if not farm:
             raise HTTPException(status_code=404, detail="Farm not found")
-        if not is_elevated and str(farm.user_id) != str(current_user.id):
+        if not is_elevated and not is_same_user(farm.user_id, current_user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Farm does not belong to you")
 
     ext = Path(file.filename or "").suffix.lower()

@@ -351,14 +351,16 @@ export default function MarketPricePage() {
   return (
     <div className="content marketPricePage">
       {/* 1. Page Header */}
-      <div className="marketHeader">
+      <div className="marketHeader lightHero">
         <div className="marketHeaderContent">
           <div className="marketBadge">
             <BarChart2 size={16} />
             <span>{lang === "hi" ? "आधिकारिक मंडी भाव" : "Official Mandi Intelligence"}</span>
           </div>
-          <h1>{t.marketPriceTitle || (lang === "hi" ? "कृषि मंडी भाव एवं बाज़ार विश्लेषण" : "Agricultural Market Prices")}</h1>
-          <p className="marketSubtitle">
+          <h1 className="lightHeroTitle" style={{ color: "#14532d", fontWeight: 800 }}>
+            {t.marketPriceTitle || (lang === "hi" ? "कृषि मंडी भाव एवं बाज़ार विश्लेषण" : "Market Price Intelligence")}
+          </h1>
+          <p className="marketSubtitle lightHeroSubtitle" style={{ color: "#334155", fontWeight: 500 }}>
             {t.marketPriceSubtitle || (lang === "hi" ? "बुवाई से पहले बाज़ार का भाव जानें — प्रामाणिक मंडी भाव एवं रुझान" : "Know the market before you sow — authentic mandi prices & trend intelligence")}
           </p>
         </div>

@@ -287,20 +287,31 @@ function Auth({ mode = "login", onAuth }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const nav = useNavigate();
 
   const getErrorMessage = (err) => {
     const detail = err.response?.data?.detail;
-    if (typeof detail === "string") return detail;
+    if (typeof detail === "string") {
+      if (detail.toLowerCase().includes("email already registered") || detail.toLowerCase().includes("already exists")) {
+        return lang === "hi" ? "यह ईमेल पहले से पंजीकृत है। कृपया लॉगिन करें।" : "This email is already registered. Please login.";
+      }
+      if (detail.toLowerCase().includes("invalid") || detail.toLowerCase().includes("incorrect")) {
+        return lang === "hi" ? "गलत ईमेल या पासवर्ड दर्ज किया गया है।" : "Invalid email or password entered.";
+      }
+      return detail;
+    }
     if (Array.isArray(detail)) return detail.map(item => item.msg || JSON.stringify(item)).join(", ");
     if (detail && typeof detail === "object") return detail.msg || JSON.stringify(detail);
     if (err.response?.status >= 500) return lang === "hi" ? "सर्वर त्रुटि। कृपया थोड़ी देर बाद पुनः प्रयास करें।" : "Server error. Please try again later.";
     if (!err.response && err.message) return lang === "hi" ? "नेटवर्क त्रुटि। कृपया इंटरनेट कनेक्शन जांचें।" : "Network error. Please check your connection.";
-    return lang === "hi" ? "कुछ त्रुटि हुई। कृपया पुनः प्रयास करें।" : "Something went wrong. Please try again.";
+    return lang === "hi" ? "पंजीकरण / लॉगिन में त्रुटि हुई। कृपया पुनः प्रयास करें।" : "Authentication failed. Please try again.";
   };
 
   const submit = async e => {
-    e.preventDefault(); setError("");
+    e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
       const url = mode === "login" ? "/auth/login" : "/auth/register";
       const payload = {
@@ -312,21 +323,27 @@ function Auth({ mode = "login", onAuth }) {
         phone_number: phoneNumber.trim() || undefined
       };
       const { data } = await api.post(url, payload);
+      if (!data || !data.access_token) {
+        throw new Error(lang === "hi" ? "प्रमाणीकरण टोकन प्राप्त नहीं हुआ।" : "Authentication token was not received.");
+      }
       localStorage.setItem("token", data.access_token);
       const assignedRole = data.role || role || "FARMER";
       localStorage.setItem("role", assignedRole);
-      if (data.user_id) localStorage.setItem("user_id", data.user_id);
+      if (data.user_id) localStorage.setItem("user_id", String(data.user_id));
       if (data.full_name) localStorage.setItem("full_name", data.full_name);
       if (data.email) localStorage.setItem("email", data.email);
       if (onAuth) onAuth();
 
+      // Automatically authenticated and redirected directly to Dashboard
       if (assignedRole === "AUTHORIZED_OPERATOR") {
-        nav("/operator");
+        nav("/operator", { replace: true });
       } else {
-        nav("/dashboard");
+        nav("/dashboard", { replace: true });
       }
     } catch(err) {
       setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -437,8 +454,23 @@ function Auth({ mode = "login", onAuth }) {
           placeholder={lang === "hi" ? "पासवर्ड दर्ज करें" : "Enter password"}
         />
         
-        <button type="submit" className="button authSubmitBtn">
-          {mode === "login" ? (t.login || (lang === "hi" ? "लॉगिन करें" : "Login")) : (t.register || (lang === "hi" ? "खाता बनाएं" : "Create Account"))}
+        <button
+          type="submit"
+          className="button authSubmitBtn"
+          disabled={loading}
+        >
+          {loading ? (
+            <>
+              <RefreshCw size={16} className="spin" style={{ marginRight: 8 }} />
+              {mode === "login"
+                ? (lang === "hi" ? "लॉगिन किया जा रहा है..." : "Signing in...")
+                : (lang === "hi" ? "खाता बनाया जा रहा है..." : "Creating account...")}
+            </>
+          ) : (
+            mode === "login"
+              ? (t.login || (lang === "hi" ? "लॉगिन करें" : "Login"))
+              : (t.register || (lang === "hi" ? "खाता बनाएं" : "Create Account"))
+          )}
         </button>
         
         <div className="authSwitchRow">
@@ -1527,6 +1559,7 @@ function WeatherPage() {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     api.get("/farms").then(r => {
@@ -1544,9 +1577,10 @@ function WeatherPage() {
     }).catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const fetchWeather = useCallback(() => {
     if (!activeLoc?.latitude || !activeLoc?.longitude) return;
     setLoading(true);
+    setError(null);
     api.post("/weather", {
       latitude: activeLoc.latitude,
       longitude: activeLoc.longitude,
@@ -1554,10 +1588,18 @@ function WeatherPage() {
       forecast_days: 7
     }).then(r => {
       setWeather(r.data);
-    }).catch(() => {}).finally(() => {
+      setError(null);
+    }).catch((err) => {
+      console.error("Failed to load weather:", err);
+      setError(err?.response?.data?.detail || err?.message || (lang === "hi" ? "मौसम डेटा लोड करने में विफल।" : "Failed to load weather data."));
+    }).finally(() => {
       setLoading(false);
     });
-  }, [activeLoc]);
+  }, [activeLoc, lang]);
+
+  useEffect(() => {
+    fetchWeather();
+  }, [fetchWeather]);
 
   const handleFarmSelect = (e) => {
     const val = e.target.value;
@@ -1655,8 +1697,41 @@ function WeatherPage() {
         </div>
       )}
 
+      {error && !weather && !loading && (
+        <div className="card empty" style={{ border: "1px solid #ffcdd2", background: "#fff5f5" }}>
+          <AlertCircle size={44} style={{ color: "#d32f2f" }} />
+          <h2>{lang === "hi" ? "मौसम डेटा लोड नहीं हो सका" : "Could not load weather data"}</h2>
+          <p style={{ color: "#666", marginBottom: "16px" }}>{error}</p>
+          <button className="button" type="button" onClick={fetchWeather}>
+            <RefreshCw size={16} /> {lang === "hi" ? "पुनः प्रयास करें" : "Retry"}
+          </button>
+        </div>
+      )}
+
       {weather && (
         <>
+          {weather.is_fallback && (
+            <div style={{
+              background: "#fff8e1",
+              border: "1px solid #ffe082",
+              color: "#6d4c41",
+              padding: "10px 16px",
+              borderRadius: "10px",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              fontSize: "14px"
+            }}>
+              <AlertCircle size={18} color="#f57c00" />
+              <span>
+                {lang === "hi"
+                  ? "उपग्रह प्रदाता अस्थायी रूप से अनुपलब्ध है - यह क्षेत्रीय कृषि-जलवायु मॉडल पर आधारित अनुमानित पूर्वानुमान है।"
+                  : "Live satellite provider temporarily unavailable - displaying regional agro-climatic estimate."}
+              </span>
+            </div>
+          )}
+
           {/* Main Weather Hero Card */}
           <div className="weatherHeroCard">
             <div className="weatherHeroLeft">
@@ -2077,9 +2152,12 @@ function FarmForm() {
 
   return (
     <div className="content">
-      <div className="pageTitle">
-        <h1>{isEditing ? `${t.editFarm}: ${form.name}` : t.addFarm}</h1>
-        <p>{isEditing ? (lang === "hi" ? "अपने खेत का रकबा, स्थान, मिट्टी विश्लेषण और फसल विवरण अपडेट करें।" : "Update your farm's acreage, location, soil analysis, and crop details.") : (lang === "hi" ? "अनुकूलित फसल सिफारिशों और मौसम चेतावनियों के लिए अपने खेत का स्थान और मिट्टी का विवरण दर्ज करें।" : "Enter your farm location and soil profile for tailored crop recommendations and weather alerts.")}</p>
+      <div className="hero">
+        <div>
+          <span className="eyebrow">{lang === "hi" ? "मैत्री खेत प्रोफाइल" : "MAITTRI FARM PROFILE"}</span>
+          <h1>{isEditing ? `${t.editFarm}: ${form.name}` : t.addFarm}</h1>
+          <p>{isEditing ? (lang === "hi" ? "अपने खेत का रकबा, स्थान, मिट्टी विश्लेषण और फसल विवरण अपडेट करें।" : "Update your farm's acreage, location, soil analysis, and crop details.") : (lang === "hi" ? "अनुकूलित फसल सिफारिशों और मौसम चेतावनियों के लिए अपने खेत का स्थान और मिट्टी का विवरण दर्ज करें।" : "Enter your farm location and soil profile for tailored crop recommendations and weather alerts.")}</p>
+        </div>
       </div>
 
       {feedback.message && (
@@ -2372,9 +2450,12 @@ function Recommend() {
 
   return (
     <div className="content">
-      <div className="pageTitle">
-        <h1>{t.results}</h1>
-        <p>{t.recommendDesc || (lang === "hi" ? "सिफारिशें खेत की मिट्टी, सीजन अनुकूलता, सिंचाई सुविधा, फसल चक्र और आर्थिक लाभ को मिलाकर तैयार की जाती हैं।" : "Recommendations combine soil, season, irrigation, crop history and demo economics.")}</p>
+      <div className="hero">
+        <div>
+          <span className="eyebrow">{lang === "hi" ? "कृषि एआई फसल चयन" : "AGRONOMIC AI SELECTION"}</span>
+          <h1>{t.cropRecommendation || (lang === "hi" ? "फसल सिफारिश" : "Crop Recommendation")}</h1>
+          <p>{t.recommendDesc || (lang === "hi" ? "सिफारिशें खेत की मिट्टी, सीजन अनुकूलता, सिंचाई सुविधा, फसल चक्र और आर्थिक लाभ को मिलाकर तैयार की जाती हैं।" : "Recommendations combine soil science, seasonal suitability, irrigation, cropping history, and economic projections.")}</p>
+        </div>
       </div>
       {error && <div className="feedbackBanner error"><AlertTriangle size={18}/> {error}</div>}
       <div className="card controls">
@@ -2385,12 +2466,17 @@ function Recommend() {
           {seasons.map(s => <option key={s} value={s}>{translateSeason(s, lang)}</option>)}
         </select>
         <button className="button" disabled={!farmId || loading} onClick={run}>
-          {loading ? (lang === "hi" ? "विश्लेषण किया जा रहा है..." : "Analyzing...") : t.recommend}
+          {loading ? (lang === "hi" ? "विश्लेषण किया जा रहा है..." : "Analyzing...") : (t.recommend || (lang === "hi" ? "सिफारिश देखें" : "Recommend"))}
         </button>
       </div>
 
       {data && (
         <>
+          <div className="resultsHeaderBlock">
+            <span className="resultsEyebrow">{lang === "hi" ? "विश्लेषण परिणाम" : "ANALYSIS OUTCOME"}</span>
+            <h2 className="resultsHeading">{t.results || (lang === "hi" ? "परिणाम" : "RESULTS")}</h2>
+          </div>
+
           <div className="card">
             <h3>{typeof t.nutrients === "string" ? t.nutrients : (t("nutrients.title") || (lang === "hi" ? "पोषक तत्व विश्लेषण" : "Nutrient Analysis"))}</h3>
             <div className="nutrients">
@@ -2444,9 +2530,12 @@ function Plan() {
 
   return (
     <div className="content">
-      <div className="pageTitle">
-        <h1>{translateCrop(plan.crop, lang)} {t.plan}</h1>
-        <p>{t.approxDuration || (lang === "hi" ? "अनुमानित फसल अवधि" : "Approximate crop duration")}: {plan.duration_days} {t.days || (lang === "hi" ? "दिन" : "days")}.</p>
+      <div className="hero">
+        <div>
+          <span className="eyebrow">{lang === "hi" ? "व्यक्तिगत फसल समयरेखा" : "PERSONAL CROP TIMELINE"}</span>
+          <h1>{translateCrop(plan.crop, lang)} {t.plan || (lang === "hi" ? "योजना" : "Plan")}</h1>
+          <p>{t.approxDuration || (lang === "hi" ? "अनुमानित फसल अवधि" : "Approximate crop duration")}: {plan.duration_days} {t.days || (lang === "hi" ? "दिन" : "days")}.</p>
+        </div>
       </div>
       <div className="timeline">
         {plan.steps.map((s, i) => (
@@ -2478,8 +2567,8 @@ function Horticulture() {
     <div className="content">
       <div className="hero">
         <div>
-          <span className="eyebrow">MODULE</span>
-          <h1>{t.horticulture}</h1>
+          <span className="eyebrow">{lang === "hi" ? "उद्यानिकी एवं बागवानी" : "HORTICULTURE & CROPS"}</span>
+          <h1>{t.horticulture || (lang === "hi" ? "बागवानी" : "Horticulture")}</h1>
           <p>{lang === "hi" ? "फल, सब्जी और फूलों की खेती की योजना इसी फार्म-डेटा इंजन पर उपलब्ध होगी।" : "Fruit, vegetable and flower planning will be added on the same farm-data engine."}</p>
         </div>
       </div>

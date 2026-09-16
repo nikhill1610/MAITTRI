@@ -321,7 +321,7 @@ export default function FarmerPlanningPage() {
   return (
     <div className="content" style={{ maxWidth: "1240px", margin: "0 auto", paddingBottom: "60px" }}>
       {/* 1. Header Banner */}
-      <div className="hero" style={{
+      <div className="hero darkHero" style={{
         background: "linear-gradient(135deg, #0f2e17 0%, #166534 60%, #14532d 100%)",
         borderRadius: "16px",
         padding: "32px 28px",
@@ -332,14 +332,14 @@ export default function FarmerPlanningPage() {
         boxShadow: "0 10px 25px -5px rgba(22, 101, 52, 0.25)"
       }}>
         <div style={{ position: "relative", zIndex: 2 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.15)", padding: "4px 12px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", marginBottom: "12px", backdropFilter: "blur(4px)" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.2)", padding: "4px 12px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", marginBottom: "12px" }}>
             <Sparkles size={14} color="#facc15" />
             <span>{lang === "hi" ? "स्मार्ट कृषि योजना इंजन" : "Smart Farm Planning Engine"}</span>
           </div>
-          <h1 style={{ fontSize: "32px", fontWeight: "800", margin: "0 0 8px 0", letterSpacing: "-0.5px" }}>
+          <h1 className="darkHeroTitle" style={{ fontSize: "32px", fontWeight: "800", color: "#ffffff", margin: "0 0 8px 0", letterSpacing: "-0.5px", textShadow: "0 2px 4px rgba(0,0,0,0.3)" }}>
             {lang === "hi" ? "🌾 मैत्री व्यक्तिगत कृषि योजना" : "🌾 MAITTRI Personal Farm Planner"}
           </h1>
-          <p style={{ margin: "0 0 16px 0", fontSize: "16px", opacity: 0.9, maxWidth: "700px", lineHeight: 1.5 }}>
+          <p className="darkHeroSubtitle" style={{ margin: "0 0 16px 0", fontSize: "16px", color: "#f0fdf4", maxWidth: "700px", lineHeight: 1.5, opacity: 1 }}>
             {t.farmerPlanningTagline || (lang === "hi" ? "आपकी बुवाई की तारीख और फसल अवस्था पर आधारित सटीक दैनिक एवं साप्ताहिक योजना" : "Stage-based agronomic guidance tailored to your sowing date")}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>

@@ -18,7 +18,7 @@ from sqlalchemy import desc
 
 from ..database import get_db
 from ..models import Farm, FarmPlan, FarmPlanTask, FarmPlanCompletion
-from ..deps import get_current_user
+from ..deps import get_current_user, is_same_user
 from ..schemas import (
     FarmerPlanCreateRequest,
     FarmerPlanUpdateRequest,
@@ -86,7 +86,7 @@ def create_farmer_plan(
 
     if user:
         role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN") and str(farm.user_id) != str(user.id):
+        if role not in ("AUTHORIZED_OPERATOR", "ADMIN") and not is_same_user(farm.user_id, user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: Cannot create plan for another farmer's farm."
@@ -182,7 +182,7 @@ def get_farmer_plan(
     if user:
         role = (getattr(user, "role", None) or "FARMER").upper()
         if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            if str(plan.user_id) != str(user.id) and (not farm or str(farm.user_id) != str(user.id)):
+            if not is_same_user(plan.user_id, user.id) and (not farm or not is_same_user(farm.user_id, user.id)):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied: Farm plan belongs to another farmer."
@@ -286,9 +286,9 @@ def update_task_status(
         role = (getattr(user, "role", None) or "FARMER").upper()
         if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
             plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
-            if plan and str(plan.user_id) != str(user.id):
+            if plan and not is_same_user(plan.user_id, user.id):
                 farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or str(farm.user_id) != str(user.id):
+                if not farm or not is_same_user(farm.user_id, user.id):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Access denied: Task belongs to another farmer's plan."
@@ -317,9 +317,9 @@ def complete_task(
         role = (getattr(user, "role", None) or "FARMER").upper()
         if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
             plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
-            if plan and str(plan.user_id) != str(user.id):
+            if plan and not is_same_user(plan.user_id, user.id):
                 farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or str(farm.user_id) != str(user.id):
+                if not farm or not is_same_user(farm.user_id, user.id):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Access denied: Task belongs to another farmer's plan."
@@ -349,9 +349,9 @@ def add_note_to_task(
         role = (getattr(user, "role", None) or "FARMER").upper()
         if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
             plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
-            if plan and str(plan.user_id) != str(user.id):
+            if plan and not is_same_user(plan.user_id, user.id):
                 farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or str(farm.user_id) != str(user.id):
+                if not farm or not is_same_user(farm.user_id, user.id):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Access denied: Task belongs to another farmer's plan."
@@ -378,9 +378,9 @@ def get_farm_diary(
     if user:
         role = (getattr(user, "role", None) or "FARMER").upper()
         if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            if str(plan.user_id) != str(user.id):
+            if not is_same_user(plan.user_id, user.id):
                 farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or str(farm.user_id) != str(user.id):
+                if not farm or not is_same_user(farm.user_id, user.id):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Access denied: Farm diary belongs to another farmer."

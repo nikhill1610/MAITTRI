@@ -34,8 +34,27 @@ if not DATABASE_URL:
             "Supabase PostgreSQL is authoritative in production. Halting startup."
         )
 
+def normalize_db_url(url: str) -> str:
+    """Normalize URL dialect prefix based on installed driver (psycopg2 vs psycopg 3)."""
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        try:
+            import psycopg2  # noqa
+        except ImportError:
+            try:
+                import psycopg  # noqa
+                url = "postgresql+psycopg://" + url[len("postgresql://"):]
+            except ImportError:
+                pass
+    return url
+
+DATABASE_URL = normalize_db_url(DATABASE_URL)
+
 is_sqlite = DATABASE_URL.startswith("sqlite")
-is_postgres = DATABASE_URL.startswith(("postgresql://", "postgres://"))
+is_postgres = DATABASE_URL.startswith(("postgresql://", "postgres://", "postgresql+"))
 
 # Strict Production Guard: Zero SQLite fallback in production
 if is_sqlite and ENVIRONMENT != "development":
@@ -47,16 +66,33 @@ if is_sqlite and ENVIRONMENT != "development":
 
 if is_postgres:
     # Supabase PostgreSQL engine with robust pool pre-ping and connection recycling
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,      # Liveness check on checkout prevents stale connections
-        pool_recycle=60,         # Periodically recycle connections for Supavisor session pooler
-        pool_size=5,
-        max_overflow=5,
-        pool_timeout=20,
-        connect_args={"connect_timeout": 15}
-    )
-    logger.info("Connected to authoritative Supabase PostgreSQL database engine.")
+    try:
+        engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,      # Liveness check on checkout prevents stale connections
+            pool_recycle=60,         # Periodically recycle connections for Supavisor session pooler
+            pool_size=5,
+            max_overflow=5,
+            pool_timeout=20,
+            connect_args={"connect_timeout": 15}
+        )
+        if ENVIRONMENT == "development":
+            # Test connection in development mode
+            with engine.connect() as conn:
+                pass
+        logger.info("Connected to authoritative Supabase PostgreSQL database engine.")
+    except Exception as e:
+        if ENVIRONMENT == "development":
+            logger.warning(f"PostgreSQL connection failed in development mode ({e}). Falling back to local SQLite.")
+            DATABASE_URL = "sqlite:///./agri.db"
+            is_sqlite = True
+            is_postgres = False
+            engine = create_engine(
+                DATABASE_URL,
+                connect_args={"check_same_thread": False}
+            )
+        else:
+            raise
 elif is_sqlite and ENVIRONMENT == "development":
     engine = create_engine(
         DATABASE_URL,
