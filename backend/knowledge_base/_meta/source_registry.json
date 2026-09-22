@@ -1,0 +1,341 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.1",
+  "description": "Registry of Authoritative Agricultural Research and Regulatory Institutions for MAITTRI Knowledge Base",
+  "institutions": [
+    {
+      "source_key": "ICAR",
+      "name": "Indian Council of Agricultural Research",
+      "name_hi": "भारतीय कृषि अनुसंधान परिषद",
+      "category": "National Apex Research Body",
+      "url": "https://icar.org.in",
+      "evidence_tier": "A",
+      "scope": "National agronomic standards, package of practices, and All India Coordinated Research Projects (AICRP)"
+    },
+    {
+      "source_key": "ICAR-IARI",
+      "name": "ICAR - Indian Agricultural Research Institute, New Delhi",
+      "name_hi": "आईसीएआर - भारतीय कृषि अनुसंधान संस्थान, नई दिल्ली",
+      "category": "National Research Institute",
+      "url": "https://www.iari.res.in",
+      "evidence_tier": "A",
+      "scope": "Crop breeding, variety releases, integrated nutrient and pest management for North Indian plains"
+    },
+    {
+      "source_key": "ICAR-IIWBR",
+      "name": "ICAR - Indian Institute of Wheat and Barley Research, Karnal",
+      "name_hi": "आईसीएआर - भारतीय गेहूं एवं जौ अनुसंधान संस्थान, करनाल",
+      "category": "Crop Specific Directorate",
+      "url": "https://iiwbr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Wheat and barley agronomy, stripe/yellow rust advisories, CRI irrigation timing, NEPZ and NWPZ varieties"
+    },
+    {
+      "source_key": "ICAR-NRRI",
+      "name": "ICAR - National Rice Research Institute, Cuttack",
+      "name_hi": "आईसीएआर - राष्ट्रीय चावल अनुसंधान संस्थान, कटक",
+      "category": "Crop Specific Directorate",
+      "url": "https://icar-nrri.in",
+      "evidence_tier": "A",
+      "scope": "Rice cultivation, puddle vs direct seeded rice (DSR), Alternate Wetting & Drying (AWD), blast, sheath blight"
+    },
+    {
+      "source_key": "ICAR-IIMR",
+      "name": "ICAR - Indian Institute of Maize Research, Ludhiana",
+      "name_hi": "आईसीएआर - भारतीय मक्का अनुसंधान संस्थान, लुधियाना",
+      "category": "Crop Specific Directorate",
+      "url": "https://iimr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Maize breeding, kharif/rabi hybrids, Fall Armyworm (FAW) IPM, moisture and whorl management"
+    },
+    {
+      "source_key": "ICAR-DRMR",
+      "name": "ICAR - Directorate of Rapeseed-Mustard Research, Bharatpur",
+      "name_hi": "आईसीएआर - सरसों अनुसंधान निदेशालय, भरतपुर",
+      "category": "Crop Specific Directorate",
+      "url": "https://www.drmr.res.in",
+      "evidence_tier": "A",
+      "scope": "Rapeseed and mustard package of practices, sulphur fertilization, aphid ETL thresholds, white rust management"
+    },
+    {
+      "source_key": "ICAR-CPRI",
+      "name": "ICAR - Central Potato Research Institute, Shimla",
+      "name_hi": "आईसीएआर - केंद्रीय आलू अनुसंधान संस्थान, शिमला",
+      "category": "Crop Specific Directorate",
+      "url": "https://cpri.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Potato seed tuber technology, Indo-Gangetic Plains potato cultivation, late blight forecast (JHULSACAST)"
+    },
+    {
+      "source_key": "ICAR-IIVR",
+      "name": "ICAR - Indian Institute of Vegetable Research, Varanasi",
+      "name_hi": "आईसीएआर - भारतीय सब्जी अनुसंधान संस्थान, वाराणसी",
+      "category": "Crop Specific Directorate",
+      "url": "https://iivr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Tomato and vegetable production, ToLCV whitefly management, staking, fruit borer IPM in Uttar Pradesh"
+    },
+    {
+      "source_key": "ICAR-DWR",
+      "name": "ICAR - Directorate of Weed Research, Jabalpur",
+      "name_hi": "आईसीएआर - खरपतवार अनुसंधान निदेशालय, जबलपुर",
+      "category": "Weed Science Directorate",
+      "url": "https://dwr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Weed biology, herbicide resistance management, Phalaris minor, Echinochloa, weed seed bank suppression"
+    },
+    {
+      "source_key": "ICAR-IISS",
+      "name": "ICAR - Indian Institute of Soil Science, Bhopal",
+      "name_hi": "आईसीएआर - भारतीय मृदा विज्ञान संस्थान, भोपाल",
+      "category": "Soil Science Directorate",
+      "url": "https://iiss.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Soil health, macronutrient and micronutrient management, balanced fertilization, DAP and SSP arithmetic"
+    },
+    {
+      "source_key": "ICAR-CSSRI",
+      "name": "ICAR - Central Soil Salinity Research Institute, Karnal",
+      "name_hi": "आईसीएआर - केंद्रीय मृदा लवणता अनुसंधान संस्थान, करनाल",
+      "category": "Soil Reclamation Directorate",
+      "url": "https://cssri.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Saline and sodic soil reclamation, gypsum requirement calculation, pyrite and green manuring"
+    },
+    {
+      "source_key": "ICAR-CIPHET",
+      "name": "ICAR - Central Institute of Post-Harvest Engineering & Technology, Ludhiana",
+      "name_hi": "आईसीएआर - केंद्रीय कटाई उपरांत अभियांत्रिकी एवं प्रौद्योगिकी संस्थान",
+      "category": "Post-Harvest Engineering Directorate",
+      "url": "https://ciphet.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Safe grain storage, moisture thresholds, hermetic bags, post-harvest losses mitigation"
+    },
+    {
+      "source_key": "ICAR-VPKAS",
+      "name": "ICAR - Vivekananda Parvatiya Krishi Anusandhan Sansthan, Almora",
+      "name_hi": "आईसीएआर - विवेकानन्द पर्वतीय कृषि अनुसंधान संस्थान, अल्मोड़ा",
+      "category": "Hill Agriculture Directorate",
+      "url": "https://vpkas.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Mountain and hill farming, terrace cultivation, finger millet (Mandua), barnyard millet (Jhangora), hill pulses"
+    },
+    {
+      "source_key": "IGGMRI",
+      "name": "Indian Grain Storage Management & Research Institute, Hapur",
+      "name_hi": "भारतीय अनाज भंडारण प्रबंधन एवं अनुसंधान संस्थान, हापुड़",
+      "category": "National Grain Storage Institute",
+      "url": "https://dfpd.gov.in",
+      "evidence_tier": "A",
+      "scope": "Scientific grain warehousing, stored grain pest diagnostics (Ghun, Pulse beetle), phosphine fumigation safety"
+    },
+    {
+      "source_key": "PPQS-CIBRC",
+      "name": "Central Insecticides Board & Registration Committee (CIBRC), Directorate of PPQ&S",
+      "name_hi": "केंद्रीय कीटनाशक बोर्ड एवं पंजीकरण समिति, वनस्पति संरक्षण, संगरोध एवं संग्रह निदेशालय",
+      "category": "Statutory Chemical Regulator",
+      "url": "https://ppqs.gov.in",
+      "evidence_tier": "A",
+      "scope": "Statutory pesticide, fungicide, herbicide label approvals, crop x target authorization, dosage, PHI, waiting period"
+    },
+    {
+      "source_key": "IMD-AGROMET",
+      "name": "India Meteorological Department - Agromet Advisory Services Division",
+      "name_hi": "भारत मौसम विज्ञान विभाग - कृषि मौसम विज्ञान प्रभाग",
+      "category": "National Meteorological Service",
+      "url": "https://agromet.imd.gov.in",
+      "evidence_tier": "A",
+      "scope": "District agromet advisories, frost/cold wave alerts, heat wave warnings, rain forecast for spray/irrigation scheduling"
+    },
+    {
+      "source_key": "MOA-DACFW",
+      "name": "Department of Agriculture & Farmers Welfare, Ministry of Agriculture, GoI",
+      "name_hi": "कृषि एवं किसान कल्याण विभाग, भारत सरकार",
+      "category": "Central Government Ministry",
+      "url": "https://agricoop.nic.in",
+      "evidence_tier": "A",
+      "scope": "National schemes: PM-KISAN, PMFBY crop insurance, PMKSY micro-irrigation, Soil Health Card portal guidelines"
+    },
+    {
+      "source_key": "AGMARKNET-DMI",
+      "name": "Agricultural Marketing Information Network (AGMARKNET), Directorate of Marketing & Inspection",
+      "name_hi": "कृषि विपणन सूचना नेटवर्क (एगमार्कनेट)",
+      "category": "Official Market Price Portal",
+      "url": "https://agmarknet.gov.in",
+      "evidence_tier": "A",
+      "scope": "Daily wholesale minimum, maximum, and modal mandi prices, market arrivals, crop variety grade records"
+    },
+    {
+      "source_key": "UP-SAUS",
+      "name": "State Agricultural Universities of Uttar Pradesh (CSAUA&T Kanpur, ANDUA&T Ayodhya, SVPUA&T Meerut, BUAT Banda)",
+      "name_hi": "उत्तर प्रदेश के राज्य कृषि विश्वविद्यालय",
+      "category": "State Agricultural Universities",
+      "url": "https://csauk.ac.in",
+      "evidence_tier": "A",
+      "scope": "State-specific package of practices, agro-climatic zone recommendations (Western, Central, Eastern, Bundelkhand UP)"
+    },
+    {
+      "source_key": "NABARD-RBI",
+      "name": "National Bank for Agriculture and Rural Development & Reserve Bank of India",
+      "name_hi": "नाबार्ड एवं भारतीय रिजर्व बैंक",
+      "category": "Agricultural Credit Regulator",
+      "url": "https://www.nabard.org",
+      "evidence_tier": "A",
+      "scope": "Kisan Credit Card (KCC) Master Circulars, scale of finance, prompt repayment incentive (3% subvention)"
+    },
+    {
+      "source_key": "ICAR-IIPR",
+      "name": "ICAR - Indian Institute of Pulses Research, Kanpur",
+      "name_hi": "आईसीएआर - भारतीय दलहन अनुसंधान संस्थान, कानपुर",
+      "category": "Crop Specific Directorate",
+      "url": "https://iipr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Chickpea, lentil, and pigeonpea agronomy, wilt and dry root rot management, Bundelkhand pulse technology"
+    },
+    {
+      "source_key": "ICAR-IISR-LKO",
+      "name": "ICAR - Indian Institute of Sugarcane Research, Lucknow",
+      "name_hi": "आईसीएआर - भारतीय गन्ना अनुसंधान संस्थान, लखनऊ",
+      "category": "Crop Specific Directorate",
+      "url": "https://iisr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Sugarcane trench planting, ratoon management, trash mulching, top borer and early shoot borer IPM"
+    },
+    {
+      "source_key": "UPCSR",
+      "name": "UP Council of Sugarcane Research, Shahjahanpur",
+      "name_hi": "उत्तर प्रदेश गन्ना शोध परिषद, शाहजहांपुर",
+      "category": "State Apex Cane Research Council",
+      "url": "https://upcane.gov.in",
+      "evidence_tier": "A",
+      "scope": "Sugarcane variety releases (Co-15023, Co-0118), Red Rot Pathotype CF-13 management, E-Ganna mill supply calendars"
+    },
+    {
+      "source_key": "ICAR-DOGR",
+      "name": "ICAR - Directorate of Onion and Garlic Research, Pune",
+      "name_hi": "आईसीएआर - प्याज एवं लहसुन अनुसंधान निदेशालय, पुणे",
+      "category": "Crop Specific Directorate",
+      "url": "https://dogr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Commercial onion production, nursery management, thrips tabaci IPM, purple blotch, curing and godown storage"
+    },
+    {
+      "source_key": "ICAR-IISR-INDORE",
+      "name": "ICAR - Indian Institute of Soybean Research, Indore",
+      "name_hi": "आईसीएआर - भारतीय सोयाबीन अनुसंधान संस्थान, इंदौर",
+      "category": "Crop Specific Directorate",
+      "url": "https://iisrindore.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Soybean production technology, Broad Bed Furrow (BBF) systems, Yellow Mosaic Virus whitefly vector, girdle beetle"
+    },
+    {
+      "source_key": "ICAR-DGR",
+      "name": "ICAR - Directorate of Groundnut Research, Junagadh",
+      "name_hi": "आईसीएआर - मूंगफली अनुसंधान निदेशालय, जूनागढ़",
+      "category": "Crop Specific Directorate",
+      "url": "https://dgr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Groundnut agronomy, pegging gypsum application (250 kg/ha), collar rot, subterranean white grub, aflatoxin management"
+    },
+    {
+      "source_key": "ICAR-CICR",
+      "name": "ICAR - Central Institute for Cotton Research, Nagpur",
+      "name_hi": "आईसीएआर - केंद्रीय कपास अनुसंधान संस्थान, नागपुर",
+      "category": "Crop Specific Directorate",
+      "url": "https://cicr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Bt cotton production, non-Bt refuge planting rules, pink bollworm pheromone monitoring, whitefly CLCuD management"
+    },
+    {
+      "source_key": "ICAR-CRIDA",
+      "name": "ICAR - Central Research Institute for Dryland Agriculture, Hyderabad",
+      "name_hi": "आईसीएआर - केंद्रीय बारानी कृषि अनुसंधान संस्थान, हैदराबाद",
+      "category": "National Agro-Meteorology & Dryland Institute",
+      "url": "https://crida.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "District agriculture contingency plans for all 75 districts of UP, monsoon delays, mid-season dry spells, drought crops"
+    },
+    {
+      "source_key": "ICAR-CIAE",
+      "name": "ICAR - Central Institute of Agricultural Engineering, Bhopal",
+      "name_hi": "आईसीएआर - केंद्रीय कृषि अभियांत्रिकी संस्थान, भोपाल",
+      "category": "Farm Engineering Directorate",
+      "url": "https://ciae.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Farm mechanization, Super Seeder calibration, Laser Land Leveler, Custom Hiring Center (CHC) machinery standards"
+    },
+    {
+      "source_key": "NHB",
+      "name": "National Horticulture Board, Ministry of Agriculture & Farmers Welfare, GoI",
+      "name_hi": "राष्ट्रीय बागवानी बोर्ड, भारत सरकार",
+      "category": "National Horticultural Board",
+      "url": "https://nhb.gov.in",
+      "evidence_tier": "A",
+      "scope": "Protected cultivation guidelines, Naturally Ventilated Polyhouse (NVPH) standards, commercial subsidies"
+    },
+    {
+      "source_key": "DGCA",
+      "name": "Directorate General of Civil Aviation, Ministry of Civil Aviation, GoI",
+      "name_hi": "नागर विमानन महानिदेशालय, भारत सरकार",
+      "category": "Statutory Aviation Regulator",
+      "url": "https://dgca.gov.in",
+      "evidence_tier": "A",
+      "scope": "The Drone Rules 2021, Kisan drone Remote Pilot Certificate (RPC), DigitalSky green zone airspace clearances"
+    },
+    {
+      "source_key": "ICAR-CAFRI",
+      "name": "ICAR - Central Agroforestry Research Institute, Jhansi",
+      "name_hi": "आईसीएआर - केंद्रीय कृषि वानिकी अनुसंधान संस्थान, झांसी",
+      "category": "National Agroforestry Institute",
+      "url": "https://cafri.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Commercial agroforestry systems, Poplar-wheat intercropping models, Clonal Eucalyptus boundary root barrier trenching"
+    },
+    {
+      "source_key": "ICAR-CITH",
+      "name": "ICAR - Central Institute of Temperate Horticulture, Srinagar",
+      "name_hi": "आईसीएआर - केंद्रीय समशीतोष्ण बागवानी संस्थान, श्रीनगर",
+      "category": "Temperate Horticulture Directorate",
+      "url": "https://cith.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Temperate fruits, High-Density Apple Orchards (HDP M-9), chilling hours requirements, low-chill cultivars (HRMN-99)"
+    },
+    {
+      "source_key": "ICAR-NDRI",
+      "name": "ICAR - National Dairy Research Institute, Karnal",
+      "name_hi": "आईसीएआर - राष्ट्रीय डेयरी अनुसंधान संस्थान, करनाल",
+      "category": "National Dairy Institute",
+      "url": "https://ndri.res.in",
+      "evidence_tier": "A",
+      "scope": "Commercial dairy farming, Murrah buffalo & Sahiwal cattle nutrition, Total Mixed Ration (TMR), mastitis CMT screening"
+    },
+    {
+      "source_key": "ICAR-CARI",
+      "name": "ICAR - Central Avian Research Institute, Izatnagar, Bareilly",
+      "name_hi": "आईसीएआर - केंद्रीय पक्षी अनुसंधान संस्थान, इज्जत नगर, बरेली",
+      "category": "National Poultry Research Institute",
+      "url": "https://cari.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Backyard poultry farming, Kadaknath, Vanaraja, CARI Nirbheek breeds, artificial brooding, Ranikhet/IBD vaccination"
+    },
+    {
+      "source_key": "ICAR-CIFA",
+      "name": "ICAR - Central Institute of Freshwater Aquaculture, Bhubaneswar",
+      "name_hi": "आईसीएआर - केंद्रीय मीठाजल जीवपालन अनुसंधान संस्थान, भुवनेश्वर",
+      "category": "National Aquaculture Institute",
+      "url": "https://cifa.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Composite carp culture (Catla, Rohu, Mrigal), water quality & dissolved oxygen standards, CIFAX formulation for EUS"
+    },
+    {
+      "source_key": "NBB",
+      "name": "National Bee Board & Ministry of Agriculture & Farmers Welfare, GoI",
+      "name_hi": "राष्ट्रीय मधुमक्खी बोर्ड, भारत सरकार",
+      "category": "National Apiculture Commodity Board",
+      "url": "https://nbb.gov.in",
+      "evidence_tier": "A",
+      "scope": "Commercial Apis mellifera apiculture, North Indian floral migration calendars, organic Varroa mite suppression (Formic acid)"
+    }
+
+  ]
+}

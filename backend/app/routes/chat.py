@@ -38,6 +38,10 @@ class SourceItem(BaseModel):
     category: Optional[str] = None
     crop: Optional[str] = None
     score: Optional[float] = None
+    url: Optional[str] = None
+    source_type: Optional[str] = None
+    source_tier: Optional[str] = None
+    published_date: Optional[str] = None
 
 
 class ChatMessageResponse(BaseModel):
@@ -47,6 +51,9 @@ class ChatMessageResponse(BaseModel):
     confidence: Optional[float] = 0.0
     language: Optional[str] = "en"
     provider: Optional[str] = "openrouter"
+    intent: Optional[str] = None
+    route: Optional[str] = None
+    requires_context: Optional[List[str]] = None
 
 
 class ChatDebugRequest(BaseModel):

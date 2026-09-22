@@ -1,0 +1,1237 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-09-22T02:05:00Z",
+  "total_documents": 62,
+  "tier_distribution": {
+    "A": 62,
+    "B": 0,
+    "SOURCE_RESEARCH_REQUIRED": 0
+  },
+  "files": [
+    {
+      "path": "agroforestry/agroforestry_poplar_eucalyptus.md",
+      "doc_id": "agroforestry_poplar_eucalyptus_001",
+      "title": "Commercial Agroforestry: Poplar & Clonal Eucalyptus Boundary & Intercropping Guide",
+      "priority": "P2",
+      "topic": "agroforestry",
+      "crop": "Trees: Poplar (Populus deltoides), Eucalyptus (Eucalyptus tereticornis Clones); Intercrops: Wheat, Sugarcane, Turmeric, Potato, Fodder",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CAFRI",
+        "FRI",
+        "UP Forest Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "allied/apiculture_beekeeping.md",
+      "doc_id": "allied_apiculture_beekeeping_001",
+      "title": "Commercial Apiculture: Apis mellifera Beekeeping, Floral Migration & Varroa Management Guide",
+      "priority": "P2",
+      "topic": "apiculture",
+      "crop": "Honey Flora: Mustard (Brassica), Eucalyptus, Litchi, Berseem, Sunflower, Coriander, Jamun",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "NBB",
+        "ICAR-AICRP",
+        "KVIC",
+        "UP Horticulture Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "allied/backyard_poultry_farming.md",
+      "doc_id": "allied_backyard_poultry_farming_001",
+      "title": "Backyard & Smallholder Poultry Farming: Improved Breeds, Brooding & Vaccination Guide",
+      "priority": "P2",
+      "topic": "animal_husbandry",
+      "crop": "Poultry Birds: Dual-Purpose Backyard Strains (Kadaknath, Vanaraja, CARI Nirbheek, CARI Debendra)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CARI",
+        "ICAR-DPR",
+        "UP Animal Husbandry Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "allied/dairy_cattle_buffalo_management.md",
+      "doc_id": "allied_dairy_cattle_buffalo_management_001",
+      "title": "Commercial Dairy Farming: Murrah Buffalo, Sahiwal Cattle, TMR Ration & Health Guide",
+      "priority": "P2",
+      "topic": "animal_husbandry",
+      "crop": "Fodder Crops: Berseem (Trifolium alexandrinum), Fodder Oats, Sorghum / Chari, Hybrid Napier Grass, Maize Silage",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "critical",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NDRI",
+        "ICAR-CIRB",
+        "UP Animal Husbandry Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "allied/inland_freshwater_aquaculture.md",
+      "doc_id": "allied_inland_freshwater_aquaculture_001",
+      "title": "Inland Freshwater Aquaculture: Composite Carp Culture & Water Quality Guide",
+      "priority": "P2",
+      "topic": "fisheries",
+      "crop": "Fish: Indian Major Carps (Catla, Rohu, Mrigal) & Compatible Exotic Carps (Silver Carp, Grass Carp, Common Carp)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CIFA",
+        "UP Fisheries Department",
+        "National Fisheries Development Board (NFDB)"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crop_residue/parali_stubble_management.md",
+      "doc_id": "res_parali_stubble_management_001",
+      "title": "In-Situ & Ex-Situ Crop Residue (Parali) Management Guide",
+      "priority": "P1",
+      "topic": "crop_residue",
+      "crop": "Paddy / Wheat Rotation",
+      "state": "Uttar Pradesh (Western UP, Terai), Punjab, Haryana",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IARI",
+        "MOA-DACFW",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/banana_guide.md",
+      "doc_id": "crop_banana_guide_001",
+      "title": "Tissue Culture Banana (Grand Naine G-9) Commercial Production, Sigatoka & Bunch Care Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Banana",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRCB",
+        "ICAR-CISH",
+        "UP Horticulture Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/chickpea_lentil_bundelkhand_guide.md",
+      "doc_id": "crop_chickpea_lentil_bundelkhand_001",
+      "title": "Bundelkhand Chickpea & Lentil Production, Moisture Conservation & Wilt Management Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Chickpea / Lentil",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIPR",
+        "BUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/chilli_guide.md",
+      "doc_id": "crop_chilli_guide_001",
+      "title": "Chilli (Capsicum annuum) Production, Murda Leaf Curl Complex & Anthracnose Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Chilli",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIVR",
+        "CSAUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/cotton_guide.md",
+      "doc_id": "crop_cotton_guide_001",
+      "title": "Cotton (Gossypium hirsutum) Production, Whitefly CLCuD & Pink Bollworm Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Cotton",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CICR",
+        "CSAUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/groundnut_guide.md",
+      "doc_id": "crop_groundnut_guide_001",
+      "title": "Groundnut (Arachis hypogaea) Production, Pegging Gypsum & Collar Rot Management Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Groundnut",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-DGR",
+        "CSAUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/maize_guide.md",
+      "doc_id": "crop_maize_production_guide_001",
+      "title": "Maize Crop Production & Agronomic Management Guide",
+      "priority": "P0",
+      "topic": "crop_production",
+      "crop": "Maize",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIMR",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/mustard_guide.md",
+      "doc_id": "crop_mustard_production_guide_001",
+      "title": "Mustard & Rapeseed Agronomic Management Guide",
+      "priority": "P0",
+      "topic": "crop_production",
+      "crop": "Mustard",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-DRMR",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/onion_guide.md",
+      "doc_id": "crop_onion_guide_001",
+      "title": "Onion (Allium cepa) Production, Nursery Management, Thrips & Storage Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Onion",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-DOGR",
+        "ICAR-IIVR",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/pigeonpea_arhar_guide.md",
+      "doc_id": "crop_pigeonpea_arhar_guide_001",
+      "title": "Pigeonpea / Arhar (Cajanus cajan) Production, Phytophthora Stem Blight & Pod Fly Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Pigeonpea",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIPR",
+        "ANDUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/potato_guide.md",
+      "doc_id": "crop_potato_production_guide_001",
+      "title": "Potato Crop Production & Tuber Management Guide",
+      "priority": "P0",
+      "topic": "crop_production",
+      "crop": "Potato",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CPRI",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/rice_guide.md",
+      "doc_id": "crop_rice_production_guide_001",
+      "title": "Rice Crop Production & Agronomic Management Guide",
+      "priority": "P0",
+      "topic": "crop_production",
+      "crop": "Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/soybean_guide.md",
+      "doc_id": "crop_soybean_guide_001",
+      "title": "Soybean (Glycine max) Production, Broad Bed Furrow & Yellow Mosaic Virus Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Soybean",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IISR",
+        "BUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/sugarcane_guide.md",
+      "doc_id": "crop_sugarcane_western_up_001",
+      "title": "Western Uttar Pradesh Sugarcane Production, Ratoon Management & Sugar Mill Integration Guide",
+      "priority": "P1",
+      "topic": "crop_production",
+      "crop": "Sugarcane",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IISR",
+        "UPCSR",
+        "UP Cane Commissioner Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/tomato_guide.md",
+      "doc_id": "crop_tomato_production_guide_001",
+      "title": "Tomato Cultivation & Protected Production Guide",
+      "priority": "P0",
+      "topic": "crop_production",
+      "crop": "Tomato",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIVR",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "crops/wheat_guide.md",
+      "doc_id": "crop_wheat_production_guide_001",
+      "title": "Wheat Crop Production & Agronomic Management Guide",
+      "priority": "P0",
+      "topic": "crop_production",
+      "crop": "Wheat",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIWBR",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/mustard_white_rust.md",
+      "doc_id": "dis_mustard_white_rust_001",
+      "title": "Mustard White Rust (Albugo candida) Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Mustard",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-DRMR",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/potato_late_blight.md",
+      "doc_id": "dis_potato_late_blight_001",
+      "title": "Potato Late Blight (Phytophthora infestans) Decision Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Potato",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CPRI",
+        "UP-SAUS",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/potato_tomato_blight.md",
+      "doc_id": "dis_potato_tomato_blight_parent_001",
+      "title": "Early Blight & Late Blight in Solanaceous Crops: Comparative Overview",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Potato / Tomato",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CPRI",
+        "ICAR-IIVR",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/pulse_wilt_root_rot.md",
+      "doc_id": "disease_pulse_wilt_root_rot_001",
+      "title": "Pulse Wilt & Root Rot Complex Management Guide: Chickpea, Lentil & Pigeonpea",
+      "priority": "P1",
+      "topic": "plant_pathology",
+      "crop": "Chickpea, Lentil, Pigeonpea",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIPR",
+        "CSAUAT",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/rice_blast.md",
+      "doc_id": "dis_rice_blast_001",
+      "title": "Rice Blast (Pyricularia oryzae) Comprehensive Decision Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/rice_blast_sheath_blight.md",
+      "doc_id": "dis_rice_blast_sheath_blight_parent_001",
+      "title": "Rice Blast & Sheath Blight Diagnostic & Comparative Overview",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/rice_sheath_blight.md",
+      "doc_id": "dis_rice_sheath_blight_001",
+      "title": "Rice Sheath Blight (Rhizoctonia solani) Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/sugarcane_red_rot.md",
+      "doc_id": "disease_sugarcane_red_rot_001",
+      "title": "Sugarcane Red Rot (Colletotrichum falcatum) & Sett Rot Eradication Guide",
+      "priority": "P1",
+      "topic": "plant_pathology",
+      "crop": "Sugarcane",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "critical",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IISR",
+        "UPCSR",
+        "UP Cane Commissioner Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/tomato_early_blight.md",
+      "doc_id": "dis_tomato_early_blight_001",
+      "title": "Tomato Early Blight (Alternaria solani) Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Tomato",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIVR",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "diseases/wheat_yellow_rust.md",
+      "doc_id": "dis_wheat_yellow_rust_001",
+      "title": "Wheat Yellow Rust (Stripe Rust) Diagnosis & Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Wheat",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIWBR",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "fertilizers/biofertilizers_organic_manures.md",
+      "doc_id": "fertilizer_biofertilizers_organic_manures_001",
+      "title": "Biofertilizers, Microbial Inoculants & On-Farm Organic Manures Guide",
+      "priority": "P1",
+      "topic": "soil_fertility",
+      "crop": "All Crops (Cereals, Pulses, Oilseeds, Vegetables, Sugarcane)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IISS",
+        "NCONF",
+        "UP Agriculture Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "fertilizers/micronutrients_zinc_iron.md",
+      "doc_id": "fert_micronutrients_zinc_iron_sulphur_001",
+      "title": "Micronutrients Management: Zinc, Iron & Sulphur Comprehensive Guide",
+      "priority": "P0",
+      "topic": "nutrient_management",
+      "crop": "General (Rice, Maize, Wheat, Mustard, Pulses)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IISS",
+        "GBPUA&T",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "fertilizers/nitrogen_deficiency_urea.md",
+      "doc_id": "fert_nitrogen_urea_management_001",
+      "title": "Nitrogen Deficiency Diagnosis & Urea Management Guide",
+      "priority": "P0",
+      "topic": "nutrient_management",
+      "crop": "General (Wheat, Rice, Maize, Mustard, Potato)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IARI",
+        "MOA-DACFW",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "fertilizers/phosphorus_deficiency_dap.md",
+      "doc_id": "fert_phosphorus_dap_ssp_guide_001",
+      "title": "Phosphorus Fertilizer & DAP/SSP Placement Guide",
+      "priority": "P0",
+      "topic": "nutrient_management",
+      "crop": "General (Wheat, Rice, Pulses, Mustard, Potato)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IISS",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "fertilizers/potassium_deficiency_mop.md",
+      "doc_id": "fert_potassium_mop_sop_guide_001",
+      "title": "Potassium Deficiency & Potash Application Management Guide",
+      "priority": "P0",
+      "topic": "nutrient_management",
+      "crop": "General (Wheat, Rice, Potato, Maize, Sugarcane)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "horticulture/precision_farming_drones.md",
+      "doc_id": "horticulture_precision_farming_drones_001",
+      "title": "Agricultural Drone Operations, Aerial Spraying SOPs & Precision NDVI Mapping Guide",
+      "priority": "P2",
+      "topic": "precision_agriculture",
+      "crop": "All Crops (Wheat, Rice, Sugarcane, Potato, Mustard, Maize, Cotton, Orchards)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "MoA&FW",
+        "DGCA",
+        "PPQS-CIBRC",
+        "UP Agriculture Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "horticulture/protected_cultivation_polyhouse.md",
+      "doc_id": "horticulture_protected_cultivation_polyhouse_001",
+      "title": "Protected Cultivation, Naturally Ventilated Polyhouses (NVPH) & Shade Nets Guide",
+      "priority": "P2",
+      "topic": "horticulture_engineering",
+      "crop": "High-Value Vegetables & Flowers (Indeterminate Tomato, Parthenocarpic Cucumber, Coloured Bell Pepper / Capsicum, Gerbera, Rose)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "NHB",
+        "ICAR-IARI",
+        "UP Horticulture Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "irrigation/micro_irrigation_drip.md",
+      "doc_id": "irrig_micro_irrigation_drip_sprinkler_001",
+      "title": "Micro-Irrigation: Drip & Sprinkler Systems and PMKSY Subsidy Guide",
+      "priority": "P1",
+      "topic": "irrigation",
+      "crop": "Horticultural & Field Crops (Potato, Tomato, Mustard, Pulses, Sugarcane, Vegetables)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "MOA-DACFW",
+        "ICAR-CIAE",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "irrigation/rice_water_management.md",
+      "doc_id": "irrig_rice_awd_water_management_001",
+      "title": "Rice Water Management & Alternate Wetting and Drying (AWD) Guide",
+      "priority": "P0",
+      "topic": "irrigation",
+      "crop": "Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "irrigation/wheat_irrigation_cri.md",
+      "doc_id": "irrig_wheat_cri_schedule_001",
+      "title": "Wheat Irrigation Scheduling & Critical CRI Stage Guide",
+      "priority": "P0",
+      "topic": "irrigation",
+      "crop": "Wheat",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIWBR",
+        "ICAR-IARI",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "machinery/farm_mechanization_chc.md",
+      "doc_id": "machinery_farm_mechanization_chc_001",
+      "title": "Farm Mechanization, Custom Hiring Centers (CHC) & Advanced Farm Implements Guide",
+      "priority": "P1",
+      "topic": "agricultural_engineering",
+      "crop": "All Crops (Wheat, Paddy, Sugarcane, Maize, Pulses, Mustard)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "UP Agriculture Department",
+        "ICAR-CIAE",
+        "Ministry of Agriculture and Farmers Welfare"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "Mountain_Farming/mountain_farming.md",
+      "doc_id": "mtn_mountain_farming_systems_001",
+      "title": "पहाड़ी खेती (Mountain & Hill Farming) — पद्धतियां, मिट्टी एवं प्रमुख फसलें",
+      "priority": "P1",
+      "topic": "mountain_agriculture",
+      "crop": "General (Finger Millet / Mandua, Barnyard Millet / Jhangora, Rajma, Maize, Apple, Off-season Vegetables)",
+      "state": "Uttarakhand, Himachal Pradesh, Jammu & Kashmir, North-Eastern States",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-VPKAS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "Mountain_Farming/mountain_horticulture_temperate.md",
+      "doc_id": "mountain_farming_horticulture_temperate_001",
+      "title": "Mountain Horticulture: Temperate Fruits (Apple, Walnut, Peach), Chilling Requirements & HDP Guide",
+      "priority": "P2",
+      "topic": "mountain_agriculture",
+      "crop": "Temperate Fruits: Apple (Malus domestica), Walnut (Juglans regia), Peach (Prunus persica), Plum (Prunus domestica)",
+      "state": "Sub-Himalayan Zone & Northern Mountain Tracts (Uttarakhand, HP, J&K, Northern Valley Enclaves)",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CITH",
+        "UHF Solan",
+        "National Horticulture Board"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "pests/gram_pod_borer.md",
+      "doc_id": "pest_gram_pod_borer_001",
+      "title": "Gram Pod Borer (Helicoverpa armigera) in Pulses: IPM Decision Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Chickpea / Gram",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIPR",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "pests/maize_fall_armyworm.md",
+      "doc_id": "pest_maize_fall_armyworm_001",
+      "title": "Fall Armyworm (FAW) in Maize: Integrated Pest Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Maize",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIMR",
+        "ICAR-NBAIR",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "pests/mustard_aphids.md",
+      "doc_id": "pest_mustard_aphids_001",
+      "title": "Mustard Aphid (Lipaphis erysimi) Identification & Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Mustard",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-DRMR",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "pests/nematodes_rodents_management.md",
+      "doc_id": "pest_nematodes_rodents_management_001",
+      "title": "Root-Knot Nematodes & Field Rodent Integrated Management Guide",
+      "priority": "P1",
+      "topic": "plant_protection",
+      "crop": "Vegetables (Tomato, Brinjal, Chilli, Okra, Cucurbits), Sugarcane, Wheat, Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "critical",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CISH",
+        "ICAR-CAZRI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "pests/rice_stem_borer.md",
+      "doc_id": "pest_rice_stem_borer_001",
+      "title": "Yellow Stem Borer in Rice: Identification & Integrated Pest Management",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Rice",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "pests/tomato_whitefly_curl.md",
+      "doc_id": "pest_tomato_whitefly_curl_001",
+      "title": "Whitefly & Tomato Leaf Curl Virus (ToLCV) Management Guide",
+      "priority": "P0",
+      "topic": "crop_protection",
+      "crop": "Tomato",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-IIVR",
+        "ICAR-IARI",
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "safety/pesticide_handling_ppe.md",
+      "doc_id": "saf_pesticide_handling_ppe_001",
+      "title": "Pesticide Safety, Personal Protective Equipment (PPE), Dilution Math & Emergency First Aid",
+      "priority": "P0",
+      "topic": "pesticide_safety",
+      "crop": "General (All Crops)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "PPQS-CIBRC"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "schemes/kcc_kisan_credit_card.md",
+      "doc_id": "sch_kcc_kisan_credit_card_001",
+      "title": "Kisan Credit Card (KCC) Scheme: Low Interest Agricultural Credit & Operational Guidelines",
+      "priority": "P0",
+      "topic": "government_schemes",
+      "crop": "General (All Food, Commercial, Horticultural Crops & Allied Activities)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "NABARD",
+        "RBI"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "schemes/pm_kisan_scheme.md",
+      "doc_id": "sch_pm_kisan_samman_nidhi_001",
+      "title": "PM-KISAN Samman Nidhi Scheme Operational Guidelines",
+      "priority": "P0",
+      "topic": "government_schemes",
+      "crop": "General (All Landholding Farmers)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "MOA-DACFW"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "schemes/pmfby_crop_insurance.md",
+      "doc_id": "sch_pmfby_crop_insurance_001",
+      "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Crop Insurance Guidelines & Claim Process",
+      "priority": "P0",
+      "topic": "government_schemes",
+      "crop": "General (Food grains, Oilseeds, Pulses, Commercial, Horticulture)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "MOA-DACFW"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "soil/soil_health_card.md",
+      "doc_id": "soil_health_card_interpretation_001",
+      "title": "Soil Health Card (SHC) Interpretation & Testing Protocol",
+      "priority": "P0",
+      "topic": "soil_health",
+      "crop": "General (Multi-crop)",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "versioned",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "MOA-DACFW",
+        "ICAR-IISS",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "soil/soil_ph_salinity.md",
+      "doc_id": "soil_ph_salinity_alkalinity_management_001",
+      "title": "Soil pH, Salinity & Sodic (Usar) Land Reclamation Guide",
+      "priority": "P0",
+      "topic": "soil_health",
+      "crop": "Salt Tolerant Crops (CSR-30, CSR-36 Rice; KRL-210, KRL-19 Wheat)",
+      "state": "Uttar Pradesh (Unnao, Rae Bareli, Sultanpur, Mainpuri, Etah, Hardoi, Pratapgarh)",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CSSRI",
+        "UPBSN",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "soil/soil_types_management.md",
+      "doc_id": "soil_major_types_management_001",
+      "title": "Major Soil Types of North India & Management Practices Guide",
+      "priority": "P0",
+      "topic": "soil_health",
+      "crop": "General (Wheat, Rice, Pulses, Oilseeds, Sugarcane)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "normal",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NBSSLUP",
+        "UP-SAUS"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "storage/grain_storage_pests.md",
+      "doc_id": "str_grain_storage_pests_001",
+      "title": "Safe Grain Storage, Pest Management (Ghun / Pulse Beetle) & Moisture Control",
+      "priority": "P0",
+      "topic": "post_harvest_storage",
+      "crop": "Wheat, Rice, Maize, Gram, Mustard",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "IGGMRI",
+        "ICAR-CIPHET"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "weather/climate_contingency_plans.md",
+      "doc_id": "weather_climate_contingency_plans_001",
+      "title": "Agricultural Drought & Monsoon Delay Climate Contingency Action Plans",
+      "priority": "P1",
+      "topic": "agro_meteorology",
+      "crop": "Contingency Crops (Pearl Millet, Sorghum, Sesame, Green Gram, Black Gram, Toria, Early Mustard)",
+      "state": "Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-CRIDA",
+        "IMD-AAS",
+        "UP Agriculture Department"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "weather/weather_frost_heatwave_precautions.md",
+      "doc_id": "wth_frost_heatwave_precautions_001",
+      "title": "Agro-Meteorological Crop Precautions: Frost, Cold Wave, Terminal Heat & Unseasonal Weather",
+      "priority": "P0",
+      "topic": "weather_advisory",
+      "crop": "General, Wheat, Mustard, Potato, Tomato",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "IMD",
+        "ICAR"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "weeds/rice_echinochloa_weeds.md",
+      "doc_id": "wd_rice_echinochloa_weeds_001",
+      "title": "Management of Echinochloa Weeds (Barnyard Grass / Sanwa / Shama) in Rice",
+      "priority": "P0",
+      "topic": "weed_management",
+      "crop": "Rice / Paddy",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-NRRI",
+        "ICAR-IIRR"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    },
+    {
+      "path": "weeds/wheat_phalaris_minor.md",
+      "doc_id": "wd_wheat_phalaris_minor_001",
+      "title": "Management of Phalaris minor (Gulli Danda / Canary Grass) in Wheat",
+      "priority": "P0",
+      "topic": "weed_management",
+      "crop": "Wheat",
+      "state": "All India / Uttar Pradesh",
+      "dynamicity": "stable",
+      "risk_level": "high",
+      "evidence_tier": "A",
+      "status": "published",
+      "primary_sources": [
+        "ICAR-DWR",
+        "ICAR-IIWBR"
+      ],
+      "replaces": [],
+      "notes": "Verified and standardized with 7-factor provenance."
+    }
+  ]
+}

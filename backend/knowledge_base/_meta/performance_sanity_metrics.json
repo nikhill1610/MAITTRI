@@ -1,0 +1,10 @@
+{
+  "import_time_ms": 1089.03,
+  "vector_init_ms": 774.09,
+  "chunks_in_index": 559,
+  "first_query_ms": 1170.3,
+  "pure_retrieval_ms": 205.99,
+  "subsequent_query_ms": 837.34,
+  "third_query_ms": 1219.59,
+  "evaluation_date": "2026-09-22"
+}

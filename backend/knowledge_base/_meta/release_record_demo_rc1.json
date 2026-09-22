@@ -1,0 +1,81 @@
+{
+  "release_metadata": {
+    "release_id": "MAITTRI-DEMO-RC1",
+    "version": "1.0.0-demo-rc1",
+    "status": "DEMO_READY_RELEASE_CANDIDATE",
+    "creation_date": "2026-09-22T23:20:00+05:30",
+    "git_commit_sha": "0d8bb25845741eddbe4993cb486a268d4ea476a5",
+    "parent_release_id": "MAITTRI-v1.0.2-PILOT-RC1",
+    "parent_baseline_sha": "0d8bb25845741eddbe4993cb486a268d4ea476a5",
+    "worktree_state": "DIRTY",
+    "worktree_description": "Clean demo release candidate containing automated readiness suites, multi-turn dialogue testing, live service routing, resilience guardrails, and full documentation.",
+    "historical_preservation_notice": "Preserves historical baseline MAITTRI-KB-v1.0.0-RELEASE-FREEZE and pilot candidate MAITTRI-v1.0.2-PILOT-RC1 unmodified."
+  },
+  "corpus_baseline": {
+    "total_markdown_documents": 62,
+    "total_json_category_registries": 6,
+    "total_chromadb_chunks": 559,
+    "chromadb_collection_name": "maitri_krishi_kb",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "embedding_dimensions": 384,
+    "distance_metric": "cosine",
+    "unique_doc_ids_verified": 62,
+    "evidence_tiers": {
+      "tier_a": 62,
+      "tier_b": 0,
+      "source_research_required": 0
+    },
+    "cibrc_chemical_safety_compliance": "100.0%"
+  },
+  "automated_verification_results": {
+    "pytest_suite": {
+      "total_tests": 55,
+      "passed": 55,
+      "failed": 0,
+      "pass_rate_percent": 100.0,
+      "runtime_seconds": 18.79
+    },
+    "development_benchmark": {
+      "total_queries": 45,
+      "passed": 45,
+      "failed": 0,
+      "pass_rate_percent": 100.0,
+      "recall_at_3_percent": 100.0,
+      "top_1_accuracy_percent": 94.59,
+      "safety_violations": 0
+    },
+    "multi_turn_context_integration": {
+      "test_cases": 5,
+      "passed": 5,
+      "status": "ALL_PASSED"
+    },
+    "security_resilience_simulation": {
+      "test_cases": 9,
+      "passed": 9,
+      "status": "ZERO_LEAKAGE_CONFIRMED"
+    },
+    "frontend_production_build": {
+      "build_tool": "Vite 7.3.6",
+      "dist_index_html_present": true,
+      "status": "BUILT_SUCCESSFULLY"
+    }
+  },
+  "operational_capabilities": {
+    "offline_local_capable": [
+      "Full vector retrieval over 62 KB documents (559 chunks)",
+      "Smart RAG router intent classification and entity detection",
+      "Chemical safety refusal with AIIMS NPIC 1800 116 117 guidance",
+      "Grounded local RAG synthesis when cloud LLMs are unavailable"
+    ],
+    "internet_dependent_capabilities": [
+      "OpenRouter / Gemini cloud conversational synthesis",
+      "Live weather streaming from external meteorological APIs",
+      "Real-time Agmarknet commodity price synchronization",
+      "Tavily trusted web search fallback"
+    ]
+  },
+  "known_limitations_and_future_scope": {
+    "human_specialist_reviews": "REV-001 through REV-004 remain strictly HUMAN_SPECIALIST_REVIEW_PENDING pending live on-ground field deployment.",
+    "field_exposure": "Real farmer field exposure, dialect voice sampling, and physical multi-village pilot remain future milestones."
+  }
+}
