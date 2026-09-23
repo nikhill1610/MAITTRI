@@ -29,6 +29,7 @@ class Intent(str, Enum):
     FERTILIZER = "FERTILIZER"
     PESTICIDE_REFUSAL = "PESTICIDE_REFUSAL"
     FINANCIAL = "FINANCIAL"
+    MARKET = "MARKET"
     UNSUPPORTED = "UNSUPPORTED"
 
 
@@ -39,6 +40,7 @@ class RouteAction(str, Enum):
     SOIL_SERVICE = "SOIL_SERVICE"
     FERTILIZER_SERVICE = "FERTILIZER_SERVICE"
     FINANCIAL_SERVICE = "FINANCIAL_SERVICE"
+    MARKET_SERVICE = "MARKET_SERVICE"
     SAFE_REFUSAL = "SAFE_REFUSAL"
     ASK_FOR_CONTEXT = "ASK_FOR_CONTEXT"
     WEB_SEARCH = "WEB_SEARCH"
@@ -79,34 +81,41 @@ def unicode_word_match(pattern: str, text: str) -> bool:
 # Multilingual Vocabulary & Pattern Definitions
 # -----------------------------------------------------------------------------
 
-# Crop Patterns
+# Helper for unicode word boundaries
+def _ubound(pat: str) -> str:
+    return rf"(?<![\u0900-\u097Fa-zA-Z0-9])(?:{pat})(?![\u0900-\u097Fa-zA-Z0-9])"
+
+# Crop Patterns (Unicode boundary enforced; Pigeonpea before Chickpea to prevent 'red gram' clash)
 CROPS_PATTERNS = {
-    "Wheat": r"गेहूं|गेहू|गेहूँ|gehu|gehun|wheat",
-    "Rice": r"धान|चावल|dhaan|chawal|rice|paddy",
-    "Mustard": r"सरसों|राई|sarson|rai|mustard|rapeseed",
-    "Maize": r"मक्का|मकई|makka|makai|corn|maize",
-    "Potato": r"आलू|aaloo|aalu|potato",
-    "Tomato": r"टमाटर|tamatar|tomato",
-    "Chickpea": r"चना|चने|chana|chane|chickpea|gram",
-    "Cotton": r"कपास|cotton|kapas",
-    "Sugarcane": r"गन्ना|sugarcane|ganna",
-    "Soybean": r"सोयाबीन|soybean|soya",
-    "Onion": r"प्याज|pyaj|pyaaz|onion",
-    "Groundnut": r"मूंगफली|mungfali|peanut|groundnut",
-    "Pigeonpea": r"अरहर|तुअर|arhar|tuar|pigeonpea",
-    "Chilli": r"मिर्च|mirch|mirchi|chilli|chili",
-    "Banana": r"केला|kela|banana"
+    "Pigeonpea": _ubound(r"अरहर|तुअर|तुवर|arhar|tuar|tuvar|pigeonpea|red\s*gram"),
+    "Wheat": _ubound(r"गेहूं|गेहू|गेहूँ|gehu|gehun|wheat"),
+    "Rice": _ubound(r"धान|चावल|dhaan|chawal|rice|paddy"),
+    "Mustard": _ubound(r"सरसों|राई|sarson|rai|mustard|rapeseed"),
+    "Maize": _ubound(r"मक्का|मकई|makka|makai|corn|maize"),
+    "Potato": _ubound(r"आलू|aaloo|aalu|potato"),
+    "Tomato": _ubound(r"टमाटर|tamatar|tomato"),
+    "Chickpea": _ubound(r"चना|चने|chana|chane|chickpea|bengal\s*gram|gram"),
+    "Cotton": _ubound(r"कपास|cotton|kapas"),
+    "Sugarcane": _ubound(r"गन्ना|sugarcane|ganna"),
+    "Soybean": _ubound(r"सोयाबीन|soybean|soya"),
+    "Onion": _ubound(r"प्याज|pyaj|pyaaz|pyaz|onion"),
+    "Groundnut": _ubound(r"मूंगफली|mungfali|peanut|groundnut"),
+    "Chilli": _ubound(r"मिर्च|mirch|mirchi|chilli|chili"),
+    "Banana": _ubound(r"केला|kela|banana")
 }
 
 # Prompt Injection Patterns (Attempts to override MAITTRI rules or ask for dangerous instructions)
 PROMPT_INJECTION_PATTERNS = [
-    r"ignore\s+(?:all\s+|maittri\s+|system\s+)?(instructions|rules|constraints|guidelines|safety)",
-    r"bypass\s+(?:all\s+|maittri\s+|system\s+)?(rules|safety|filters)",
-    r"disregard\s+(?:all\s+|maittri\s+|system\s+)?(instructions|rules)",
+    r"ignore\s+(?:all\s+)?(?:previous\s+)?(?:system\s+|maittri\s+)?(instructions|prompts?|rules|constraints|guidelines|safety)",
+    r"bypass\s+(?:all\s+)?(?:previous\s+)?(?:system\s+|maittri\s+)?(rules|safety|filters)",
+    r"disregard\s+(?:all\s+)?(?:previous\s+)?(instructions|prompts?|rules)",
     r"act as\s+(?:an unfiltered|dan|jailbreak)",
-    r"forget\s+(?:your\s+)?(instructions|rules|persona)",
+    r"forget\s+(?:all\s+)?(?:previous\s+)?(?:your\s+)?(instructions|rules|persona)",
+    r"(you are now|pretend to be)\s+(?:an unfiltered|dan|jailbreak|unrestricted)",
+    r"(jailbreak|unfiltered)\s+mode",
     r"नियमों को अनदेखा",
-    r"सभी नियम भूल जाओ"
+    r"सभी नियम भूल जाओ",
+    r"(पिछली|सभी)\s+(हिदायतें|निर्देश|नियम)\s*(भूल जाओ|अनदेखा|हटाओ)"
 ]
 
 # Chemical / Pesticide Safety Risk Patterns (Triggers PESTICIDE_REFUSAL)
@@ -136,24 +145,29 @@ PESTICIDE_SAFETY_PATTERNS = [
 
 # Weather / Meteorological Patterns (Requires actual meteorological keywords)
 WEATHER_PATTERNS = [
-    r"(?:मौसम|weather|forecast|\brain\b|barish|बारिश|वर्षा|तापमान|temperature|frost|पाला|cold wave|शीतलहर|heatwave|लू)",
-    r"(?:कल|आज|tomorrow|today|aaj|kal)\s+.*?(?:मौसम|weather|\brain\b|barish|बारिश|वर्षा|forecast|तापमान|frost|पाला|spray|छिड़काव)",
-    r"(?:can i spray|spray karu|छिड़काव करूं|छिड़काव करूँ)",
-    r"(?:aaj|kal)\s*(?:irrigation|sinchai|पानी|सिंचाई)\s*(?:karu|karein|dena)",
-    r"(?:wind speed|हवा की गति|humidity|नमी का स्तर)"
+    r"(?:मौसम|weather|forecast|\brain\b|barish|बारिश|वर्षा|तापमान|temperature|frost|पाला|cold wave|शीतलहर|heatwave|लू|mausam|monsoon|मानसून|drought|सूखा)",
+    r"(?:कल|आज|tomorrow|today|aaj|kal|current|live)\s+.*?(?:मौसम|weather|\brain\b|barish|बारिश|वर्षा|forecast|तापमान|temperature|frost|पाला|spray|छिड़काव|mausam|sinchai|irrigation|rainfall|humidity|monsoon)",
+    r"(?:can i spray|spray karu|छिड़काव करूं|छिड़काव करूँ|spray karun|should i spray)",
+    r"(?:aaj|kal|today|tomorrow|now)\s*.*?(?:irrigation|sinchai|पानी|सिंचाई)\s*(?:karu|karein|dena|karni|kare|chahiye|should)",
+    r"(?:should i irrigate|irrigate today|irrigation today)",
+    r"(?:mausam|weather)\s*(?:ke hisaab|ke hisab|ke according|according)",
+    r"(?:wind speed|हवा की गति|humidity|नमी का स्तर|rainfall|precipitation)"
 ]
 
 # Mandi & Financial Patterns
 MANDI_PATTERNS = [
-    r"mandi\s*(bhav|rate|price|rates)",
-    r"(मंडी|भाव|रेट|rate|price|bhav).*?(क्या है|कितना है|बताएं|बताओ|आज|today)",
-    r"(आज|today).*?(mandi|भाव|रेट|rate|price|bhav)",
+    r"mandi\s*(?:bhav|rate|price|rates)",
+    r"(मंडी|भाव|रेट|rate|price|bhav).*?(क्या है|कितना है|बताएं|बताओ|आज|today|latest|current|modal)",
+    r"(आज|today|latest|current).*?(mandi|भाव|रेट|rate|price|bhav|modal)",
     r"what is today'?s (mandi|market) price",
     r"today'?s price of",
     r"mandi rate",
     r"msp|न्यूनतम समर्थन मूल्य|minimum support price",
     r"procurement|खरीद|खरीदी|उपार्जन",
-    r"agmarknet|apmc"
+    r"agmarknet|apmc|enam",
+    r"modal\s*price",
+    r"bazaar\s*(?:bhav|rate|price)",
+    r"market\s*price"
 ]
 
 INSURANCE_SCHEMES_PATTERNS = [
@@ -176,9 +190,9 @@ SOIL_PATTERNS = [
 
 # Fertilizer Patterns
 FERTILIZER_PATTERNS = [
-    r"(यूरिया|urea|dap|डीएपी|mop|पोटाश|npk|जिंक सल्फेट|zinc sulphate|nano urea)",
+    r"(यूरिया|urea|dap|डीएपी|mop|पोटाश|npk|जिंक सल्फेट|zinc sulphate|nano urea|जिप्सम|gypsum)",
     r"(fertilizer|खाद|उर्वरक|khad|nutrients?)\s*(kab|kitna|kaise|schedule|dose|timing|use|dalna|dena)",
-    r"(nitrogen|phosphorus|potassium|phosphatic)\s*(deficiency|dose|management)",
+    r"(nitrogen|phosphorus|potassium|phosphatic|biostimulant|humic acid|biofertilizer|बायोफर्टिलाइजर|ह्यूमिक)\s*(deficiency|dose|management|se|\bka\b|\bki\b|\bke\b)?",
     r"leaves are yellow.*?(nitrogen|urea|fertilizer)",
     r"पत्ते पीले.*?(नाइट्रोजन|यूरिया|खाद)"
 ]
@@ -219,9 +233,24 @@ NON_AGRI_PATTERNS = [
 ]
 
 
+VALID_SHORT_WORDS = {
+    # Hinglish & Hindi common grammar/stop words
+    "is", "me", "ka", "ki", "ke", "ko", "se", "pe", "to", "na", "ha", "ye", "wo", "ab", "do",
+    "ho", "ja", "de", "le", "re", "bhi", "par", "kya", "aur", "tai", "mai", "aap", "hum", "hai",
+    # English common prepositions & short words
+    "in", "on", "at", "to", "or", "of", "an", "as", "by", "if", "my", "up", "so", "no", "hi", "he", "we", "am"
+}
+
+
 def is_gibberish(text: str) -> bool:
     """Detects random key mashing or empty meaningless strings."""
     clean = text.strip()
+    clean_lower = clean.lower()
+
+    # Valid short words in Hindi/Hinglish/English are not gibberish
+    if clean_lower in VALID_SHORT_WORDS:
+        return False
+
     if len(clean) < 3:
         return True
 
@@ -229,7 +258,7 @@ def is_gibberish(text: str) -> bool:
     if " " in clean:
         words = clean.split()
         gibberish_words = [w for w in words if is_gibberish(w)]
-        return len(gibberish_words) / len(words) > 0.6
+        return len(gibberish_words) / len(words) >= 0.5
 
     # Single token checks
     mash_patterns = [
@@ -273,12 +302,195 @@ def is_non_agricultural_query(text: str) -> bool:
     return False
 
 
+KNOWN_LOCATIONS = {
+    # Uttar Pradesh
+    "meerut", "aligarh", "agra", "bareilly", "varanasi", "lucknow", "kanpur", "kanpur nagar",
+    "muzaffarnagar", "prayagraj", "allahabad", "gorakhpur", "saharanpur", "bijnor", "moradabad",
+    "rampur", "bulandshahr", "mathura", "firozabad", "mainpuri", "etawah", "jhansi", "banda",
+    "lalitpur", "jalaun", "hamirpur", "mahoba", "chitrakoot", "ayodhya", "faizabad", "barabanki",
+    "sultanpur", "amethi", "rae bareli", "sitapur", "lakhimpur", "lakhimpur kheri", "hardoi",
+    "unnao", "badaun", "pilibhit", "shahjahanpur", "deoria", "kushinagar", "azamgarh", "mau",
+    "ballia", "jaunpur", "ghazipur", "chandauli", "mirzapur", "sonbhadra", "shamli", "baghpat",
+    "hapur", "sambhal", "amroha", "kasganj",
+    # Punjab
+    "ludhiana", "amritsar", "bathinda", "patiala", "jalandhar", "sangrur", "firozpur", "faridkot",
+    "moga", "hoshiarpur", "gurdaspur", "kapurthala", "mansa", "muktsar", "barnala", "rupnagar",
+    "mohali", "fazilka", "pathankot", "tarn taran",
+    # Haryana
+    "karnal", "hisar", "ambala", "sirsa", "rohtak", "kurukshetra", "sonipat", "panipat", "jind",
+    "kaithal", "fatehabad", "bhiwani", "rewari", "mahendragarh", "gurugram", "gurgaon", "faridabad",
+    "palwal", "mewat", "nuh", "panchkula", "yamunanagar", "charkhi dadri",
+    # Madhya Pradesh
+    "indore", "ujjain", "bhopal", "sehore", "gwalior", "jabalpur", "hoshangabad", "narmadapuram",
+    "dewas", "dhar", "khargone", "khandwa", "ratlam", "mandsaur", "neemuch", "sagar", "vidisha",
+    # Rajasthan
+    "jaipur", "kota", "sri ganganagar", "ganganagar", "bikaner", "jodhpur", "alwar", "bharatpur",
+    "hanumangarh", "sikar", "nagaur",
+    # Delhi / NCR & Major Centers
+    "delhi", "new delhi", "ncr",
+    # States
+    "uttar pradesh", "punjab", "haryana", "madhya pradesh", "rajasthan", "bihar", "maharashtra", "gujarat"
+}
+
+HINDI_KNOWN_LOCATIONS = {
+    "दिल्ली": "Delhi",
+    "नई दिल्ली": "New Delhi",
+    "मेरठ": "Meerut",
+    "लखनऊ": "Lucknow",
+    "कानपुर": "Kanpur",
+    "करनाल": "Karnal",
+    "आगरा": "Agra",
+    "वाराणसी": "Varanasi",
+    "बरेली": "Bareilly",
+    "प्रयागराज": "Prayagraj",
+    "इलाहाबाद": "Allahabad",
+    "गोरखपुर": "Gorakhpur",
+    "सहारनपुर": "Saharanpur",
+    "अलीगढ़": "Aligarh",
+    "मुरादाबाद": "Moradabad",
+    "झांसी": "Jhansi",
+    "अयोध्या": "Ayodhya",
+    "बाराबंकी": "Barabanki",
+    "लुधियाना": "Ludhiana",
+    "अमृतसर": "Amritsar",
+    "पटियाला": "Patiala",
+    "जालंधर": "Jalandhar",
+    "बठिंडा": "Bathinda",
+    "हिसार": "Hisar",
+    "रोहतक": "Rohtak",
+    "अंबाला": "Ambala",
+    "गुरुग्राम": "Gurugram",
+    "गुड़गांव": "Gurgaon",
+    "फरीदाबाद": "Faridabad",
+    "पानीपत": "Panipat",
+    "सोनीपत": "Sonipat",
+    "इंदौर": "Indore",
+    "उज्जैन": "Ujjain",
+    "भोपाल": "Bhopal",
+    "ग्वालियर": "Gwalior",
+    "जबलपुर": "Jabalpur",
+    "जयपुर": "Jaipur",
+    "कोटा": "Kota",
+    "जोधपुर": "Jodhpur",
+    "बीकानेर": "Bikaner",
+    "उत्तर प्रदेश": "Uttar Pradesh",
+    "पंजाब": "Punjab",
+    "हरियाणा": "Haryana",
+    "मध्य प्रदेश": "Madhya Pradesh",
+    "राजस्थान": "Rajasthan",
+    "बिहार": "Bihar",
+    "गुजरात": "Gujarat",
+    "महाराष्ट्र": "Maharashtra",
+}
+
+LOCATION_STOPWORDS = {
+    # Time / Temporal
+    "aaj", "kal", "parson", "today", "tomorrow", "now", "current", "latest", "recent", "abhi",
+    "subah", "shaam", "raat", "morning", "evening", "night",
+    # Crops & Farm
+    "gehun", "gehu", "wheat", "dhan", "dhaan", "paddy", "rice", "makka", "maize", "corn",
+    "sarson", "mustard", "aloo", "aalu", "potato", "tamatar", "tomato", "chawal", "fasal", "crop", "crops",
+    "khet", "farm", "field", "mitti", "soil", "pani", "water", "sinchai", "irrigation", "khad", "fertilizer",
+    "urea", "dap", "spray", "spraying", "keetnashak", "pesticide", "dawa", "rog", "disease",
+    "kisan", "farmer", "krishi", "agriculture", "kheti", "beej", "seed",
+    "arhar", "tuar", "chana", "chickpea", "gram", "mungfali", "peanut", "groundnut", "soybean", "soya",
+    "kapas", "cotton", "ganna", "sugarcane", "pyaj", "onion", "mirch", "chilli", "kela", "banana", "bajra", "jowar",
+    # Stages & Operations
+    "cri", "tillering", "flowering", "pod", "milking", "dough", "booting", "sowing", "harvesting", "buwai", "ropai", "katai", "nursery",
+    # Nutrients
+    "gypsum", "potash", "sulphate", "compost", "manure", "gobarkhad", "zinc", "boron",
+    # Weather words
+    "mausam", "weather", "barish", "baarish", "rain", "rainfall", "temperature", "taapman", "forecast",
+    "frost", "pala", "hawa", "wind", "dhoop", "sun", "cloud", "badal", "alert",
+    # Action / Grammar / Helpers
+    "karein", "kare", "karna", "karni", "karta", "karega", "hoga", "hogi", "hai", "hain", "tha", "thi",
+    "kya", "kyu", "kyun", "kab", "kaise", "kisko", "kahan", "kitna", "kitni", "kitne",
+    "batao", "bataiye", "batayein", "bata", "dein", "dena", "chahiye", "hisaab", "hisab", "according",
+    "apne", "apna", "apni", "mere", "meri", "mera", "is", "iss", "us", "uss", "yeh", "woh",
+    "pehli", "dusri", "teesri", "first", "second", "third", "stage", "din", "day", "days",
+    "advisory", "advice", "salah", "check", "kripya", "please", "help",
+    # Market words
+    "mandi", "bazaar", "bazar", "market", "apmc", "rate", "rates", "bhav", "price", "prices", "modal", "dam", "daam"
+}
+
+
+def _is_valid_location_candidate(cand: str) -> bool:
+    """Validates candidate string to ensure it is not a stopword, crop, or growth stage."""
+    c_low = cand.lower().strip()
+    if c_low in LOCATION_STOPWORDS or len(c_low) < 3:
+        return False
+    # Ensure it doesn't match any crop pattern
+    for pat in CROPS_PATTERNS.values():
+        if re.search(pat, c_low):
+            return False
+    return True
+
+
+def extract_location_from_text(text: str) -> Optional[str]:
+    """Extracts an explicit location mention from a query or chat message."""
+    if not text or not text.strip():
+        return None
+    raw = text.strip()
+    q_lower = raw.lower()
+
+    # 1. Check Hindi known locations (longest first)
+    for h_loc, en_name in sorted(HINDI_KNOWN_LOCATIONS.items(), key=lambda x: len(x[0]), reverse=True):
+        if h_loc in raw:
+            return en_name
+
+    # 2. Check English / Transliterated known locations (longest first)
+    for loc in sorted(KNOWN_LOCATIONS, key=len, reverse=True):
+        if re.search(r"\b" + re.escape(loc) + r"\b", q_lower):
+            return loc.upper() if len(loc) <= 3 else loc.title()
+
+    # 3. Prepositional / Postpositional patterns
+    # Postpositional grammar: "X mein", "X me", "X ka", "X ke", "X ki", "X jile", "X district"
+    post_pat = r"\b([a-zA-Z\u0900-\u097F]{3,25})\s+(?:mein|me|ka|ke|ki|jile|jila|district|में|का|के|की|जिले|ज़िले)\b"
+    m = re.search(post_pat, raw, re.IGNORECASE)
+    if m:
+        cand = m.group(1).strip()
+        if _is_valid_location_candidate(cand):
+            return cand.title() if cand.isascii() else cand
+
+    # Mandi-specific postposition: "X mandi", "X APMC", "X bazaar"
+    mandi_loc_pat = r"\b([a-zA-Z\u0900-\u097F]{3,25})\s+(?:mandi|मंडी|bazaar|बाज़ार|market|apmc)\b"
+    m = re.search(mandi_loc_pat, raw, re.IGNORECASE)
+    if m:
+        cand = m.group(1).strip()
+        if _is_valid_location_candidate(cand):
+            return cand.title() if cand.isascii() else cand
+
+    prep_pat = r"\b(?:in|at|for|near)\s+([a-zA-Z\u0900-\u097F]{3,25})\b"
+    m = re.search(prep_pat, raw, re.IGNORECASE)
+    if m:
+        cand = m.group(1).strip()
+        if _is_valid_location_candidate(cand):
+            return cand.title() if cand.isascii() else cand
+
+    weath_pat = r"\b([a-zA-Z\u0900-\u097F]{3,25})\s+(?:weather|forecast|mausam|मौसम)\b"
+    m = re.search(weath_pat, raw, re.IGNORECASE)
+    if m:
+        cand = m.group(1).strip()
+        if _is_valid_location_candidate(cand):
+            return cand.title() if cand.isascii() else cand
+
+    return None
+
+
 def extract_entities(query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Lightweight extraction of crops, location, and parameters from query and client context."""
+    """
+    Lightweight extraction of crops, location, and parameters from query and context.
+    Enforces strict 5-tier location precedence:
+    1. Explicit location extracted from CURRENT user message
+    2. Explicit location established in current conversation (history)
+    3. Request context / active field context (context["location"])
+    4. User/farm profile location (context["farm_location"], etc.)
+    5. None (caller will ask for location if needed)
+    """
     entities: Dict[str, Any] = {}
     q_lower = query.lower()
 
-    # Detect crop
+    # Detect crop: query takes precedence over context
     for crop_name, pat in CROPS_PATTERNS.items():
         if re.search(pat, q_lower):
             entities["crop"] = crop_name
@@ -287,9 +499,43 @@ def extract_entities(query: str, context: Optional[Dict[str, Any]] = None) -> Di
     if not entities.get("crop") and context and context.get("crop"):
         entities["crop"] = context.get("crop")
 
-    # Detect location
-    if context and context.get("location"):
-        entities["location"] = context.get("location")
+    # Tier 1: Explicit location extracted from CURRENT user message
+    loc = extract_location_from_text(query)
+
+    # Tier 2: Explicit location established in current conversation (history)
+    if not loc and context and context.get("history"):
+        history = context.get("history")
+        if isinstance(history, list):
+            for turn in reversed(history):
+                if isinstance(turn, dict):
+                    role = turn.get("role") or turn.get("sender") or ""
+                    if role in ("user", "farmer", ""):
+                        msg_text = turn.get("content") or turn.get("message") or ""
+                        cand_loc = extract_location_from_text(msg_text)
+                        if cand_loc:
+                            loc = cand_loc
+                            break
+
+    # Tier 3: Request context / active field context
+    if not loc and context:
+        loc = (
+            context.get("location")
+            or context.get("field_location")
+            or context.get("active_location")
+            or context.get("active_field_location")
+        )
+
+    # Tier 4: User / farm profile location
+    if not loc and context:
+        loc = (
+            context.get("farm_location")
+            or context.get("profile_location")
+            or context.get("user_location")
+        )
+
+    # Tier 5: None if not available
+    if loc:
+        entities["location"] = str(loc).strip()
 
     # Detect pH value if present
     ph_match = re.search(r"\bph\s*(?:is|hai|का मान)?\s*([0-9]+(?:\.[0-9]+)?)", q_lower)
@@ -343,7 +589,20 @@ def classify_query(
     has_injection = any(re.search(p, q_lower) for p in PROMPT_INJECTION_PATTERNS)
 
     # 3. Pesticide Chemical Safety & Refusal (Top safety priority)
+    # Fertilizer dose questions must not trigger pesticide refusal solely because of the word "dose"
+    is_pure_fertilizer = bool(re.search(
+        r"\b(urea|dap|npk|potash|khad|fertilizer|fertilizers|gypsum|zinc sulphate|organic manure|compost|यूरिया|डीएपी|खाद|उर्वरक|जिप्सम|पोटाश)\b",
+        q_lower
+    ))
+    has_chemical_hazard_term = bool(re.search(
+        r"\b(pesticide|insecticide|fungicide|herbicide|chemical|dawa|dawai|celphos|sulphas|quickphos|aluminium phosphide|कीटनाशक|रसायन|खरपतवारनाशक|फफूंदनाशक|सल्फास|सेलफॉस|सल्फॉस)\b",
+        q_lower
+    ))
+
     is_pesticide_hazard = any(re.search(p, q_lower) for p in PESTICIDE_SAFETY_PATTERNS)
+    if is_pure_fertilizer and not has_chemical_hazard_term:
+        is_pesticide_hazard = False
+
     if is_pesticide_hazard:
         logger.warning(f"SMART_RAG route=PESTICIDE_REFUSAL action=SAFE_REFUSAL confidence=0.98 reason=chemical_safety")
         return RouteDecision(
@@ -384,38 +643,83 @@ def classify_query(
 
     # 5. Weather Query Detection
     is_weather = any(re.search(p, q_lower) for p in WEATHER_PATTERNS)
-    # Check if query is explicitly asking about live/tomorrow weather or spray condition
-    weather_keywords = [r"\bkal\b", r"\bbarish\b", r"\bweather\b", r"मौसम", r"\brain\b", r"\bforecast\b", r"\btomorrow\b", r"\btoday\b", r"\baaj\b", r"\bspray\b", r"\bfrost\b", r"\bpala\b", r"होगी", r"रहेगा"]
-    if is_weather and any(re.search(pat, q_lower) for pat in weather_keywords):
-        has_location = bool(entities.get("location"))
-        if not has_location:
-            logger.info(f"SMART_RAG route=WEATHER action=ASK_FOR_CONTEXT confidence=0.93 reason=missing_location")
+    if is_weather:
+        # Check if query is a static agronomic contingency / precaution question rather than live weather telemetry
+        is_static_advisory = (
+            any(w in q_lower for w in [
+                "pala se bachav", "pala se bachaav", "frost protection", "frost injury",
+                "पाले से बचाव", "heatwave precaution", "तापमान आवश्यकता", "temperature requirement",
+                "delayed monsoon", "contingency plan", "monsoon is delayed", "monsoon delayed",
+                "chilling hours", "चिलिंग"
+            ])
+            and not any(re.search(pat, q_lower) for pat in [r"\baaj\b", r"\btoday\b", r"\bcurrent\b", r"\blive\b", r"\bnow\b", r"\bkal\b", r"\btomorrow\b"])
+        )
+
+        if is_static_advisory:
+            logger.info(f"SMART_RAG route=WEATHER action=RAG confidence=0.92 reason=static_climate_advisory")
             return RouteDecision(
                 intent=Intent.WEATHER,
-                confidence=0.93,
-                action=RouteAction.ASK_FOR_CONTEXT,
-                reason="Weather forecast requested without farm location context.",
+                confidence=0.92,
+                action=RouteAction.RAG,
+                reason="Static agro-climatic contingency, frost/heatwave precaution, or temperature threshold advisory.",
                 safety_level="normal",
-                required_context=["location"],
-                service="weather",
-                detected_entities=entities
-            )
-        else:
-            logger.info(f"SMART_RAG route=WEATHER action=WEATHER_SERVICE confidence=0.95 reason=live_weather")
-            return RouteDecision(
-                intent=Intent.WEATHER,
-                confidence=0.95,
-                action=RouteAction.WEATHER_SERVICE,
-                reason="Live weather forecast / meteorological advisory requested.",
-                safety_level="normal",
-                service="weather",
+                service="kb",
                 detected_entities=entities
             )
 
-    # 6. Financial Query Detection (Mandi Prices, MSP, PMFBY, Schemes)
-    is_mandi = any(re.search(p, q_lower) for p in MANDI_PATTERNS)
+        # Check for explicit live weather / forecast intent
+        live_weather_markers = [
+            r"\bkal\b", r"\bbarish\b", r"\bweather\b", r"मौसम", r"\bmausam\b", r"\brain\b",
+            r"\bforecast\b", r"\btomorrow\b", r"\btoday\b", r"\baaj\b", r"\bspray\b",
+            r"होगी", r"रहेगा", r"sambhavna", r"संभावना",
+            r"current", r"live", r"according", r"hisaab", r"hisab"
+        ]
+        if any(re.search(pat, q_lower) for pat in live_weather_markers):
+            has_location = bool(entities.get("location"))
+            if not has_location:
+                logger.info(f"SMART_RAG route=WEATHER action=ASK_FOR_CONTEXT confidence=0.93 reason=missing_location")
+                return RouteDecision(
+                    intent=Intent.WEATHER,
+                    confidence=0.93,
+                    action=RouteAction.ASK_FOR_CONTEXT,
+                    reason="Weather forecast requested without farm location context.",
+                    safety_level="normal",
+                    required_context=["location"],
+                    service="weather",
+                    detected_entities=entities
+                )
+            else:
+                logger.info(f"SMART_RAG route=WEATHER action=WEATHER_SERVICE confidence=0.95 reason=live_weather")
+                return RouteDecision(
+                    intent=Intent.WEATHER,
+                    confidence=0.95,
+                    action=RouteAction.WEATHER_SERVICE,
+                    reason="Live weather forecast / meteorological advisory requested.",
+                    safety_level="normal",
+                    service="weather",
+                    detected_entities=entities
+                )
+
+    # 6. Financial & Market Query Detection (Mandi Prices, MSP, PMFBY, Schemes)
+    is_mandi = any(re.search(p, q_lower) for p in MANDI_PATTERNS) or bool(
+        re.search(r"\b(mandi|bazaar|market|apmc|agmarknet|enam|मंडी|बाज़ार)\b", q_lower) and
+        re.search(r"\b(bhav|rate|price|rates|prices|modal|bazaar|daam|dam|भाव|रेट|दाम)\b", q_lower)
+    )
     is_insurance_or_scheme = any(re.search(p, q_lower) for p in INSURANCE_SCHEMES_PATTERNS)
-    if is_mandi or is_insurance_or_scheme:
+
+    if is_mandi:
+        logger.info(f"SMART_RAG route=MARKET action=MARKET_SERVICE confidence=0.95 reason=live_market_price")
+        return RouteDecision(
+            intent=Intent.MARKET,
+            confidence=0.95,
+            action=RouteAction.MARKET_SERVICE,
+            reason="Live mandi / market price requested.",
+            safety_level="normal",
+            service="market",
+            detected_entities=entities
+        )
+
+    if is_insurance_or_scheme:
         # If calculation is explicitly requested, always use deterministic insurance service
         is_calculation = bool(re.search(r"\b(calculate|premium calculate|प्रीमियम निकालो|गणना|calculate karo)\b", q_lower))
 
@@ -426,10 +730,8 @@ def classify_query(
             q_lower
         ))
 
-        is_pure_mandi_bhav = bool(re.search(r"\b(mandi\s*(?:bhav|rate|price|rates)|मंडी\s*भाव|मंडी\s*रेट)\b", q_lower))
-
         # Explicit policy/scheme/procurement freshness query -> WEB_SEARCH
-        if not is_calculation and (freshness_demanded and is_policy_or_procurement_update and not is_pure_mandi_bhav):
+        if not is_calculation and freshness_demanded:
             logger.info(f"SMART_RAG route=FINANCIAL action=WEB_SEARCH confidence=0.95 reason=freshness_scheme_policy")
             return RouteDecision(
                 intent=Intent.FINANCIAL,
@@ -441,7 +743,7 @@ def classify_query(
                 detected_entities=entities
             )
 
-        service_target = "market" if is_mandi else ("insurance" if "bima" in q_lower or "pmfby" in q_lower or "insurance" in q_lower else "schemes")
+        service_target = "insurance" if "bima" in q_lower or "pmfby" in q_lower or "insurance" in q_lower else "schemes"
         logger.info(f"SMART_RAG route=FINANCIAL action=FINANCIAL_SERVICE confidence=0.94 target={service_target}")
         return RouteDecision(
             intent=Intent.FINANCIAL,
@@ -506,6 +808,28 @@ def classify_query(
             reason="Recent agricultural pest/disease advisory or official ICAR recommendation requested.",
             safety_level="normal",
             service="web_search",
+            detected_entities=entities
+        )
+
+    # 10.5 Missing Crop Context for Vague Symptom / Diagnosis Queries (Clarification Gate)
+    has_crop = bool(entities.get("crop"))
+    is_vague_symptom = bool(re.search(
+        r"(patte\s+(?:sukh|sukhe|pile|peele)|पत्ते\s+(?:सूख|पीले)|सड़\s*रहे|सूख\s*रहे|keeda|कीड़ा|बीमारी|रोग|bimari|rog|kharab|dawai\s+batao|dawa\s+chahiye)",
+        q_lower
+    )) and bool(re.search(
+        r"(meri\s+fasal|hamari\s+fasal|fasal\s+me|khet\s+me|फसल\s+में|मेरी\s+फसल|पौधों\s+में|plants)",
+        q_lower
+    ))
+    if is_vague_symptom and not has_crop:
+        logger.info(f"SMART_RAG route=GENERAL action=ASK_FOR_CONTEXT confidence=0.90 reason=missing_crop_context")
+        return RouteDecision(
+            intent=Intent.GENERAL,
+            confidence=0.90,
+            action=RouteAction.ASK_FOR_CONTEXT,
+            reason="Ambiguous crop symptom or disease diagnosis requested without crop identity.",
+            safety_level="normal",
+            required_context=["crop"],
+            service="rag",
             detected_entities=entities
         )
 

@@ -17,7 +17,9 @@ Strict Architecture Principles:
 import os
 import re
 import time
+import threading
 import logging
+from datetime import datetime
 from enum import Enum
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
@@ -207,8 +209,8 @@ def sanitize_and_enrich_query(
     # 1. Strip phone numbers (10 digits with optional +91 or dashes)
     clean = re.sub(r"(?:\+91[\-\s]?)?[6-9]\d{9}", "", clean)
 
-    # 2. Strip Aadhaar patterns (xxxx xxxx xxxx)
-    clean = re.sub(r"\b\d{4}[\s\-]\d{4}[\s\-]\d{4}\b", "", clean)
+    # 2. Strip Aadhaar patterns (spaced, hyphenated, or contiguous 12-digit)
+    clean = re.sub(r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b", "", clean)
 
     # 3. Strip JWT tokens or hex IDs
     clean = re.sub(r"\beyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+", "", clean)
@@ -238,7 +240,7 @@ def sanitize_and_enrich_query(
 
     # Add India & year context if freshness requested
     if freshness_needed:
-        current_year = "2026"
+        current_year = str(datetime.now().year)
         if current_year not in clean:
             terms.append(current_year)
         if not any(k in clean.lower() for k in ["india", "up", "uttar pradesh", "haryana", "punjab", "mp", "maharashtra", "bihar"]):
@@ -257,29 +259,33 @@ class SafeSearchCache:
     """Thread-safe in-memory cache with TTL to avoid redundant web API queries."""
     def __init__(self, ttl_seconds: int = 3600):
         self.ttl = ttl_seconds
+        self._lock = threading.Lock()
         self._store: Dict[str, Tuple[float, List[WebEvidence]]] = {}
 
     def get(self, key: str) -> Optional[List[WebEvidence]]:
-        entry = self._store.get(key)
-        if not entry:
-            return None
-        cached_time, results = entry
-        if time.time() - cached_time > self.ttl:
-            del self._store[key]
-            return None
-        return results
+        with self._lock:
+            entry = self._store.get(key)
+            if not entry:
+                return None
+            cached_time, results = entry
+            if time.time() - cached_time > self.ttl:
+                del self._store[key]
+                return None
+            return results
 
     def set(self, key: str, results: List[WebEvidence]):
-        # Limit cache size to prevent memory bloat
-        if len(self._store) > 500:
-            # Evict oldest 100 entries
-            sorted_keys = sorted(self._store.keys(), key=lambda k: self._store[k][0])
-            for old_k in sorted_keys[:100]:
-                self._store.pop(old_k, None)
-        self._store[key] = (time.time(), results)
+        with self._lock:
+            # Limit cache size to prevent memory bloat
+            if len(self._store) > 500:
+                # Evict oldest 100 entries
+                sorted_keys = sorted(self._store.keys(), key=lambda k: self._store[k][0])
+                for old_k in sorted_keys[:100]:
+                    self._store.pop(old_k, None)
+            self._store[key] = (time.time(), results)
 
     def clear(self):
-        self._store.clear()
+        with self._lock:
+            self._store.clear()
 
 
 _SEARCH_CACHE = SafeSearchCache(ttl_seconds=3600)  # 1 hour cache
@@ -423,7 +429,13 @@ class WebSearchService:
     def enabled(self) -> bool:
         if self._enabled is not None:
             return self._enabled
-        return os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
+        is_flag_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
+        if not is_flag_enabled:
+            return False
+        # If using Tavily, ensure api_key is configured; otherwise do not make pointless provider calls
+        if isinstance(self.provider, TavilySearchProvider) and not self.provider.api_key:
+            return False
+        return True
 
     @enabled.setter
     def enabled(self, val: bool):
@@ -442,7 +454,7 @@ class WebSearchService:
         Stage 2: Reputable Broader Search (if Stage 1 yields < 2 evidence items)
         """
         if not self.enabled:
-            logger.info("WebSearchService is disabled via WEB_SEARCH_ENABLED flag.")
+            logger.info("WebSearchService is disabled via WEB_SEARCH_ENABLED flag or missing API key.")
             return []
 
         # Sanitize query (remove PII, enrich with technical context)
@@ -496,6 +508,16 @@ class WebSearchService:
             except Exception as e:
                 logger.warning(f"Stage 2 broader search error: {e}")
 
+        # Safety-critical Pest / Disease query gate (down-rank / reject low-authority General Web)
+        is_pest_or_disease = bool(re.search(
+            r"\b(disease|pest|insect|fungus|blight|rust|rot|bacteri|caterpillar|borer|कीट|रोग|बीमारी|कीड़ा|fungicide|pesticide|कीटनाशक)\b",
+            query.lower()
+        ))
+        if is_pest_or_disease:
+            authoritative_only = [ev for ev in evidence if ev.source_tier in (SourceTier.AUTHORITATIVE, SourceTier.INSTITUTIONAL)]
+            if authoritative_only:
+                evidence = authoritative_only
+
         # ---------------------------------------------------------------------
         # SOURCE TRUST SCORING & HIERARCHICAL SORTING (Section 19)
         # Priority: AUTHORITATIVE (Tier 1) > INSTITUTIONAL (Tier 2) > GENERAL_WEB (Tier 3)
@@ -514,8 +536,9 @@ class WebSearchService:
         # Truncate to max_results
         final_evidence = evidence[:self.max_results]
 
-        # Save to cache
-        _SEARCH_CACHE.set(cache_key, final_evidence)
+        # Save to cache ONLY if evidence is non-empty (never cache empty / failed results)
+        if final_evidence:
+            _SEARCH_CACHE.set(cache_key, final_evidence)
 
         return final_evidence
 

@@ -19,16 +19,16 @@ report = {
 }
 
 # 1. Pytest Suite Execution
-print("\n--- 1. Running 55-Test Pytest Suite ---")
-pytest_bin = os.path.join("backend", ".venv", "Scripts", "pytest.exe")
+print("\n--- 1. Running Pytest Suite ---")
 test_files = [
     "backend/tests/test_rag_trustworthy.py",
     "backend/tests/test_chat_rag.py",
     "backend/tests/test_smart_rag_router.py",
-    "backend/tests/test_web_search_fallback.py"
+    "backend/tests/test_web_search_fallback.py",
+    "backend/tests/test_coderabbit_security_web_fixes.py"
 ]
 p_start = time.time()
-res_pytest = subprocess.run([pytest_bin] + test_files + ["-q"], capture_output=True, text=True)
+res_pytest = subprocess.run([sys.executable, "-m", "pytest"] + test_files + ["-q"], capture_output=True, text=True, encoding="utf-8")
 p_runtime = time.time() - p_start
 pytest_output = res_pytest.stdout + "\n" + res_pytest.stderr
 print(pytest_output.strip().split("\n")[-1])
@@ -85,13 +85,13 @@ print(f"Frontend dist/index.html exists: {dist_index}")
 
 # 4. Multi-turn and Resilience Scripts Verification
 print("\n--- 4. Multi-Turn & Resilience Verification ---")
-res_mt = subprocess.run([os.path.join("backend", ".venv", "Scripts", "python.exe"), "backend/scripts/verify_stage6_multiturn.py"], capture_output=True, text=True)
+res_mt = subprocess.run([sys.executable, "backend/scripts/verify_stage6_multiturn.py"], capture_output=True, text=True, encoding="utf-8")
 report["checks"]["multiturn_context"] = {
     "status": "PASSED" if res_mt.returncode == 0 else "FAILED",
     "exit_code": res_mt.returncode
 }
 
-res_res = subprocess.run([os.path.join("backend", ".venv", "Scripts", "python.exe"), "backend/scripts/verify_stage8_resilience.py"], capture_output=True, text=True)
+res_res = subprocess.run([sys.executable, "backend/scripts/verify_stage8_resilience.py"], capture_output=True, text=True, encoding="utf-8")
 report["checks"]["security_resilience"] = {
     "status": "PASSED" if res_res.returncode == 0 else "FAILED",
     "exit_code": res_res.returncode

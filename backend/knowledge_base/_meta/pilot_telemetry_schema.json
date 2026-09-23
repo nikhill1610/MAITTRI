@@ -51,11 +51,11 @@
     },
     "detected_intent": {
       "type": "string",
-      "enum": ["GENERAL", "CALENDAR", "WEATHER", "SOIL", "FERTILIZER", "PESTICIDE_REFUSAL", "FINANCIAL", "UNSUPPORTED"]
+      "enum": ["GENERAL", "CALENDAR", "WEATHER", "SOIL", "FERTILIZER", "PESTICIDE_REFUSAL", "FINANCIAL", "MARKET", "UNSUPPORTED"]
     },
     "route_action": {
       "type": "string",
-      "enum": ["RAG", "WEATHER_SERVICE", "CALENDAR_SERVICE", "SOIL_SERVICE", "FERTILIZER_SERVICE", "RAG_WEB_FALLBACK", "WEB_SEARCH"]
+      "enum": ["RAG", "WEATHER_SERVICE", "CALENDAR_SERVICE", "SOIL_SERVICE", "FERTILIZER_SERVICE", "FINANCIAL_SERVICE", "MARKET_SERVICE", "SAFE_REFUSAL", "ASK_FOR_CONTEXT", "WEB_SEARCH", "RAG_WEB_FALLBACK"]
     },
     "retrieved_doc_ids": {
       "type": "array",

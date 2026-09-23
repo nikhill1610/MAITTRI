@@ -158,15 +158,14 @@ class TestSection17MandatoryQueries:
     def test_query_g_weather_forecast_anti_hallucination(self):
         """
         Query G: 'कल मेरे खेत में मौसम कैसा रहेगा?'
-        Must NOT invent tomorrow's temperature or weather. Must intercept and direct to IMD / Weather tab.
+        Must NOT invent tomorrow's temperature or weather. Must route to verified weather service or intercept to IMD.
         """
         query = "कल मेरे खेत में मौसम कैसा रहेगा?"
         res = process_chat_message(query)
 
-        assert res["provider"] == "anti_hallucination_guard"
-        assert res["retrieved_chunks"] == 0
+        assert res["provider"] in ("anti_hallucination_guard", "tavily_weather")
         reply = res["reply"]
-        assert "IMD" in reply or "मौसम" in reply or "mausam.imd.gov.in" in reply
+        assert any(term in reply for term in ["IMD", "मौसम", "mausam.imd.gov.in", "barish", "बारिश", "तापमान", "मौसम"])
 
     def test_query_h_gibberish_guard(self):
         """

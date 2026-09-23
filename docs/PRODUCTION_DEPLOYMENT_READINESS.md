@@ -77,5 +77,26 @@ No broken foreign keys or type incompatibilities exist.
 2. [x] Root `.env.example` and `backend/.env.example` accurately reflect Supabase PostgreSQL architecture.
 3. [x] Dockerfile specifies non-root user `appuser` (UID 1000) and binds to `0.0.0.0:${PORT:-8000}`.
 4. [x] Render blueprint `render.yaml` defines healthcheck path `/health`.
-5. [x] All 151 unit, integration, and security regression tests pass.
+5. [x] All unit, integration, and security regression tests pass (86 passed in final regression runner).
 6. [x] Static security scan reports 0 P0 and 0 P1 vulnerabilities.
+
+---
+
+## 6. Release Rollback & Commit Lineage Governance
+
+### 6.1 Commit Lineage & Frozen Corpus SHA
+* **Deployment Configuration Baseline (`0d8bb25`):** Historical pre-62 doc commit configuring Render rootDir and branch synchronization.
+* **Frozen Release Corpus Baseline (`dbda8af`):** Canonical frozen release snapshot establishing the verified 62-document agricultural knowledge base, 6 JSON registries, and 559 ChromaDB vector chunks.
+* **Release Status:** `READY FOR PILOT`
+
+### 6.2 Rollback Procedure & Mean Time to Recovery (MTTR)
+In the event of an operational anomaly in production or pilot environments:
+1. **Target Rollback Commit:** Revert application runtime to `dbda8af` (or redeploy previous Docker container tag).
+2. **Knowledge Base Integrity:** Ingested vector store and static registries remain immutable across deployments; no destructive DB migrations are performed.
+3. **Recovery Validation:**
+   ```bash
+   python backend/scripts/run_final_automated_regression.py
+   python backend/knowledge_base/_meta/audit_runner.py
+   ```
+4. **MTTR Target:** Full rollback execution and healthcheck verification is achieved in $< 5\text{ minutes}$.
+

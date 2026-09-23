@@ -76,7 +76,7 @@ Temperate deciduous fruit trees enter internal winter dormancy to survive sub-ze
 |:---|:---:|:---|:---|
 | **High-Chill Standard Apple** | **1,000 to 1,400 Hours** | **2,000 to 2,700 Meters** (High Hills) | **Red Delicious**, **Royal Delicious**, **Vance Delicious**, **Honeycrisp** |
 | **Medium-Chill Apple** | **700 to 900 Hours** | **1,500 to 2,000 Meters** (Mid Hills) | **Gala**, **Fuji**, **Golden Delicious** (Universal Pollinizer) |
-| **Low-Chill Subtropical Apple** | **150 to 300 Hours** | **Below 1,200 Meters** (Foothills, Valley plains) | **HRMN-99** (Developed by farmer innovator Hariman Sharma; requires only 100–150 hrs chilling; fruits in plains of UP/Punjab/HP), **Anna**, **Dorsett Golden** |
+| **Low-Chill Subtropical Apple** | **100 to 300 Hours** | **Below 1,200 Meters** (Foothills, Valley plains) | **HRMN-99** (Developed by farmer innovator Hariman Sharma; requires only 100–150 hrs chilling; fruits in plains of UP/Punjab/HP), **Anna**, **Dorsett Golden** |
 | **Walnut (Persian/English)** | **700 to 1,000 Hours** | **1,200 to 2,200 Meters** (Slope terraces) | **CITH-Walnut-1 to 5**, **Sulaiman**, **Hamdan**, **Pratap** |
 | **Low-Chill Peach & Plum** | **250 to 400 Hours** | **800 to 1,500 Meters** (Sub-montane valleys) | **Peach: Shan-e-Punjab, Flordasun**; **Plum: Santa Rosa, Kala Amritsari** |
 

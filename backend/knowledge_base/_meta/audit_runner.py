@@ -1,13 +1,20 @@
 import os
 import re
+import sys
 import json
 import yaml
 from pathlib import Path
 
-KB_DIR = Path(r"c:\Users\HP\Desktop\MAITTRI\backend\knowledge_base")
+# Enforce UTF-8 on Windows consoles
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+# Resolve KB_DIR relative to script location for cross-platform portability
+KB_DIR = Path(__file__).resolve().parent.parent
 META_DIR = KB_DIR / "_meta"
 
 print("--- STARTING MAITTRI KNOWLEDGE BASE COMPREHENSIVE AUDIT ---")
+print(f"Knowledge Base Directory: {KB_DIR}")
 
 md_files = [p for p in KB_DIR.rglob("*.md") if "_meta" not in str(p)]
 print(f"Total Content Markdown Files Found: {len(md_files)}")
@@ -76,7 +83,6 @@ for p in sorted(md_files):
         if not has_gate:
             missing_safety_gate.append(rel_path)
 
-
     manifest_entries.append({
         "path": rel_path,
         "doc_id": doc_id or "",
@@ -119,11 +125,21 @@ print(f"JSON Parse Errors: {len(json_errors)}")
 for jerr in json_errors:
     print(f"  JSON ERROR: {jerr}")
 
+# Guard against wiping manifests on empty/failed discovery
+if len(manifest_entries) == 0:
+    print("FATAL: Zero markdown documents discovered. Aborting manifest update to prevent corpus wipe.")
+    sys.exit(1)
+
+# Derive status dynamically based on actual errors
+has_errors = bool(frontmatter_errors or json_errors or len(manifest_entries) != 62)
+audit_status = "AUDIT_FAILED" if has_errors else "RELEASE_READY"
+acceptance_status = "REJECTED_ERRORS_DETECTED" if has_errors else "ALL_GATES_PASSED"
+
 # Update file_manifest.json
 manifest_path = META_DIR / "file_manifest.json"
 manifest_payload = {
     "schema_version": "1.0",
-    "updated_at": "2026-09-22T02:05:00Z",
+    "updated_at": "2026-09-23T00:00:00Z",
     "total_documents": len(manifest_entries),
     "tier_distribution": tier_counts,
     "files": manifest_entries
@@ -136,16 +152,23 @@ print(f"Updated {manifest_path} with {len(manifest_entries)} entries.")
 kb_manifest_path = META_DIR / "kb_manifest.json"
 kb_manifest_payload = {
     "version": "2.0.0",
-    "release_date": "2026-09-22",
-    "status": "RELEASE_READY",
+    "release_date": "2026-09-23",
+    "status": audit_status,
     "total_content_markdown_docs": len(manifest_entries),
     "total_json_registries": 6,
     "total_meta_files": 6,
     "evidence_tiers": tier_counts,
     "phases_completed": ["PHASE 1", "PHASE 2", "PHASE 3", "PHASE 4", "PHASE 5", "PHASE 6"],
-    "acceptance_status": "ALL_GATES_PASSED"
+    "acceptance_status": acceptance_status
 }
 with open(kb_manifest_path, "w", encoding="utf-8") as f:
     json.dump(kb_manifest_payload, f, indent=2, ensure_ascii=False)
-print(f"Updated {kb_manifest_path}.")
+print(f"Updated {kb_manifest_path} (Status: {audit_status}, Acceptance: {acceptance_status}).")
+
+if has_errors:
+    print(f"--- AUDIT COMPLETED WITH ERRORS (status: {audit_status}) ---")
+    sys.exit(1)
+else:
+    print(f"--- AUDIT COMPLETED CLEANLY: 62 DOCS VERIFIED (status: {audit_status}) ---")
+    sys.exit(0)
 

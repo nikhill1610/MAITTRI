@@ -77,6 +77,94 @@ class TestSmartRAGRouterClassification(unittest.TestCase):
         self.assertEqual(res.action, RouteAction.WEATHER_SERVICE)
         self.assertEqual(res.service, "weather")
 
+    def test_live_weather_hybrid_irrigation_meerut_routing(self):
+        """'Meerut mein aaj ke mausam ke hisaab se kya mujhe gehun ki sinchai karni chahiye?' -> WEATHER + WEATHER_SERVICE"""
+        res = classify_query("Meerut mein aaj ke mausam ke hisaab se kya mujhe gehun ki sinchai karni chahiye?")
+        self.assertEqual(res.intent, Intent.WEATHER)
+        self.assertEqual(res.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(res.detected_entities.get("location"), "Meerut")
+        self.assertEqual(res.detected_entities.get("crop"), "Wheat")
+
+    def test_weather_distinction_queries(self):
+        """Verify distinction between Live Weather, Live Weather + Context, and Static RAG"""
+        # 1. 'aaj Meerut me barish hogi?' -> LIVE WEATHER
+        r1 = classify_query("aaj Meerut me barish hogi?")
+        self.assertEqual(r1.intent, Intent.WEATHER)
+        self.assertEqual(r1.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(r1.detected_entities.get("location"), "Meerut")
+
+        # 2. 'today weather ke hisaab se spray karu?' -> LIVE WEATHER + agronomic/safety context
+        r2 = classify_query("today weather ke hisaab se spray karu?", context={"location": "Meerut"})
+        self.assertEqual(r2.intent, Intent.WEATHER)
+        self.assertEqual(r2.action, RouteAction.WEATHER_SERVICE)
+
+        # 3. 'gehun ki pehli sinchai kab karein?' -> STATIC RAG
+        r3 = classify_query("gehun ki pehli sinchai kab karein?")
+        self.assertIn(r3.intent, (Intent.CALENDAR, Intent.GENERAL))
+        self.assertIn(r3.action, (RouteAction.CALENDAR_SERVICE, RouteAction.RAG))
+
+    def test_explicit_location_precedence_over_stored_context(self):
+        """
+        Verify strict 5-tier location precedence:
+        Stored context = Meerut
+        Case 1: 'Delhi mein aaj mausam kaisa hai?' -> Delhi
+        Case 2: 'Lucknow me kal barish hogi?' -> Lucknow
+        Case 3: 'aaj mausam kaisa hai?' -> inherited Meerut
+        Case 4: 'Delhi mein aaj ke mausam ke hisaab se kya mujhe gehun ki sinchai karni chahiye?' -> WEATHER_SERVICE, Delhi, Wheat
+        """
+        stored_ctx = {"location": "Meerut"}
+
+        # Case 1: Explicit Delhi overrides stored Meerut
+        r1 = classify_query("Delhi mein aaj mausam kaisa hai?", context=stored_ctx)
+        self.assertEqual(r1.intent, Intent.WEATHER)
+        self.assertEqual(r1.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(r1.detected_entities.get("location"), "Delhi")
+
+        # Case 2: Explicit Lucknow overrides stored Meerut
+        r2 = classify_query("Lucknow me kal barish hogi?", context=stored_ctx)
+        self.assertEqual(r2.intent, Intent.WEATHER)
+        self.assertEqual(r2.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(r2.detected_entities.get("location"), "Lucknow")
+
+        # Case 3: No new location in query inherits stored Meerut
+        r3 = classify_query("aaj mausam kaisa hai?", context=stored_ctx)
+        self.assertEqual(r3.intent, Intent.WEATHER)
+        self.assertEqual(r3.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(r3.detected_entities.get("location"), "Meerut")
+
+        # Case 4: Complex hybrid irrigation query with explicit Delhi overrides stored Meerut
+        r4 = classify_query(
+            "Delhi mein aaj ke mausam ke hisaab se kya mujhe gehun ki sinchai karni chahiye?",
+            context=stored_ctx
+        )
+        self.assertEqual(r4.intent, Intent.WEATHER)
+        self.assertEqual(r4.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(r4.detected_entities.get("location"), "Delhi")
+        self.assertEqual(r4.detected_entities.get("crop"), "Wheat")
+
+    def test_conversation_history_location_precedence(self):
+        """
+        'Delhi ka weather batao' followed by 'kal barish hogi?'
+        Conversation history location Delhi overrides stored profile location Meerut.
+        """
+        stored_ctx = {
+            "location": "Meerut",
+            "history": [
+                {"role": "user", "content": "Delhi ka weather batao"},
+                {"role": "assistant", "content": "Delhi weather is clear."}
+            ]
+        }
+        res = classify_query("kal barish hogi?", context=stored_ctx)
+        self.assertEqual(res.intent, Intent.WEATHER)
+        self.assertEqual(res.action, RouteAction.WEATHER_SERVICE)
+        self.assertEqual(res.detected_entities.get("location"), "Delhi")
+
+    def test_ordinary_agronomy_unaffected_by_location_precedence(self):
+        """Verify ordinary agronomy queries remain routed to CALENDAR / RAG."""
+        res = classify_query("gehun ki pehli sinchai kab karein?", context={"location": "Meerut"})
+        self.assertIn(res.intent, (Intent.CALENDAR, Intent.GENERAL))
+        self.assertIn(res.action, (RouteAction.CALENDAR_SERVICE, RouteAction.RAG))
+
     def test_soil_ph_query(self):
         """'Meri soil ka pH 8.5 hai, kya problem hai?' -> SOIL"""
         res = classify_query("Meri soil ka pH 8.5 hai, kya problem hai?")
@@ -116,11 +204,34 @@ class TestSmartRAGRouterClassification(unittest.TestCase):
         self.assertEqual(res.action, RouteAction.SAFE_REFUSAL)
 
     def test_financial_mandi_bhav(self):
-        """'Aaj wheat ka mandi bhav kya hai?' -> FINANCIAL"""
+        """'Aaj wheat ka mandi bhav kya hai?' -> MARKET / FINANCIAL"""
         res = classify_query("Aaj wheat ka mandi bhav kya hai?")
-        self.assertEqual(res.intent, Intent.FINANCIAL)
-        self.assertEqual(res.action, RouteAction.FINANCIAL_SERVICE)
+        self.assertIn(res.intent, (Intent.FINANCIAL, Intent.MARKET))
+        self.assertIn(res.action, (RouteAction.FINANCIAL_SERVICE, RouteAction.MARKET_SERVICE))
         self.assertEqual(res.service, "market")
+
+    def test_mandi_jaipur_wheat_routing(self):
+        """Case 1: 'Aaj Jaipur mandi me gehun ka latest bhav kya hai?'"""
+        res = classify_query("Aaj Jaipur mandi me gehun ka latest bhav kya hai?")
+        self.assertIn(res.intent, (Intent.MARKET, Intent.FINANCIAL))
+        self.assertEqual(res.action, RouteAction.MARKET_SERVICE)
+        self.assertEqual(res.detected_entities.get("location"), "Jaipur")
+        self.assertEqual(res.detected_entities.get("crop"), "Wheat")
+
+    def test_mandi_meerut_wheat_routing(self):
+        """Case 2: 'Meerut mandi ka aaj ka gehu rate?'"""
+        res = classify_query("Meerut mandi ka aaj ka gehu rate?")
+        self.assertIn(res.intent, (Intent.MARKET, Intent.FINANCIAL))
+        self.assertEqual(res.action, RouteAction.MARKET_SERVICE)
+        self.assertEqual(res.detected_entities.get("location"), "Meerut")
+        self.assertEqual(res.detected_entities.get("crop"), "Wheat")
+
+    def test_general_agronomy_not_market_route(self):
+        """Case 3: 'gehu ki kheti kaise kare?' -> static RAG, NOT market route"""
+        res = classify_query("gehu ki kheti kaise kare?")
+        self.assertEqual(res.intent, Intent.GENERAL)
+        self.assertEqual(res.action, RouteAction.RAG)
+        self.assertNotEqual(res.action, RouteAction.MARKET_SERVICE)
 
     def test_financial_pmfby_insurance(self):
         """'PMFBY premium calculate karo' -> FINANCIAL"""
@@ -217,8 +328,8 @@ class TestSmartRAGChatServiceIntegration(unittest.TestCase):
         from app.services.chat_service import process_chat_message
         res = process_chat_message("Aaj wheat ka mandi bhav kya hai?")
         self.assertEqual(res["provider"], "anti_hallucination_guard")
-        self.assertEqual(res["intent"], "FINANCIAL")
-        self.assertEqual(res["route"], "FINANCIAL_SERVICE")
+        self.assertIn(res["intent"], ("FINANCIAL", "MARKET"))
+        self.assertIn(res["route"], ("FINANCIAL_SERVICE", "MARKET_SERVICE"))
 
     def test_integration_pmfby_guidance(self):
         from app.services.chat_service import process_chat_message

@@ -75,7 +75,8 @@ Commercial banana (*केला / Musa acuminata*) cultivation has emerged as a
 - Plantlets must be **30–35 cm tall with 5–6 functional dark green leaves** and a well-developed root ball. Reject elongated, spindly, or mottled plantlets (virus risk).
 
 ### 3. Spacing & Density:
-- Standard High Density: **1.8 m $\times$ 1.5 m** (approx. **3,086 plants/ha** or 1,250 plants/acre).
+- Standard Planting: **1.8 m $\times$ 1.8 m** (approx. **3,086 plants/ha** or 1,250 plants/acre).
+- High Density Planting (HDP): **1.8 m $\times$ 1.5 m** (approx. **3,703 plants/ha** or 1,500 plants/acre).
 - Paired Row Spacing: **1.2 m $\times$ 1.2 m in pairs with 2.1 m tractor interspaces** for mechanization and intercropping with green manure.
 
 ---

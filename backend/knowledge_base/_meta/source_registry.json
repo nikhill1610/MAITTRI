@@ -335,7 +335,60 @@
       "url": "https://nbb.gov.in",
       "evidence_tier": "A",
       "scope": "Commercial Apis mellifera apiculture, North Indian floral migration calendars, organic Varroa mite suppression (Formic acid)"
+    },
+    {
+      "source_key": "ICAR-IISR",
+      "name": "ICAR - Indian Institute of Sugarcane Research, Lucknow",
+      "name_hi": "आईसीएआर - भारतीय गन्ना अनुसंधान संस्थान, लखनऊ",
+      "category": "Crop Specific Directorate",
+      "url": "https://iisr.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Sugarcane agronomy, autumn/spring planting, trench method, red rot resistance, ratoon management"
+    },
+    {
+      "source_key": "ICAR-NRCB",
+      "name": "ICAR - National Research Centre for Banana, Tiruchirappalli",
+      "name_hi": "आईसीएआर - राष्ट्रीय केला अनुसंधान केंद्र, तिरुचिरापल्ली",
+      "category": "Crop Specific Directorate",
+      "url": "https://nrcb.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Banana cultivation packages, Grand Naine spacing, drip fertigation, bunch management, Panama wilt prevention"
+    },
+    {
+      "source_key": "ICAR-CISH",
+      "name": "ICAR - Central Institute for Subtropical Horticulture, Lucknow",
+      "name_hi": "आईसीएआर - केंद्रीय उपोष्ण बागवानी संस्थान, लखनऊ",
+      "category": "National Research Institute",
+      "url": "https://cish.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Subtropical horticulture, high-density mango and guava, rejuvenation pruning, malformation management"
+    },
+    {
+      "source_key": "ICAR-CIRB",
+      "name": "ICAR - Central Institute for Research on Buffaloes, Hisar",
+      "name_hi": "आईसीएआर - केंद्रीय भैंस अनुसंधान संस्थान, हिसार",
+      "category": "National Livestock Research Institute",
+      "url": "https://cirb.icar.gov.in",
+      "evidence_tier": "A",
+      "scope": "Murrah buffalo breeding, nutrition, dairy reproduction, semen cryopreservation, mastitis management"
+    },
+    {
+      "source_key": "ICAR-DPR",
+      "name": "ICAR - Directorate of Poultry Research, Hyderabad",
+      "name_hi": "आईसीएआर - कुक्कुट अनुसंधान निदेशालय, हैदराबाद",
+      "category": "National Poultry Research Directorate",
+      "url": "https://pdonpoultry.org",
+      "evidence_tier": "A",
+      "scope": "Rural and backyard poultry breeds (Vanaraja, Gramapriya, Srinidhi), health protocols, feed formulation"
+    },
+    {
+      "source_key": "FRI",
+      "name": "Forest Research Institute (ICFRE), Dehradun",
+      "name_hi": "वन अनुसंधान संस्थान, देहरादून",
+      "category": "National Forestry Research Institute",
+      "url": "https://fri.icfre.gov.in",
+      "evidence_tier": "A",
+      "scope": "Commercial agroforestry, Poplar and Eucalyptus clonal plantations, spacing geometries, rabi intercropping"
     }
-
   ]
 }

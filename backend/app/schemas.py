@@ -594,4 +594,52 @@ class IVRSimulateResponse(BaseModel):
     is_demo_mode: bool = True
 
 
+# -----------------------------------------------------------------------------
+# Telemetry & Route Action Schemas (CR-23)
+# -----------------------------------------------------------------------------
+from enum import Enum
+
+class IntentEnum(str, Enum):
+    GENERAL = "GENERAL"
+    CALENDAR = "CALENDAR"
+    WEATHER = "WEATHER"
+    SOIL = "SOIL"
+    FERTILIZER = "FERTILIZER"
+    PESTICIDE_REFUSAL = "PESTICIDE_REFUSAL"
+    FINANCIAL = "FINANCIAL"
+    MARKET = "MARKET"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
+class RouteActionEnum(str, Enum):
+    RAG = "RAG"
+    WEATHER_SERVICE = "WEATHER_SERVICE"
+    CALENDAR_SERVICE = "CALENDAR_SERVICE"
+    SOIL_SERVICE = "SOIL_SERVICE"
+    FERTILIZER_SERVICE = "FERTILIZER_SERVICE"
+    FINANCIAL_SERVICE = "FINANCIAL_SERVICE"
+    MARKET_SERVICE = "MARKET_SERVICE"
+    SAFE_REFUSAL = "SAFE_REFUSAL"
+    ASK_FOR_CONTEXT = "ASK_FOR_CONTEXT"
+    WEB_SEARCH = "WEB_SEARCH"
+    RAG_WEB_FALLBACK = "RAG_WEB_FALLBACK"
+
+
+class PilotTelemetryEvent(BaseModel):
+    event_id: str
+    timestamp_utc: str
+    session_hash: Optional[str] = None
+    sanitized_query_text: Optional[str] = None
+    detected_language: str
+    crop_detected: Optional[str] = None
+    voluntary_geography: Optional[Dict[str, Optional[str]]] = None
+    detected_intent: IntentEnum
+    route_action: RouteActionEnum
+    retrieved_doc_ids: List[str]
+    answer_status: str
+    generation_provider: Optional[str] = None
+    confidence_score: Optional[float] = None
+
+
+
 

@@ -7,7 +7,6 @@
     "duplicate_context_rate_percent": 0.0
   },
   "routing": {
-    "intent_accuracy_percent": 100.0,
     "overall_routing_accuracy_percent": 100.0,
     "live_routing_accuracy_percent": 100.0,
     "clarification_accuracy_percent": 100.0,

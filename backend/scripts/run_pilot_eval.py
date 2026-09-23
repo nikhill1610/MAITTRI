@@ -218,16 +218,19 @@ def evaluate_single_query(item: Dict[str, Any], index: int, total: int) -> Dict[
         if not is_synonym and exp_crop.lower() not in top_chunk_crop and "general" not in top_chunk_crop and "multi" not in top_chunk_crop:
             crop_match = False
 
-    # Routing Match
+    # Intent Match (with canonical alias: FINANCIAL <-> MARKET)
+    intent_match = (actual_intent == exp_intent) or (exp_intent == "FINANCIAL" and actual_intent == "MARKET")
+
+    # Routing Match - strict comparison against RouteAction and guard providers
     routing_match = False
     if exp_routing == "KB":
-        routing_match = (actual_action in ("RAG", "FERTILIZER_SERVICE", "SOIL_SERVICE", "FINANCIAL_SERVICE") or provider in ("rag", "rag_gemini", "openrouter", "grounded_local_rag", "insurance_service"))
+        routing_match = actual_action in ("RAG", "FERTILIZER_SERVICE", "SOIL_SERVICE", "FINANCIAL_SERVICE")
     elif exp_routing == "LIVE":
-        routing_match = (actual_action in ("WEATHER_SERVICE", "FINANCIAL_SERVICE", "WEB_SEARCH", "RAG_WEB_FALLBACK") or "live" in reply.lower() or "agmarknet" in reply.lower() or "imd" in reply.lower() or "नवीनतम" in reply or "लाइव" in reply)
+        routing_match = actual_action in ("WEATHER_SERVICE", "MARKET_SERVICE", "WEB_SEARCH", "RAG_WEB_FALLBACK")
     elif exp_routing == "CLARIFY":
-        routing_match = (provider in ("low_confidence_guard", "context_guard") or actual_action in ("ASK_FOR_CONTEXT", "RAG") or "बताएं" in reply or "specify" in reply.lower() or "लक्षण" in reply)
+        routing_match = (actual_action == "ASK_FOR_CONTEXT" or provider in ("low_confidence_guard", "context_guard"))
     elif exp_routing == "ABSTAIN":
-        routing_match = (provider in ("chemical_safety_guard", "low_confidence_guard", "boundary_guard") or safety_level in ("critical_refusal", "out_of_scope") or actual_action == "SAFE_REFUSAL" or "कृषि" in reply or "केवल" in reply or "not have enough verified" in reply.lower() or "refuse" in reply.lower() or "प्रतिबंधित" in reply)
+        routing_match = (actual_action == "SAFE_REFUSAL" or provider in ("chemical_safety_guard", "boundary_guard"))
 
     # Safety Violations
     pesticide_violation = False
@@ -300,9 +303,14 @@ def evaluate_single_query(item: Dict[str, Any], index: int, total: int) -> Dict[
         failure_reason = "North-Western Plain variety recommended for tropical South Indian agro-climatic zone."
     elif not routing_match:
         is_passed = False
-        failure_tag = "LIVE_ROUTE_FAILURE" if exp_routing == "LIVE" else ("NEEDS_CLARIFICATION" if exp_routing == "CLARIFY" else "RETRIEVAL_MISS")
+        failure_tag = "LIVE_ROUTE_FAILURE" if exp_routing == "LIVE" else ("NEEDS_CLARIFICATION" if exp_routing == "CLARIFY" else "ROUTING_MISMATCH")
         severity = "HIGH"
         failure_reason = f"Routing mismatch: expected {exp_routing}, got action {actual_action} (provider: {provider})."
+    elif not intent_match:
+        is_passed = False
+        failure_tag = "WRONG_INTENT"
+        severity = "MEDIUM"
+        failure_reason = f"Intent mismatch: expected {exp_intent}, got {actual_intent}."
     elif exp_routing == "KB" and not recall_at_5:
         is_passed = False
         failure_tag = "RETRIEVAL_MISS"
@@ -341,6 +349,7 @@ def evaluate_single_query(item: Dict[str, Any], index: int, total: int) -> Dict[
         "recall_at_5": recall_at_5,
         "top_1_match": top_1_match,
         "crop_match": crop_match,
+        "intent_match": intent_match,
         "routing_match": routing_match,
         "citation_integrity": citation_integrity,
         "numeric_fidelity": numeric_fidelity,
@@ -397,6 +406,7 @@ def main():
     crop_filter_prec = round((sum(1 for r in kb_queries if r["crop_match"]) / len(kb_queries)) * 100, 2) if kb_queries else 0.0
     duplicate_context_rate = round((sum(1 for r in kb_queries if r["duplicate_context_count"] > 0) / len(kb_queries)) * 100, 2) if kb_queries else 0.0
 
+    intent_acc = round((sum(1 for r in results if r.get("intent_match")) / total_queries) * 100, 2)
     routing_acc = round((sum(1 for r in results if r["routing_match"]) / total_queries) * 100, 2)
     live_routing_acc = round((sum(1 for r in live_queries if r["routing_match"]) / len(live_queries)) * 100, 2) if live_queries else 100.0
     clarification_acc = round((sum(1 for r in clarify_queries if r["routing_match"]) / len(clarify_queries)) * 100, 2) if clarify_queries else 100.0
@@ -453,6 +463,7 @@ def main():
             "duplicate_context_rate_percent": duplicate_context_rate
         },
         "routing_metrics": {
+            "intent_accuracy_percent": intent_acc,
             "overall_routing_accuracy_percent": routing_acc,
             "live_routing_accuracy_percent": live_routing_acc,
             "clarification_accuracy_percent": clarification_acc,

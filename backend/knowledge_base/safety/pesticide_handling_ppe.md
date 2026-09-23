@@ -102,7 +102,7 @@ Before opening any chemical container, the spray operator must put on the follow
 ## 3. Chemical Dilution Arithmetic & Solution Preparation (घोल बनाने का सही गणित)
 
 ### A. The Standard Dosage Calculation Formula
-$$\text{Commercial Formulation Required (ml or g)} = \frac{\text{Recommended active ingredient (a.i.) in g} \times 100}{\text{Strength of active ingredient in formulation (\%) Chaos}}$$
+$$\text{Commercial Formulation Required (ml or g)} = \frac{\text{Recommended active ingredient (a.i.) in g} \times 100}{\text{Strength of active ingredient in formulation (\%)}}$$
 
 *Example*: To apply 200 g a.i. of an insecticide formulated as 20% EC per acre:
 $$\text{Formulation} = \frac{200 \times 100}{20} = \mathbf{1,000\text{ ml (1.0 Litre)}}\text{ per acre}.$$
