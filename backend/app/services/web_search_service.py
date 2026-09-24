@@ -529,6 +529,21 @@ class WebSearchService:
             except Exception as e:
                 logger.warning(f"Stage 2 broader search error: {e}")
 
+        # Scheme policy gate: strictly reject foreign or non-Indian domains for scheme queries
+        is_scheme_query = bool(re.search(r"\b(pmfby|pm-?kisan|pmksy|kcc|fasal\s*bima|crop\s*insurance)\b", query.lower()))
+        if is_scheme_query:
+            scheme_allowed = []
+            for ev in evidence:
+                d = (ev.domain or "").lower().strip()
+                if d.startswith("www."):
+                    d = d[4:]
+                # Strictly reject foreign .gov (e.g. fedramp.gov, hhs.gov)
+                if d.endswith(".gov") and not d.endswith(".gov.in"):
+                    continue
+                if d.endswith(".gov.in") or d.endswith(".nic.in") or d in TIER_1_AUTHORITATIVE_DOMAINS or any(d.endswith("." + auth) for auth in TIER_1_AUTHORITATIVE_DOMAINS):
+                    scheme_allowed.append(ev)
+            evidence = scheme_allowed
+
         # Safety-critical Pest / Disease query gate (down-rank / reject low-authority General Web)
         is_pest_or_disease = bool(re.search(
             r"\b(disease|pest|insect|fungus|blight|rust|rot|bacteri|caterpillar|borer|कीट|रोग|बीमारी|कीड़ा|fungicide|pesticide|कीटनाशक)\b",

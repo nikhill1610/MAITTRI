@@ -812,7 +812,7 @@ def test_scheme_case_b_only_old_official_documents_found():
         assert res["live_lookup_result"] == "stale_documents_rejected"
         assert res["rejection_reason"] == "old_documents_rejected"
         reply = res["reply"]
-        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "Mujhe official Indian government sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main unrelated ya outdated documents ko latest PMFBY rules ke roop me present nahi karunga." in reply
         assert "General/Background Information" in reply
         assert "1.5%" in reply
 
@@ -846,7 +846,7 @@ def test_scheme_case_c_official_page_with_no_publication_date():
         assert res["live_lookup_result"] == "undated_page_rejected"
         assert res["rejection_reason"] == "undated_evidence_rejected"
         reply = res["reply"]
-        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "Mujhe official Indian government sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main unrelated ya outdated documents ko latest PMFBY rules ke roop me present nahi karunga." in reply
         assert "General/Background Information" in reply
 
 
@@ -878,7 +878,7 @@ def test_scheme_case_d_web_search_returns_generic_homepage_or_lms():
         assert res["live_lookup_provider"] == "tavily"
         assert res["live_lookup_result"] == "training_lms_excluded"
         reply = res["reply"]
-        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "Mujhe official Indian government sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main unrelated ya outdated documents ko latest PMFBY rules ke roop me present nahi karunga." in reply
         assert "LMS" not in reply
         assert "training" not in reply.lower()
 
@@ -902,7 +902,7 @@ def test_scheme_case_e_provider_failure():
         assert res["live_lookup_result"] == "provider_error"
         assert "Provider exception" in (res.get("rejection_reason") or "")
         reply = res["reply"]
-        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "Mujhe official Indian government sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main unrelated ya outdated documents ko latest PMFBY rules ke roop me present nahi karunga." in reply
         assert "General/Background Information" in reply
 
 

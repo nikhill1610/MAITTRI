@@ -26,7 +26,8 @@ test_files = [
     "backend/tests/test_smart_rag_router.py",
     "backend/tests/test_web_search_fallback.py",
     "backend/tests/test_coderabbit_security_web_fixes.py",
-    "backend/tests/test_manual_batch1_fixes.py"
+    "backend/tests/test_manual_batch1_fixes.py",
+    "backend/tests/test_scheme_source_contamination.py"
 ]
 p_start = time.time()
 res_pytest = subprocess.run([sys.executable, "-m", "pytest"] + test_files + ["-q"], capture_output=True, text=True, encoding="utf-8", errors="replace")

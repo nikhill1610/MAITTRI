@@ -18,8 +18,10 @@ Phase 4 Production Implementation:
 """
 
 import os
+import sys
 import re
 import logging
+from datetime import datetime
 import requests
 from pathlib import Path
 from urllib.parse import urlparse
@@ -1398,6 +1400,73 @@ def detect_scheme_freshness_request(clean_msg: str) -> Optional[Dict[str, str]]:
     }
 
 
+APPROVED_PMFBY_DOMAINS = {
+    "pmfby.gov.in",
+    "agriwelfare.gov.in",
+    "agricoop.nic.in",
+    "pib.gov.in",
+    "egazette.gov.in",
+    "icar.gov.in",
+    "agricoop.gov.in",
+    "india.gov.in"
+}
+
+PMFBY_STRONG_IDENTIFIERS = [
+    r"\bpmfby\b",
+    r"\bpradhan\s*mantri\s*fasal\s*bima\s*yojana\b",
+    r"प्रधानमंत्री\s*फसल\s*बीमा\s*योजना",
+    r"\bfasal\s*bima\s*yojana\b",
+    r"फसल\s*बीमा\s*योजना",
+    r"\boperational\s*guidelines\s*of\s*pmfby\b",
+    r"\bpmfby-[\w\-]+\b"
+]
+
+FOREIGN_UNRELATED_PATTERNS = [
+    r"\bfedramp\b",
+    r"\bpoverty\s*guidelines?\b",
+    r"\bdepartment\s*of\s*health\s*and\s*human\s*services\b",
+    r"\bhhs\b",
+    r"\bmedicaid\b",
+    r"\bmedicare\b",
+    r"\bcybersecurity\b",
+    r"\bcloud\s*service\s*providers?\b",
+    r"\bfederal\s*register\b",
+    r"\bhomeland\s*security\b"
+]
+
+
+def extract_issuing_authority(all_text: str, domain: str) -> str:
+    """
+    Extracts verifiable issuing authority directly from document text or verified official portal.
+    Never attributes foreign or mismatched domains to Ministry of Agriculture.
+    """
+    all_text_low = all_text.lower()
+    domain_low = (domain or "").lower().strip()
+    if domain_low.startswith("www."):
+        domain_low = domain_low[4:]
+
+    # Foreign domains must never receive an Indian authority attribution
+    if domain_low.endswith(".gov") and not domain_low.endswith(".gov.in"):
+        return "issuing authority not verified"
+
+    if "ministry of agriculture" in all_text_low or "moa&fw" in all_text_low or "कृषि एवं किसान कल्याण मंत्रालय" in all_text_low:
+        return "Ministry of Agriculture & Farmers Welfare, GoI"
+    if "department of agriculture" in all_text_low or "dac&fw" in all_text_low or "कृषि विभाग" in all_text_low:
+        return "Department of Agriculture & Farmers Welfare, GoI"
+    if "press information bureau" in all_text_low or "pib" in all_text_low or "pib.gov.in" in domain_low:
+        return "Press Information Bureau (PIB), GoI"
+    if "cabinet committee on economic affairs" in all_text_low or "ccea" in all_text_low:
+        return "Cabinet Committee on Economic Affairs (CCEA), GoI"
+    if "egazette.gov.in" in domain_low:
+        return "The Gazette of India, GoI"
+    if "pmfby.gov.in" in domain_low:
+        return "PMFBY Division, MoA&FW, GoI"
+    if "agriwelfare.gov.in" in domain_low or "agricoop.nic.in" in domain_low:
+        return "Department of Agriculture & Farmers Welfare, GoI"
+
+    return "issuing authority not verified"
+
+
 def extract_scheme_structured_evidence(
     evidence_list: List[WebEvidence],
     scheme: str = "PMFBY",
@@ -1405,12 +1474,12 @@ def extract_scheme_structured_evidence(
 ) -> Tuple[List[Dict[str, Any]], str, Optional[str]]:
     """
     Extracts structured official evidence for scheme rule revisions and notifications.
-    Strictly disqualifies:
-    - Homepage landing text
-    - Training/LMS pages
-    - General scheme descriptions
-    - Undated snippets
-    - Old circulars / past reports lacking target_year
+    Strictly enforces 5 validation gates:
+    1. Strict Source Authority Gate (approved Indian domains only; reject foreign .gov)
+    2. Scheme Relevance Gate (requires strong PMFBY identifier; rejects unrelated topics)
+    3. Exclusions (homepage, training/lms, general descriptions)
+    4. Date / Freshness Gate (explicit verified date with target_year)
+    5. Authority Attribution Invariant (real verified authority or marked unverified)
     """
     valid_notifs: List[Dict[str, Any]] = []
     last_rej_code = "no_verified_2026_rule"
@@ -1420,9 +1489,64 @@ def extract_scheme_structured_evidence(
         content_low = ev.content.lower()
         title_low = ev.title.lower()
         url_low = ev.url.lower()
+        domain_low = (ev.domain or "").lower().strip()
+        if domain_low.startswith("www."):
+            domain_low = domain_low[4:]
         parsed = urlparse(ev.url)
+        all_text = f"{ev.published_date or ''} {ev.title} {ev.content}"
+        all_text_low = all_text.lower()
 
-        # 1. Homepage text
+        # -------------------------------------------------------------
+        # GATE 1: STRICT SOURCE AUTHORITY GATE
+        # -------------------------------------------------------------
+        # Foreign or non-Indian .gov domains (e.g. fedramp.gov, hhs.gov, aspe.hhs.gov) must be rejected
+        is_foreign_gov = domain_low.endswith(".gov") and not domain_low.endswith(".gov.in")
+        is_indian_gov = (
+            domain_low.endswith(".gov.in") or
+            domain_low.endswith(".nic.in") or
+            domain_low in APPROVED_PMFBY_DOMAINS or
+            any(domain_low.endswith("." + d) for d in APPROVED_PMFBY_DOMAINS)
+        )
+
+        if is_foreign_gov or not is_indian_gov:
+            last_rej_code = "foreign_or_unauthorized_domain_rejected"
+            last_rej_reason = "foreign_or_non_indian_source_rejected"
+            continue
+
+        # If domain is .gov.in / .nic.in but NOT in the explicitly approved PMFBY list,
+        # require that the document itself explicitly belongs to Ministry of Agriculture / PMFBY
+        if domain_low not in APPROVED_PMFBY_DOMAINS and not any(domain_low.endswith("." + d) for d in APPROVED_PMFBY_DOMAINS):
+            belongs_to_agri = any(
+                k in all_text_low for k in [
+                    "ministry of agriculture", "department of agriculture", "moa&fw",
+                    "कृषि मंत्रालय", "कृषि एवं किसान कल्याण", "pmfby division", "fasal bima", "dac&fw"
+                ]
+            )
+            if not belongs_to_agri:
+                last_rej_code = "unrelated_indian_gov_domain_rejected"
+                last_rej_reason = "indian_gov_page_not_affiliated_with_agriculture"
+                continue
+
+        # -------------------------------------------------------------
+        # GATE 2: SCHEME RELEVANCE GATE
+        # -------------------------------------------------------------
+        # Immediate rejection if foreign/unrelated topics detected
+        if any(re.search(pat, all_text_low) for pat in FOREIGN_UNRELATED_PATTERNS):
+            last_rej_code = "foreign_or_unrelated_topic_rejected"
+            last_rej_reason = "unrelated_foreign_topic_in_document"
+            continue
+
+        # Must contain at least one strong scheme identifier
+        if scheme.upper() == "PMFBY":
+            has_strong_id = any(re.search(pat, all_text_low) for pat in PMFBY_STRONG_IDENTIFIERS)
+            if not has_strong_id:
+                last_rej_code = "scheme_irrelevance_rejected"
+                last_rej_reason = "document_lacks_strong_pmfby_identifiers"
+                continue
+
+        # -------------------------------------------------------------
+        # GATE 3: EXCLUSIONS (Homepage, LMS/Training, General/Evaluation Reports)
+        # -------------------------------------------------------------
         is_homepage = parsed.path.strip("/") in ("", "index.html", "index.php", "home") or any(
             h in title_low for h in ["welcome to", "pmfby home", "portal home", "home |"]
         )
@@ -1431,7 +1555,6 @@ def extract_scheme_structured_evidence(
             last_rej_reason = "homepage_content_excluded"
             continue
 
-        # 2. Training / LMS
         is_lms = "/lms" in url_low or "/training" in url_low or "/course" in url_low or any(
             t in (title_low + " " + content_low) for t in [
                 "learning management system", "lms", "training & courses",
@@ -1443,7 +1566,6 @@ def extract_scheme_structured_evidence(
             last_rej_reason = "training_or_lms_excluded"
             continue
 
-        # 3. General scheme description / old parliamentary committee report
         is_gen_desc = (
             "was launched in 2016" in content_low
             or "parliamentary committee report" in title_low
@@ -1454,10 +1576,11 @@ def extract_scheme_structured_evidence(
             last_rej_reason = "general_description_excluded"
             continue
 
-        # 4. Date extraction & freshness check
-        all_text = f"{ev.published_date or ''} {ev.title} {ev.content}"
+        # -------------------------------------------------------------
+        # GATE 4: DATE / FRESHNESS GATE
+        # -------------------------------------------------------------
         date_year_match = re.search(
-            rf"\b(?:\d{{1,2}}[-/\.]\d{{1,2}}[-/\.]{target_year}|{target_year}[-/\.]\d{{1,2}}[-/\.]\d{{1,2}}|\d{{1,2}}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+{target_year}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+{target_year}|Kharif\s+{target_year}|Rabi\s+{target_year}(?:-27)?|w\.e\.f\.?\s*{target_year}|{target_year})\b",
+            rf"\b(?:\d{{1,2}}[-/\.]\d{{1,2}}[-/\.]{target_year}|{target_year}[-/\.]\d{{1,2}}[-/\.]\d{{1,2}}|\d{{1,2}}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s,]+{target_year}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{{1,2}}[\s,]+{target_year}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+{target_year}|Kharif\s+{target_year}|Rabi\s+{target_year}(?:-27)?|w\.e\.f\.?\s*{target_year})\b",
             all_text,
             re.IGNORECASE
         )
@@ -1472,7 +1595,6 @@ def extract_scheme_structured_evidence(
                 last_rej_reason = "undated_evidence_rejected"
             continue
 
-        # 5. Must have notification / circular / order / rule substance
         has_substance = bool(re.search(
             r"\b(circular|notification|guidelines?|order|amendment|adhisuchna|paripatra|rule|rules|mandate|revision|revised|directive|clause)\b",
             title_low + " " + content_low
@@ -1482,10 +1604,12 @@ def extract_scheme_structured_evidence(
             last_rej_reason = "no_rule_change_in_evidence"
             continue
 
-        extracted_date = date_year_match.group(0)
-        authority = "Ministry of Agriculture & Farmers Welfare, GoI"
-        if "department of agriculture" in content_low:
-            authority = "Department of Agriculture & Farmers Welfare, GoI"
+        extracted_date = date_year_match.group(0).strip()
+
+        # -------------------------------------------------------------
+        # GATE 5: AUTHORITY ATTRIBUTION INVARIANT
+        # -------------------------------------------------------------
+        authority = extract_issuing_authority(all_text, domain_low)
 
         sentences = re.split(r"(?<=[.!?])\s+", ev.content)
         rule_change = ""
@@ -1518,11 +1642,15 @@ def extract_scheme_structured_evidence(
 def compose_scheme_fallback_response(scheme: str, target_year: str, language: str) -> str:
     """
     Composes safe fallback response when no verified rule change / notification is found.
-    Fulfills Requirement 6 verbatim:
-    'Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga.'
+    Fulfills exact requirement:
+    'Mujhe official Indian government sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main unrelated ya outdated documents ko latest PMFBY rules ke roop me present nahi karunga.'
     Followed by stable scheme information separately, clearly labelled as general/background information.
     """
-    prefix = f"Mujhe official sources se {target_year} ke specific naye {scheme} rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga."
+    prefix = (
+        f"Mujhe official Indian government sources se {target_year} ke specific naye {scheme} "
+        f"rule changes verify nahi mile. Main unrelated ya outdated documents ko "
+        f"latest {scheme} rules ke roop me present nahi karunga."
+    )
 
     if scheme.upper() == "PMFBY":
         background_info = (
@@ -1550,11 +1678,12 @@ def compose_scheme_freshness_response(
     language: str
 ) -> str:
     """
-    Farmer-facing format (Requirement 8):
+    Farmer-facing format:
     - direct answer first
     - max 3–5 bullets
     - include date for every claimed latest/current change
-    - source line at end
+    - issuing authority directly from metadata/content, or marked unverified
+    - source line at end with actual authorities & domains (never blindly hardcoded)
     - no raw search-engine snippets
     """
     header = f"🏛️ {scheme} {target_year} आधिकारिक नियम एवं अधिसूचना (Verified Updates):"
@@ -1564,12 +1693,16 @@ def compose_scheme_freshness_response(
         rule = item["rule_change"]
         dt = item["date"]
         auth = item["authority"]
-        bullet = f"- **{title}**: {rule} (अधिसूचना तिथि: {dt}, जारीकर्ता: {auth})"
+        auth_label = f", जारीकर्ता: {auth}" if auth != "issuing authority not verified" else ", जारीकर्ता: सत्यापित नहीं"
+        bullet = f"- **{title}**: {rule} (अधिसूचना तिथि: {dt}{auth_label})"
         bullets.append(bullet)
 
     bullets_text = "\n".join(bullets)
-    top_domain = notifications[0]["domain"] if notifications else "pmfby.gov.in"
-    source_line = f"स्रोत: Ministry of Agriculture & Farmers Welfare, GoI ({top_domain})"
+    auths = sorted(list(set(n["authority"] for n in notifications if n.get("authority") and n["authority"] != "issuing authority not verified")))
+    domains = sorted(list(set(n["domain"] for n in notifications if n.get("domain"))))
+    auth_display = ", ".join(auths) if auths else "Official Indian Government Sources"
+    domain_display = f" ({', '.join(domains)})" if domains else ""
+    source_line = f"स्रोत: {auth_display}{domain_display}"
 
     return f"{header}\n\n{bullets_text}\n\n{source_line}"
 
@@ -3063,64 +3196,75 @@ def process_chat_message(
 
             if valid_notifs:
                 reply = compose_scheme_freshness_response(scheme_name, target_year, valid_notifs, lang)
-                formatted_sources = []
-                for n in valid_notifs:
-                    formatted_sources.append({
-                        "title": n["title"],
-                        "section": "Official Notification",
-                        "source": n["domain"],
-                        "organization": n["authority"],
-                        "category": "Schemes",
-                        "url": n["url"],
-                        "score": 0.95
-                    })
-                logger.info(
-                    "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=%d, rejection_reason=None, anti_hallucination_fallback=False",
-                    scheme_name, target_year, len(valid_notifs)
+                # Requirement 6: Zero Raw / Foreign Contamination Invariant Check
+                foreign_contamination_detected = any(
+                    term in reply.lower() for term in [
+                        "fedramp", "hhs", "poverty guidelines", "department of health and human services",
+                        "aspe.hhs.gov", "fedramp.gov"
+                    ]
                 )
-                return {
-                    "reply": clean_farmer_markdown(reply),
-                    "sources": formatted_sources,
-                    "retrieved_chunks": len(valid_notifs),
-                    "confidence": 0.95,
-                    "language": lang,
-                    "provider": "tavily_scheme",
-                    "intent": route_decision.intent.value,
-                    "route": route_decision.action.value,
-                    "live_lookup_attempted": True,
-                    "live_lookup_provider": "tavily",
-                    "live_lookup_result": "verified_scheme_rule_found",
-                    "rejection_reason": None
-                }
-            else:
-                # Safe fallback: no verified rule change found
-                fallback_reply = compose_scheme_fallback_response(scheme_name, target_year, lang)
-                logger.info(
-                    "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=0, rejection_reason=%s, anti_hallucination_fallback=True",
-                    scheme_name, target_year, rej_reason
-                )
-                return {
-                    "reply": clean_farmer_markdown(fallback_reply),
-                    "sources": [{
-                        "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
-                        "section": "Official Guidelines",
-                        "source": "pmfby.gov.in",
-                        "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
-                        "category": "Schemes",
-                        "url": "https://pmfby.gov.in",
-                        "score": 0.90
-                    }],
-                    "retrieved_chunks": 0,
-                    "confidence": 0.75,
-                    "language": lang,
-                    "provider": "anti_hallucination_guard",
-                    "intent": route_decision.intent.value,
-                    "route": route_decision.action.value,
-                    "live_lookup_attempted": True,
-                    "live_lookup_provider": "tavily",
-                    "live_lookup_result": rej_code or "no_verified_2026_rule",
-                    "rejection_reason": rej_reason or "no_verified_2026_notification"
-                }
+                if not foreign_contamination_detected:
+                    formatted_sources = []
+                    for n in valid_notifs:
+                        formatted_sources.append({
+                            "title": n["title"],
+                            "section": "Official Notification",
+                            "source": n["domain"],
+                            "organization": n["authority"],
+                            "category": "Schemes",
+                            "url": n["url"],
+                            "score": 0.95
+                        })
+                    logger.info(
+                        "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=%d, rejection_reason=None, anti_hallucination_fallback=False",
+                        scheme_name, target_year, len(valid_notifs)
+                    )
+                    return {
+                        "reply": clean_farmer_markdown(reply),
+                        "sources": formatted_sources,
+                        "retrieved_chunks": len(valid_notifs),
+                        "confidence": 0.95,
+                        "language": lang,
+                        "provider": "tavily_scheme",
+                        "intent": route_decision.intent.value,
+                        "route": route_decision.action.value,
+                        "live_lookup_attempted": True,
+                        "live_lookup_provider": "tavily",
+                        "live_lookup_result": "verified_scheme_rule_found",
+                        "rejection_reason": None
+                    }
+                else:
+                    logger.error("CONTAMINATION GUARD: Foreign policy terms detected in PMFBY answer. Purging to safe fallback.")
+                    rej_reason = "foreign_contamination_purged"
+
+            # Safe fallback: no verified rule change found or contaminated evidence purged
+            fallback_reply = compose_scheme_fallback_response(scheme_name, target_year, lang)
+            logger.info(
+                "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=0, rejection_reason=%s, anti_hallucination_fallback=True",
+                scheme_name, target_year, rej_reason
+            )
+            return {
+                "reply": clean_farmer_markdown(fallback_reply),
+                "sources": [{
+                    "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
+                    "section": "Official Guidelines",
+                    "source": "pmfby.gov.in",
+                    "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                    "category": "Schemes",
+                    "url": "https://pmfby.gov.in",
+                    "score": 0.90
+                }],
+                "retrieved_chunks": 0,
+                "confidence": 0.75,
+                "language": lang,
+                "provider": "anti_hallucination_guard",
+                "intent": route_decision.intent.value,
+                "route": route_decision.action.value,
+                "live_lookup_attempted": True,
+                "live_lookup_provider": "tavily",
+                "live_lookup_result": rej_code or "no_verified_2026_rule",
+                "rejection_reason": rej_reason or "no_verified_2026_notification"
+            }
 
         evidence = []
         if getattr(web_search_service, "enabled", False):
