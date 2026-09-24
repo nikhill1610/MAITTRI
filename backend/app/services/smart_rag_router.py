@@ -145,13 +145,14 @@ PESTICIDE_SAFETY_PATTERNS = [
 
 # Weather / Meteorological Patterns (Requires actual meteorological keywords)
 WEATHER_PATTERNS = [
-    r"(?:मौसम|weather|forecast|\brain\b|barish|बारिश|वर्षा|तापमान|temperature|frost|पाला|cold wave|शीतलहर|heatwave|लू|mausam|monsoon|मानसून|drought|सूखा)",
-    r"(?:कल|आज|tomorrow|today|aaj|kal|current|live)\s+.*?(?:मौसम|weather|\brain\b|barish|बारिश|वर्षा|forecast|तापमान|temperature|frost|पाला|spray|छिड़काव|mausam|sinchai|irrigation|rainfall|humidity|monsoon)",
+    r"(?:मौसम|weather|forecast|\brain\b|ba+rish|बारिश|वर्षा|बरसात|barsat|barsaat|तापमान|temperature|frost|पाला|cold wave|शीतलहर|heatwave|लू|mausam|monsoon|मानसून|drought|सूखा)",
+    r"(?:कल|आज|अभी|tomorrow|today|yesterday|aaj|kal|abhi|current|live|now|right\s*now)\s+.*?(?:मौसम|weather|\brain\b|ba+rish|बारिश|वर्षा|बरसात|barsat|barsaat|forecast|तापमान|temperature|frost|पाला|spray|छिड़काव|mausam|sinchai|irrigation|rainfall|humidity|monsoon)",
+    r"(?:kya\s+)?(?:abhi|kal|aaj|today|tomorrow)\s+.*?(?:ba+rish|barish|बारिश|वर्षा|barsat|barsaat|rain|raining|precipitation)\s*(?:ho|hogi|hoga|hai|rhi|rahi|pad)",
     r"(?:can i spray|spray karu|छिड़काव करूं|छिड़काव करूँ|spray karun|should i spray)",
-    r"(?:aaj|kal|today|tomorrow|now)\s*.*?(?:irrigation|sinchai|पानी|सिंचाई)\s*(?:karu|karein|dena|karni|kare|chahiye|should)",
+    r"(?:aaj|kal|today|tomorrow|now|abhi)\s*.*?(?:irrigation|sinchai|पानी|सिंचाई)\s*(?:karu|karein|dena|karni|kare|chahiye|should)",
     r"(?:should i irrigate|irrigate today|irrigation today)",
     r"(?:mausam|weather)\s*(?:ke hisaab|ke hisab|ke according|according)",
-    r"(?:wind speed|हवा की गति|humidity|नमी का स्तर|rainfall|precipitation)"
+    r"(?:wind speed|हवा की गति|humidity|नमी का स्तर|rainfall|precipitation|बूंदाबांदी|drizzle)"
 ]
 
 # Mandi & Financial Patterns
@@ -209,9 +210,9 @@ CALENDAR_PATTERNS = [
 
 # Freshness & Current Information Patterns (Sections 8 & 20)
 FRESHNESS_PATTERNS = [
-    r"\b(latest|recent|new|today|current|this year|2026)\b",
-    r"\b(abhi|aaj|naya|naye|nayi|nai|taaza|taza|haal hi|update|rules?|guidelines?)\b",
-    r"(नई|नए|नया|आज|ताज़ा|ताजा|वर्तमान|हाल ही|नया नियम|नई गाइडलाइन|ताजा अपडेट|नया अपडेट)"
+    r"\b(latest|recent|new|today|current|this year|2026|notification|circular|update|rules?|guidelines?)\b",
+    r"\b(abhi|aaj|naya|naye|nayi|nai|taaza|taza|haal hi|sanshodhan|adhisuchna|paripatra)\b",
+    r"(नई|नए|नया|आज|ताज़ा|ताजा|वर्तमान|हाल ही|नया नियम|नई गाइडलाइन|ताजा अपडेट|नया अपडेट|अधिसूचना|परिपत्र|संशोधन)"
 ]
 
 
@@ -409,8 +410,16 @@ LOCATION_STOPWORDS = {
     "apne", "apna", "apni", "mere", "meri", "mera", "is", "iss", "us", "uss", "yeh", "woh",
     "pehli", "dusri", "teesri", "first", "second", "third", "stage", "din", "day", "days",
     "advisory", "advice", "salah", "check", "kripya", "please", "help",
+    # Pests, Diseases, and Management
+    "borer", "aphid", "aphids", "thrips", "whitefly", "weevil", "mite", "mites", "nematode", "nematodes",
+    "caterpillar", "armyworm", "rust", "blight", "rot", "wilt", "curl", "mosaic", "smut", "mildew",
+    "keeda", "keede", "sundi", "illi", "ilaj", "upchar", "upay", "dawai", "prabandhan", "management", "control",
     # Market words
-    "mandi", "bazaar", "bazar", "market", "apmc", "rate", "rates", "bhav", "price", "prices", "modal", "dam", "daam"
+    "mandi", "bazaar", "bazar", "market", "apmc", "rate", "rates", "bhav", "price", "prices", "modal", "dam", "daam",
+    # Government schemes, policy, and administrative terms
+    "pmfby", "pmkisan", "kisan", "yojana", "scheme", "schemes", "bima", "fasal", "policy", "rules", "rule", "niyam",
+    "circular", "guidelines", "guideline", "update", "updates", "amendment", "notification", "adhisuchna", "paripatra",
+    "central", "government", "sarkar", "state", "pradhan", "mantri"
 }
 
 
@@ -477,27 +486,86 @@ def extract_location_from_text(text: str) -> Optional[str]:
     return None
 
 
+def detect_weather_time_scope(query: str) -> str:
+    """Detects requested temporal horizon for weather: CURRENT, TOMORROW, NEXT_24_HOURS, or TODAY."""
+    q = (query or "").lower()
+    if re.search(r"\b(kal|tomorrow|कल)\b", q):
+        return "TOMORROW"
+    if re.search(r"\b(abhi|now|currently|right\s*now|इस\s*समय|अभी)\b", q):
+        return "CURRENT"
+    if re.search(r"\b(next\s*24|agle\s*24|अगले\s*24)\b", q):
+        return "NEXT_24_HOURS"
+    if re.search(r"\b(aaj|today|आज)\b", q):
+        return "TODAY"
+    return "TODAY"
+
+
 def extract_entities(query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Lightweight extraction of crops, location, and parameters from query and context.
-    Enforces strict 5-tier location precedence:
-    1. Explicit location extracted from CURRENT user message
-    2. Explicit location established in current conversation (history)
-    3. Request context / active field context (context["location"])
-    4. User/farm profile location (context["farm_location"], etc.)
-    5. None (caller will ask for location if needed)
+    Enforces deterministic context precedence:
+    1. Explicit entities extracted from CURRENT user message
+    2. Previously established conversation entities (history)
+    3. Request context / active field context / profile
+    4. Ask clarification
+    Explicit new topic/crop in current message overrides previous conversation context.
     """
     entities: Dict[str, Any] = {}
     q_lower = query.lower()
 
-    # Detect crop: query takes precedence over context
+    # Tier 1: Current user message extraction
     for crop_name, pat in CROPS_PATTERNS.items():
         if re.search(pat, q_lower):
             entities["crop"] = crop_name
             break
 
-    if not entities.get("crop") and context and context.get("crop"):
-        entities["crop"] = context.get("crop")
+    age_match = re.search(r"\b(\d+)\s*(?:din|दिन|days?|day)\b", q_lower)
+    if age_match:
+        entities["crop_age_days"] = int(age_match.group(1))
+
+    PEST_DISEASE_PATTERNS = {
+        "pod borer": r"\b(pod\s*borer|heliothis|helicoverpa|फली\s*छेदक|चना\s*इल्ली|फली\s*सुंडी)\b",
+        "yellow rust": r"\b(yellow\s*rust|stripe\s*rust|peela\s*ratua|पीला\s*रतुआ)\b",
+        "leaf curl": r"\b(leaf\s*curl|murda|leaf\s*curl\s*virus|पर्ण\s*कुंचन)\b",
+        "whitefly": r"\b(whitefly|white\s*fly|सफेद\s*मक्खी)\b",
+        "stem borer": r"\b(stem\s*borer|तना\s*छेदक)\b",
+        "aphid": r"\b(aphids?|maahu|माहू|मोयला)\b",
+        "fall armyworm": r"\b(fall\s*armyworm|faw|सैनिक\s*कीट)\b",
+        "late blight": r"\b(late\s*blight|jhulsa|झुलसा|पछेती\s*झुलसा)\b",
+        "early blight": r"\b(early\s*blight|अगेती\s*झुलसा)\b"
+    }
+    for t_name, t_pat in PEST_DISEASE_PATTERNS.items():
+        if re.search(t_pat, q_lower):
+            entities["pest_disease"] = t_name
+            break
+
+    # Tier 2: Previously established entities in conversation history (single reverse pass)
+    if context and context.get("history") and not (entities.get("crop") and entities.get("crop_age_days") and entities.get("pest_disease")):
+        history = context.get("history")
+        if isinstance(history, list):
+            for turn in reversed(history):
+                if isinstance(turn, dict):
+                    msg_text = (turn.get("content") or turn.get("message") or "").lower()
+                    if not entities.get("crop"):
+                        for crop_name, pat in CROPS_PATTERNS.items():
+                            if re.search(pat, msg_text):
+                                entities["crop"] = crop_name
+                                break
+                    if not entities.get("crop_age_days"):
+                        m = re.search(r"\b(\d+)\s*(?:din|दिन|days?|day)\b", msg_text)
+                        if m:
+                            entities["crop_age_days"] = int(m.group(1))
+                    if not entities.get("pest_disease"):
+                        for t_name, t_pat in PEST_DISEASE_PATTERNS.items():
+                            if re.search(t_pat, msg_text):
+                                entities["pest_disease"] = t_name
+                                break
+                    if entities.get("crop") and entities.get("crop_age_days") and entities.get("pest_disease"):
+                        break
+
+    # Tier 3: Request context / active field context fallback for crop
+    if not entities.get("crop") and context:
+        entities["crop"] = context.get("crop") or context.get("field_crop") or context.get("active_crop")
 
     # Tier 1: Explicit location extracted from CURRENT user message
     loc = extract_location_from_text(query)
@@ -545,7 +613,11 @@ def extract_entities(query: str, context: Optional[Dict[str, Any]] = None) -> Di
         except ValueError:
             pass
 
+    # Temporal weather horizon detection (CURRENT, TOMORROW, NEXT_24_HOURS, TODAY)
+    entities["time_scope"] = detect_weather_time_scope(query)
+
     return entities
+
 
 
 # -----------------------------------------------------------------------------
@@ -669,9 +741,9 @@ def classify_query(
 
         # Check for explicit live weather / forecast intent
         live_weather_markers = [
-            r"\bkal\b", r"\bbarish\b", r"\bweather\b", r"मौसम", r"\bmausam\b", r"\brain\b",
-            r"\bforecast\b", r"\btomorrow\b", r"\btoday\b", r"\baaj\b", r"\bspray\b",
-            r"होगी", r"रहेगा", r"sambhavna", r"संभावना",
+            r"\bkal\b", r"\bba+rish\b", r"\bbarsat\b", r"\bbarsaat\b", r"वर्षा", r"\bweather\b", r"मौसम", r"\bmausam\b", r"\brain\b",
+            r"\bforecast\b", r"\btomorrow\b", r"\btoday\b", r"\baaj\b", r"\ba+bhi\b", r"अभी", r"\bnow\b", r"\bspray\b",
+            r"होगी", r"रहेगा", r"sambhavna", r"संभावना", r"rhi\s+hai", r"rahi\s+hai",
             r"current", r"live", r"according", r"hisaab", r"hisab"
         ]
         if any(re.search(pat, q_lower) for pat in live_weather_markers):

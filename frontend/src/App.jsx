@@ -723,20 +723,22 @@ function Layout({ children }) {
         </div>
       </aside>
 
-      {/* Floating lower-left weather logo on mobile when sidebar is closed */}
-      <Link
-        to="/weather"
-        className="mobileLowerLeftWeatherBtn"
-        title={typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम सेवा" : "Weather"))}
-        aria-label="Weather"
-      >
-        <CloudSun size={20} />
-        {sidebarWeather ? (
-          <span className="mobileWeatherBadge">{sidebarWeather.current.temperature_2m}°C</span>
-        ) : (
-          <span>{typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम" : "Weather"))}</span>
-        )}
-      </Link>
+      {/* Floating lower-left weather logo on mobile when sidebar is closed (hidden on assistant pages to avoid input overlap) */}
+      {!/^\/(?:krishi-assistant|chat|assistant)(?:\/|$)/.test(currentPath) && (
+        <Link
+          to="/weather"
+          className="mobileLowerLeftWeatherBtn"
+          title={typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम सेवा" : "Weather"))}
+          aria-label="Weather"
+        >
+          <CloudSun size={20} />
+          {sidebarWeather ? (
+            <span className="mobileWeatherBadge">{sidebarWeather.current.temperature_2m}°C</span>
+          ) : (
+            <span>{typeof t.weather === "string" ? t.weather : (t("nav.weather") || (lang === "hi" ? "मौसम" : "Weather"))}</span>
+          )}
+        </Link>
+      )}
 
       <main className="main">
         <header className="topbar">

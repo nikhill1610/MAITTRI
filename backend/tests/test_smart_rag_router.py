@@ -294,12 +294,36 @@ class TestSmartRAGChatServiceIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from unittest.mock import MagicMock
-        if "dotenv" not in sys.modules:
+        try:
+            import dotenv
+        except ImportError:
             sys.modules["dotenv"] = MagicMock()
-        if "requests" not in sys.modules:
+        try:
+            import requests
+        except ImportError:
             sys.modules["requests"] = MagicMock()
-        if "chromadb" not in sys.modules:
-            sys.modules["chromadb"] = MagicMock()
+        try:
+            import chromadb
+        except ImportError:
+            mock_coll = MagicMock()
+            mock_coll.count.return_value = 0
+            mock_coll.query.return_value = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+            mock_coll.get.return_value = {"ids": [], "documents": [], "metadatas": []}
+            mock_client = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_coll
+            mock_client.get_collection.return_value = mock_coll
+            mock_chromadb = MagicMock()
+            mock_chromadb.PersistentClient.return_value = mock_client
+            sys.modules["chromadb"] = mock_chromadb
+            cls._mocked_chromadb = True
+
+    @classmethod
+    def tearDownClass(cls):
+        if getattr(cls, "_mocked_chromadb", False):
+            sys.modules.pop("chromadb", None)
+            import app.services.rag_service as rs
+            rs._COLLECTION = None
+            rs._CHROMA_CLIENT = None
 
     def test_integration_pesticide_refusal(self):
         from app.services.chat_service import process_chat_message

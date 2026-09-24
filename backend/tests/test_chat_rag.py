@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Maitri Krishi Assistant - Automated RAG Test Suite
 --------------------------------------------------
@@ -567,8 +568,9 @@ def test_case_3_static_rag_not_market_route():
 
 def test_case_4_mock_tavily_fresh_official_result():
     """
-    Case 4: Mock Tavily returns fresh official market result
+    Case 4 (Test A): Mock Tavily returns fresh official market result
     - price/date/source rendered correctly
+    - metadata exposes live lookup audit fields
     """
     from app.services.chat_service import process_chat_message
     from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
@@ -589,6 +591,13 @@ def test_case_4_mock_tavily_fresh_official_result():
     with patch.object(web_search_service, "search", return_value=[mock_ev]):
         res = process_chat_message("Jaipur mandi me wheat ka latest modal price kya hai?")
         assert res["provider"] == "tavily_market"
+        assert res["intent"] == "MARKET"
+        assert res["route"] == "MARKET_SERVICE"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "verified_rate_found"
+        assert res["rejection_reason"] is None
+        assert res["retrieved_chunks"] >= 1
         reply = res["reply"]
         assert "Modal price: ₹2500 / quintal" in reply
         assert "Min–Max: ₹2400 – ₹2600 / quintal" in reply
@@ -598,10 +607,12 @@ def test_case_4_mock_tavily_fresh_official_result():
 
 def test_case_5_mock_tavily_stale_result():
     """
-    Case 5: Mock Tavily returns stale result
-    - response labels it as latest verified available
-    - does NOT call it today's rate
+    Case 5 (Test B): Mock Tavily returns stale result
+    - stale market rate rejected
+    - anti_hallucination_guard returns safe fallback
+    - no invented price or obsolete rate presented as current
     """
+    import re
     from app.services.chat_service import process_chat_message
     from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
 
@@ -619,18 +630,25 @@ def test_case_5_mock_tavily_stale_result():
 
     with patch.object(web_search_service, "search", return_value=[mock_ev]):
         res = process_chat_message("Aaj Jaipur mandi me gehun ka latest bhav kya hai?")
-        assert res["provider"] == "tavily_market"
+        assert res["provider"] == "anti_hallucination_guard"
+        assert res["intent"] == "MARKET"
+        assert res["route"] == "MARKET_SERVICE"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "stale_rate_rejected"
+        assert res["rejection_reason"] == "stale_market_rate_rejected"
         reply = res["reply"]
-        assert "Latest verified available rate I found is from" in reply
-        assert stale_date in reply or "2025-07-15" in reply
-        assert "aaj ka rate" not in reply.lower()
-        assert "today's rate" not in reply.lower()
+        assert "Main abhi Jaipur mandi ka current verified" in reply
+        assert "agmarknet.gov.in" in reply
+        assert "2350" not in reply
+        assert not re.search(r"₹\s*\d{3,5}", reply)
 
 
 def test_case_6_mock_tavily_fails_safe_fallback():
     """
-    Case 6: Mock Tavily fails
+    Case 6 (Test D): Mock Tavily fails with exception/timeout
     - safe fallback
+    - live_lookup_result = 'provider_error'
     - no invented price
     """
     import re
@@ -640,10 +658,376 @@ def test_case_6_mock_tavily_fails_safe_fallback():
     with patch.object(web_search_service, "search", side_effect=RuntimeError("Tavily timeout")):
         res = process_chat_message("Aaj Jaipur mandi me gehun ka latest bhav kya hai?")
         assert res["provider"] == "anti_hallucination_guard"
+        assert res["intent"] == "MARKET"
+        assert res["route"] == "MARKET_SERVICE"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "provider_error"
+        assert "Provider exception" in (res.get("rejection_reason") or "")
         reply = res["reply"]
         assert "Main abhi Jaipur mandi ka current verified" in reply
         assert "agmarknet.gov.in" in reply
         assert not re.search(r"₹\s*\d{3,5}", reply)
         assert not re.search(r"rs\.?\s*\d{3,5}", reply, re.IGNORECASE)
+
+
+def test_case_7_no_trustworthy_result_safe_fallback():
+    """
+    Case 7 (Test C): Live lookup returns results without trustworthy prices
+    - safe fallback returned by anti_hallucination_guard
+    - live_lookup_result = 'no_verified_rate'
+    - rejection_reason = 'no_price_in_evidence'
+    """
+    import re
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
+
+    mock_ev = WebEvidence(
+        title="Department of Agriculture Annual Report",
+        url="https://agriwelfare.gov.in/report.pdf",
+        domain="agriwelfare.gov.in",
+        content="General overview of mandi operations and APMC guidelines across northern states.",
+        score=0.75,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL
+    )
+
+    with patch.object(web_search_service, "search", return_value=[mock_ev]):
+        res = process_chat_message("Aaj Jaipur mandi me gehun ka latest bhav kya hai?")
+        assert res["provider"] == "anti_hallucination_guard"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "no_verified_rate"
+        assert res["rejection_reason"] == "no_price_in_evidence"
+        assert not re.search(r"₹\s*\d{3,5}", res["reply"])
+
+
+def test_case_8_price_cannot_appear_without_source_and_freshness():
+    """
+    Case 8 (Test E): Invariant that specific ₹ value can NEVER appear without
+    an authoritative source and explicit reported date/freshness.
+    """
+    import re
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
+    from datetime import date
+
+    # 1. Fallback case: absolutely no ₹ value
+    with patch.object(web_search_service, "search", return_value=[]):
+        res_fb = process_chat_message("Aaj Jaipur mandi me gehun ka latest bhav kya hai?")
+        assert not re.search(r"₹\s*\d{3,5}", res_fb["reply"])
+        assert not re.search(r"rs\.?\s*\d{3,5}", res_fb["reply"], re.IGNORECASE)
+
+    # 2. Verified case: ₹ value MUST have date, source, and sources array
+    today_str = date.today().strftime("%d-%m-%Y")
+    mock_ev = WebEvidence(
+        title="Jaipur Mandi Daily Wheat Rate",
+        url="https://agmarknet.gov.in/jaipur",
+        domain="agmarknet.gov.in",
+        content=f"Modal price: Rs 2550 per quintal reported on {today_str}.",
+        score=0.98,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date=today_str
+    )
+    with patch.object(web_search_service, "search", return_value=[mock_ev]):
+        res_ver = process_chat_message("Aaj Jaipur mandi me gehun ka latest bhav kya hai?")
+        if re.search(r"₹\s*\d{3,5}", res_ver["reply"]):
+            assert today_str in res_ver["reply"]
+            assert any(s in res_ver["reply"] for s in ["AGMARKNET", "eNAM", "gov.in"])
+            assert len(res_ver["sources"]) > 0
+            assert res_ver["sources"][0]["source"]
+
+
+def test_scheme_case_a_verified_2026_notification_found():
+    """
+    Scheme Test A: Verified 2026 official notification found.
+    - direct answer first
+    - max 3-5 bullets
+    - includes date for claimed change
+    - source line at end
+    - no raw snippets dumped
+    """
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
+
+    mock_ev = WebEvidence(
+        title="PMFBY Revised Operational Guidelines 2026",
+        url="https://pmfby.gov.in/files/guidelines_2026.pdf",
+        domain="pmfby.gov.in",
+        content="Ministry of Agriculture notification dated 15-01-2026: Mandatory electronic claim transfer within 15 days of CCE completion. State subsidy release deadline tightened for Kharif 2026.",
+        score=0.96,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-01-15"
+    )
+
+    with patch.object(web_search_service, "search", return_value=[mock_ev]):
+        res = process_chat_message("PMFBY ke latest rules 2026 kya hain?")
+        assert res["provider"] == "tavily_scheme"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "verified_scheme_rule_found"
+        assert res["rejection_reason"] is None
+        reply = res["reply"]
+        assert "2026" in reply
+        assert "15-01-2026" in reply
+        assert "pmfby.gov.in" in reply
+        assert "Ministry of Agriculture" in reply
+        # Verify bullet structure
+        assert "\n-" in reply
+        lines = [line.strip() for line in reply.split("\n") if line.strip().startswith("-")]
+        assert 1 <= len(lines) <= 5
+        # Ensure no raw snippet dump artifacts
+        assert "..." not in reply or len(reply) < 500
+
+
+def test_scheme_case_b_only_old_official_documents_found():
+    """
+    Scheme Test B: Only old official documents found.
+    - rejects stale documents from past years as 2026 rules
+    - safe fallback returned
+    - exact required sentence present
+    - stable scheme information summarized separately as general/background info
+    """
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
+
+    mock_ev = WebEvidence(
+        title="Standing Committee Report on PMFBY 2021",
+        url="https://pmfby.gov.in/report_2021.pdf",
+        domain="pmfby.gov.in",
+        content="Report on PMFBY implementation across states in 2020-21. Premium shares 1.5% and 2%.",
+        score=0.88,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2021-03-15"
+    )
+
+    with patch.object(web_search_service, "search", return_value=[mock_ev]):
+        res = process_chat_message("PMFBY ke latest rules 2026 kya hain?")
+        assert res["provider"] == "anti_hallucination_guard"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "stale_documents_rejected"
+        assert res["rejection_reason"] == "old_documents_rejected"
+        reply = res["reply"]
+        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "General/Background Information" in reply
+        assert "1.5%" in reply
+
+
+def test_scheme_case_c_official_page_with_no_publication_date():
+    """
+    Scheme Test C: Official page with no publication date.
+    - rejects undated page as unverified for 2026 rules
+    - safe fallback returned
+    - exact required sentence present
+    """
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
+
+    mock_ev = WebEvidence(
+        title="PMFBY Scheme Details",
+        url="https://pmfby.gov.in/details",
+        domain="pmfby.gov.in",
+        content="Pradhan Mantri Fasal Bima Yojana offers comprehensive risk insurance for notified crops across states.",
+        score=0.82,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date=None
+    )
+
+    with patch.object(web_search_service, "search", return_value=[mock_ev]):
+        res = process_chat_message("PMFBY ke latest rules 2026 kya hain?")
+        assert res["provider"] == "anti_hallucination_guard"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "undated_page_rejected"
+        assert res["rejection_reason"] == "undated_evidence_rejected"
+        reply = res["reply"]
+        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "General/Background Information" in reply
+
+
+def test_scheme_case_d_web_search_returns_generic_homepage_or_lms():
+    """
+    Scheme Test D: Web search returns generic PMFBY homepage or LMS training page.
+    - never infers policy change from homepage or LMS training
+    - safe fallback returned
+    - exact required sentence present
+    """
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service, WebEvidence, SourceTier, SourceType
+
+    mock_ev_lms = WebEvidence(
+        title="PMFBY Learning Management System | Farmer Training Courses",
+        url="https://pmfby.gov.in/lms/wim",
+        domain="pmfby.gov.in",
+        content="PMFBY LMS portal for insurance training and capacity building of bank officials.",
+        score=0.85,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date=None
+    )
+
+    with patch.object(web_search_service, "search", return_value=[mock_ev_lms]):
+        res = process_chat_message("PMFBY ke latest rules 2026 kya hain?")
+        assert res["provider"] == "anti_hallucination_guard"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "training_lms_excluded"
+        reply = res["reply"]
+        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "LMS" not in reply
+        assert "training" not in reply.lower()
+
+
+def test_scheme_case_e_provider_failure():
+    """
+    Scheme Test E: Web search provider failure / timeout.
+    - handles exception gracefully
+    - live_lookup_result = 'provider_error'
+    - safe fallback returned
+    - exact required sentence present
+    """
+    from app.services.chat_service import process_chat_message
+    from app.services.web_search_service import web_search_service
+
+    with patch.object(web_search_service, "search", side_effect=RuntimeError("Tavily gateway timeout")):
+        res = process_chat_message("PMFBY ke latest rules 2026 kya hain?")
+        assert res["provider"] == "anti_hallucination_guard"
+        assert res["live_lookup_attempted"] is True
+        assert res["live_lookup_provider"] == "tavily"
+        assert res["live_lookup_result"] == "provider_error"
+        assert "Provider exception" in (res.get("rejection_reason") or "")
+        reply = res["reply"]
+        assert "Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga." in reply
+        assert "General/Background Information" in reply
+
+
+def test_diagnostic_confidence_calibration_tomato_leaf_curl_followup():
+    """
+    Regression Test: Diagnostic Confidence Calibration for Symptom-Based Crop Disease Follow-Up.
+    1. Initial ambiguous tomato curl query:
+       'tamatar ke patte curl ho rahe hain, kya problem ho sakti hai?'
+       -> Must return differential diagnosis with multiple potential causes.
+    2. Follow-up symptom narrowing query:
+       'patte upar ki taraf mud rahe hain aur whitefly bhi dikh rahi hai'
+       -> Must narrow strongly toward ToLCV using calibrated language:
+          - 'ToLCV ka strong suspicion hai'
+          - 'ToLCV ki sambhavna kaafi badh jaati hai'
+          - 'Symptoms ToLCV se strongly match karte hain'
+       -> Must NOT claim definitive / laboratory-confirmed diagnosis.
+       -> Clearly separates:
+          - likely diagnosis
+          - what farmer should check next
+          - immediate low-risk management (rogueing, yellow sticky traps, neem oil, no chemical cures virus)
+          - when expert/lab confirmation is useful
+       -> Includes relevant ICAR-IIVR source line.
+    """
+    from app.services.chat_service import process_chat_message
+
+    # Turn 1: Ambiguous initial query
+    q1 = "tamatar ke patte curl ho rahe hain, kya problem ho sakti hai?"
+    res1 = process_chat_message(q1)
+    reply1 = res1.get("reply", "")
+
+    # Must present differential diagnosis across multiple causes
+    assert any(term in reply1 for term in ["causes", "कारण", "TLCV", "Leaf Curl Virus"])
+    assert any(term in reply1 for term in ["Physiological", "Mites", "Thrips", "Herbicide"])
+
+    # Turn 2: Follow-up symptom narrowing with history
+    history = [
+        {"role": "user", "content": q1},
+        {"role": "assistant", "content": reply1}
+    ]
+    q2 = "patte upar ki taraf mud rahe hain aur whitefly bhi dikh rahi hai"
+    res2 = process_chat_message(q2, history=history)
+    reply2 = res2.get("reply", "")
+
+    # 1. Calibrated language checks
+    assert "ToLCV" in reply2
+    assert "ToLCV ka strong suspicion hai" in reply2
+    assert "ToLCV ki sambhavna kaafi badh jaati hai" in reply2
+    assert "Symptoms ToLCV se strongly match karte hain" in reply2
+
+    # 2. Must NOT claim definitive / absolute confirmation without lab testing
+    assert "definitive confirmation nahi hai" in reply2
+    assert "Tomato me leaf curl disease aur whitefly control ke liye key advisory:" not in reply2
+
+    # 3. Clearly separated sections
+    assert "Likely Diagnosis:" in reply2
+    assert "What to check next:" in reply2
+    assert "Immediate Low-risk Management:" in reply2
+    assert "When Expert" in reply2
+
+    # 4. Preserved safety & agronomic guidance
+    assert "vector" in reply2.lower() or "vahak" in reply2.lower()
+    assert "rogue out" in reply2 or "ukhaadkar" in reply2
+    assert "Yellow Sticky Traps" in reply2
+    assert "Neem oil" in reply2 or "neem" in reply2.lower()
+    assert "cure" in reply2.lower() or "theek" in reply2.lower()
+
+    # 5. Relevant source line
+    assert "ICAR-IIVR" in reply2
+
+
+def test_crop_age_action_query_synthesis_wheat_cri():
+    """
+    Regression Test: Single-turn crop-age + action-query synthesis.
+    A. 'mere gehun ko 22 din hue hain, ab kya karu?'
+       -> identifies CRI stage, first irrigation due, waterlogging prevention, urea top-dressing.
+    B. 'wheat 22 days old hai, next kya karna chahiye?'
+       -> first sentence directly answers 'ab kya karu?'.
+    C. nearby age outside CRI range:
+       - 12 days: explains irrigation not yet due, wait for 20-25 days CRI stage.
+       - 45 days: explains tillering stage 2nd irrigation & final urea split.
+    D. no raw 'A:' / FAQ fragments appear in the final reply.
+    """
+    import re
+    from app.services.chat_service import process_chat_message
+
+    # Test A: "mere gehun ko 22 din hue hain, ab kya karu?"
+    res_a = process_chat_message("mere gehun ko 22 din hue hain, ab kya karu?")
+    reply_a = res_a.get("reply", "")
+
+    # First sentence directly answers "ab kya karu?" and identifies CRI stage
+    assert "CRI" in reply_a
+    assert "sinchai" in reply_a.lower() or "irrigation" in reply_a.lower()
+    assert "First Irrigation" in reply_a or "पहली सिंचाई" in reply_a
+    assert "Urea" in reply_a or "यूरिया" in reply_a
+    assert "Waterlogging" in reply_a or "जलभराव" in reply_a or "suffocate" in reply_a
+    assert "ICAR-IIWBR" in reply_a
+
+    # Test B: "wheat 22 days old hai, next kya karna chahiye?"
+    res_b = process_chat_message("wheat 22 days old hai, next kya karna chahiye?")
+    reply_b = res_b.get("reply", "")
+    assert "CRI" in reply_b
+    assert "sinchai" in reply_b.lower() or "irrigation" in reply_b.lower()
+    assert "ICAR-IIWBR" in reply_b
+
+    # Test C: Nearby age outside CRI range (12 days & 45 days)
+    # C1: 12 days -> irrigation NOT due yet, wait for CRI
+    res_c1 = process_chat_message("mere gehun ko 12 din hue hain, ab kya karu?")
+    reply_c1 = res_c1.get("reply", "")
+    assert "zaroorat nahi hai" in reply_c1 or "not yet due" in reply_c1 or "आवश्यकता नहीं" in reply_c1
+    assert "20–25" in reply_c1 or "20-25" in reply_c1
+
+    # C2: 45 days -> Tillering stage, second irrigation
+    res_c2 = process_chat_message("wheat 45 days old hai, next kya karna chahiye?")
+    reply_c2 = res_c2.get("reply", "")
+    assert "Tillering" in reply_c2 or "tillering" in reply_c2.lower() or "कल्ले" in reply_c2
+    assert "Second Irrigation" in reply_c2 or "second irrigation" in reply_c2.lower() or "दूसरी सिंचाई" in reply_c2
+
+    # Test D: No raw "A:" / FAQ fragments in any replies
+    for rep in [reply_a, reply_b, reply_c1, reply_c2]:
+        assert not re.search(r"^[-•*\s]*(?:A\s*:|Answer\s*:|उत्तर\s*:)", rep, re.MULTILINE | re.I)
+        assert not re.search(r"^[-•*\s]*(?:Q\s*:|Question\s*:|प्रश्न\s*:)", rep, re.MULTILINE | re.I)
+        assert "A: Due to" not in rep
+        assert "A: Only if" not in rep
+
+
+
 
 

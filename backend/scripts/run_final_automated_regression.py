@@ -25,12 +25,13 @@ test_files = [
     "backend/tests/test_chat_rag.py",
     "backend/tests/test_smart_rag_router.py",
     "backend/tests/test_web_search_fallback.py",
-    "backend/tests/test_coderabbit_security_web_fixes.py"
+    "backend/tests/test_coderabbit_security_web_fixes.py",
+    "backend/tests/test_manual_batch1_fixes.py"
 ]
 p_start = time.time()
-res_pytest = subprocess.run([sys.executable, "-m", "pytest"] + test_files + ["-q"], capture_output=True, text=True, encoding="utf-8")
+res_pytest = subprocess.run([sys.executable, "-m", "pytest"] + test_files + ["-q"], capture_output=True, text=True, encoding="utf-8", errors="replace")
 p_runtime = time.time() - p_start
-pytest_output = res_pytest.stdout + "\n" + res_pytest.stderr
+pytest_output = (res_pytest.stdout or "") + "\n" + (res_pytest.stderr or "")
 print(pytest_output.strip().split("\n")[-1])
 
 passed_match = re.search(r"(\d+) passed", pytest_output)

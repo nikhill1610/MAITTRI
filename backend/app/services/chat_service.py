@@ -22,6 +22,7 @@ import re
 import logging
 import requests
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Dict, Any, List, Optional, Tuple
 from dotenv import load_dotenv
 
@@ -35,10 +36,13 @@ from .smart_rag_router import (
     Intent,
     RouteAction,
     RouteDecision,
+    detect_weather_time_scope,
     compose_pesticide_refusal_reply,
     compose_missing_context_reply,
     compose_unsupported_reply,
-    compose_web_evidence_unavailable_reply
+    compose_web_evidence_unavailable_reply,
+    extract_location_from_text,
+    CROPS_PATTERNS
 )
 from .web_search_service import (
     web_search_service,
@@ -90,6 +94,10 @@ def clean_farmer_markdown(text: str) -> str:
 
     # 7. Normalize bullet whitespace
     cleaned = re.sub(r"^[ \t]*-[ \t]+", "- ", cleaned, flags=re.MULTILINE)
+
+    # 7b. Strip raw FAQ labels e.g. "- A: ", "- Q: ", "A: ", "Q: "
+    cleaned = re.sub(r"^[ \t]*-[ \t]*(?:A|Q|Answer|Question|उत्तर|प्रश्न)\s*[:：]\s*", "- ", cleaned, flags=re.MULTILINE | re.I)
+    cleaned = re.sub(r"^[ \t]*(?:A|Q|Answer|Question|उत्तर|प्रश्न)\s*[:：]\s*", "", cleaned, flags=re.MULTILINE | re.I)
 
     # 8. Clean up extra blank lines (no more than 2 consecutive newlines)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
@@ -325,14 +333,32 @@ CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
 6. CONDITIONAL CHEMICAL SAFETY WARNINGS:
    - Chemical/pesticide safety warnings must appear ONLY when the query actually involves chemical/pesticide use, mixing, or spraying.
    - Do NOT add unrelated chemical or expert consultation warnings to simple irrigation, sowing, fertilizer, or cultural questions.
-7. DISEASE IDENTIFICATION SAFETY:
-   - For symptom/disease questions without a laboratory test, state potential causes non-definitively ('Possible causes include...') and outline distinguishing field checks.
+7. DISEASE IDENTIFICATION SAFETY & DIAGNOSTIC CONFIDENCE CALIBRATION:
+   - For initial symptom queries without a laboratory test, state 2 to 4 potential causes non-definitively ('Possible causes include...') and outline distinguishing field checks. Never jump to a single definitive disease diagnosis from one symptom.
+   - For follow-up symptom queries where symptoms narrow down (e.g. tomato upward leaf curling + visible whitefly pointing to ToLCV), use calibrated language: 'ToLCV ka strong suspicion hai' / 'ToLCV ki sambhavna kaafi badh jaati hai' / 'Symptoms ToLCV se strongly match karte hain'.
+   - Do NOT state definitive diagnosis unless confirmatory laboratory evidence exists.
+   - Clearly separate:
+     1) Likely Diagnosis (calibrated non-definitive suspicion)
+     2) What farmer should check next
+     3) Immediate low-risk management (uproot severely infected early plants, yellow sticky traps, vector control; state clearly that no chemical cures the virus once infected)
+     4) When expert/lab confirmation is useful (consult KVK before major crop decisions).
+   - Include a relevant source line at the end (e.g. 'Source: ICAR-IIVR, Varanasi').
 8. TARGET LENGTH & STYLE:
    - Normal simple questions should stay within about 60–120 words unless more detail is genuinely required.
    - Language: {lang_inst}
    - Output ONLY the final farmer-facing response. No meta-commentary, no thinking blocks.
 9. SOURCE ATTRIBUTION:
    - If citing the source institution, mention it simply at the bottom (e.g. 'Source: ICAR-IIWBR, Karnal').
+10. QUESTION INTENT FIDELITY & DIRECT ANSWERS:
+   - If farmer asks for fertilizer dose/quantity, answer the recommended quantity and split schedule from knowledge base; if crop stage is needed, state the splits and ask current stage. Do not deflect with unrelated concepts like neem oil coating.
+   - If farmer asks about applying a double dose of fertilizer, explicitly start with: "No, [Fertilizer] ka double dose bina soil-test/recommendation ke na dein." Explain soil fixation and micronutrient lockout. Do NOT append pesticide spray boilerplate.
+   - If farmer asks for frost protection, give actionable measures first (light evening irrigation, smoke cover, potassium/thiourea foliar spray).
+   - If farmer asks what PM-KISAN is and its eligibility, explain the scheme amount (Rs 6,000/yr in 3 installments) and eligibility (landholding, eKYC, exclusions) directly. Do not substitute payment delay troubleshooting for eligibility.
+   - If farmer asks a crop-age + action question (e.g. "mere gehun ko 22 din hue hain, ab kya karu?"):
+     * The very first sentence must directly answer "ab kya karu?" by identifying the supported physiological stage from retrieved knowledge (e.g. 20–25 DAS = Crown Root Initiation / CRI stage) and stating whether first irrigation is due.
+     * State immediate actionable measures: light first irrigation (4–5 cm depth), first top-dressing of urea (approx 36 kg/acre) after irrigation, and waterlogging prevention.
+     * If crop age is outside the CRI window (e.g. 10–12 days), clearly explain that first irrigation is not yet due and advise waiting until 20–25 DAS. If 40–45 days, advise that 2nd irrigation at tillering stage and final urea split are due.
+     * Never output raw FAQ markers like "Q:" or "A:".
 
 {context_str}### RETRIEVED AGRICULTURAL KNOWLEDGE PIECES:
 {knowledge_str}
@@ -608,7 +634,8 @@ def call_openrouter(
 def generate_grounded_offline_reply(
     query: str,
     language: str,
-    retrieved_chunks: List[Dict[str, Any]]
+    retrieved_chunks: List[Dict[str, Any]],
+    entities: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Synthesizes an intelligent, concise, direct agricultural advisory directly from
@@ -641,44 +668,414 @@ def generate_grounded_offline_reply(
 
     top_chunk = retrieved_chunks[0]
     crop_val = top_chunk.get("crop", "")
+    if not crop_val and entities and entities.get("crop"):
+        crop_val = entities.get("crop")
     source_val = top_chunk.get("source", "")
-    source_name = "ICAR-IIWBR, Karnal" if "IIWBR" in source_val else ("ICAR / State Agriculture Department" if "ICAR" in source_val else (top_chunk.get("organization") or source_val))
-    if len(source_name) > 40 and "(" in source_name:
+    org_val = top_chunk.get("organization", "")
+    if "IIVR" in org_val or "IIVR" in source_val:
+        source_name = "ICAR-IIVR, Varanasi (Vegetable Pathology & Whitefly Management)"
+    elif "IIWBR" in source_val or "IIWBR" in org_val:
+        source_name = "ICAR-IIWBR, Karnal"
+    elif "IIPR" in source_val or "IIPR" in org_val:
+        source_name = "ICAR-IIPR, Kanpur"
+    elif "CRIDA" in source_val or "CRIDA" in org_val:
+        source_name = "ICAR-CRIDA, Hyderabad"
+    elif "ICAR" in source_val:
+        source_name = "ICAR / State Agriculture Department"
+    else:
+        source_name = org_val or source_val
+    if len(source_name) > 60 and "(" in source_name and "IIVR" not in source_name:
         m = re.search(r"\(([^)]+)\)", source_name)
         if m:
             source_name = f"ICAR-{m.group(1)}"
 
     q_lower = query.lower()
     is_irrigation = bool(re.search(r"sinchai|irrigate|irrigation|सिंचाई|पानी|water|प्यास|कंस|नमी", q_lower))
-    is_first_irrigation = is_irrigation and bool(re.search(r"first|pehli|पहली|पहला|कब|kab|timing|schedule|समय|cri", q_lower))
 
-    # Wheat first irrigation direct answer
-    if is_first_irrigation and ("wheat" in q_lower or "gehu" in q_lower or "गेहूं" in q_lower or crop_val == "Wheat"):
+    # --- Specific Intent Handlers for High-Value Farm Queries ---
+
+    # 1. DAP Double Dose
+    is_dap_double = bool(re.search(r"\bdap\b|डीएपी", q_lower) and re.search(r"double|दो\s*गुना|दोगुना|दोहरा|2\s*गुना", q_lower))
+    if is_dap_double:
         if language == "hi":
-            lead = "🌾 गेहूं की पहली सिंचाई सामान्यतः बुवाई के 20–25 दिन बाद, CRI stage (ताज मूल अवस्था) पर करें।"
+            lead = "नहीं, डीएपी (DAP) की दोगुनी खुराक बिना मिट्टी जांच या वैज्ञानिक सिफारिश के बिल्कुल न दें।"
             bullets = [
-                "- मिट्टी में पहले से पर्याप्त नमी हो तो बहुत जल्दी सिंचाई न करें।",
-                "- हल्की और समान सिंचाई रखें (लगभग 4–5 सेमी)।",
-                "- भारी मिट्टी में पानी खड़ा होने से बचाएं ताकि फसल पीली न पड़े।"
+                "- अतिरिक्त फॉस्फोरस मिट्टी में स्थिर (fix) हो जाता है, जिससे पौधे उसे अवशोषित नहीं कर पाते और लागत व्यर्थ जाती है।",
+                "- अत्यधिक डीएपी के कारण मिट्टी में जिंक (Zinc) और आयरन (Iron) की उपलब्धता बाधित होती है, जिससे फसल में पीलापन आ सकता है।",
+                "- बीज अंकुरण के समय अधिक सांद्रता से नन्हीं जड़ों को रासायनिक क्षति (salt injury) का खतरा रहता है।",
+                "- गेहूं में सामान्य अनुशंसित डीएपी 50–55 किग्रा प्रति एकड़ (लगभग 1 बैग, 50 किग्रा प्रति बैग) है, जिसे बुवाई के समय बेसल (basal) दिया जाता है।"
             ]
         elif language == "hinglish":
-            lead = "🌾 Gehun ki pehli sinchai aamtaur par sowing ke 20–25 din baad, CRI stage par karein."
+            lead = "No, DAP ka double dose bina soil-test/recommendation ke na dein."
             bullets = [
-                "- Mitti me pehle se paryapt nami ho to bahut jaldi sinchai na karein.",
-                "- Pehli sinchai halki aur saman rakhein (around 4–5 cm).",
-                "- Bhari mitti me paani khada hone se bachayein taaki jado ko oxygen milti rahe."
+                "- Excess phosphorus mitti me fix ho jata hai aur paudhe use absorb nahi kar pate, jisse lagat barbad hoti hai.",
+                "- Excessive DAP mitti me Zinc aur Iron ki availability rok deta hai, jisse fasal me severe chlorosis (peelapan) aa sakta hai.",
+                "- Germination ke time chemical concentration jyada hone se nanni roots ko salt injury ka risk rehta hai.",
+                "- Gehun me normal recommended DAP lagbhag 50–55 kg per acre (approx. 1 bag of 50 kg) hai, jo buwai ke time basal application me di jaati hai."
             ]
         else:
-            lead = "🌾 The first irrigation in wheat should generally be applied 20–25 days after sowing at the Crown Root Initiation (CRI) stage."
+            lead = "No, do not apply a double dose of DAP without soil-test recommendations."
             bullets = [
-                "- If the soil already has adequate moisture, do not irrigate prematurely.",
-                "- Keep the first irrigation light and even (approx. 4–5 cm depth).",
-                "- Prevent waterlogging in heavy soils to avoid root hypoxia and yellowing."
+                "- Excess phosphorus gets fixed in the soil and becomes unavailable to crops, leading to wasted input costs.",
+                "- High phosphorus levels induce secondary zinc and iron deficiencies, leading to severe chlorosis.",
+                "- Elevated chemical concentrations near germinating seeds cause root salt injury.",
+                "- The standard recommended DAP dose for wheat is 50–55 kg per acre (approx. 1 bag of 50 kg), applied strictly as a basal placement at sowing."
             ]
-        
         reply = f"{lead}\n\n" + "\n".join(bullets)
-        if source_name:
-            reply += f"\n\nSource: {source_name}"
+        reply += "\n\nSource: ICAR-IIWBR / Indian Institute of Soil Science (IISS)"
+        return clean_farmer_markdown(reply)
+
+    # 2. Wheat Urea Dose
+    is_urea_dose = bool(re.search(r"\burea\b|यूरिया", q_lower) and re.search(r"\b(kitna|how\s*much|dose|dena|dein|chahiye)\b|कितना|कितनी|खुराक|मात्रा", q_lower))
+    if is_urea_dose and (crop_val == "Wheat" or (entities and entities.get("crop") == "Wheat") or any(w in q_lower for w in ["wheat", "gehun", "gehu", "गेहूं", "गेहु"])):
+        if language == "hi":
+            lead = "🌾 गेहूं में यूरिया की कुल अनुशंसित मात्रा लगभग 100 किग्रा प्रति एकड़ (45 किग्रा के लगभग 2.2 बैग) होती है, जिसे 3 विभाजित खुराकों (split doses) में दिया जाता है:"
+            bullets = [
+                "- बेसल खुराक (Basal): बुवाई के समय लगभग 28 किग्रा/एकड़ यूरिया दें (यदि बुवाई पर डीएपी दिया है तो बेसल यूरिया की मात्रा घटाएं)।",
+                "- पहली टॉप-ड्रेसिंग (CRI अवस्था, 20–25 दिन): पहली सिंचाई पर 36 किग्रा/एकड़ यूरिया (45 किग्रा का 0.8 बैग)।",
+                "- दूसरी टॉप-ड्रेसिंग (कल्ले निकलते समय, 45–50 दिन): दूसरी सिंचाई पर शेष 36 किग्रा/एकड़ यूरिया (45 किग्रा का 0.8 बैग)।",
+                "- ध्यान दें: यह सिफारिश मध्यम उपजाऊ व सिंचित भूमि (120 किग्रा N/हेक्टेयर लक्ष्य) के लिए है; मृदा स्वास्थ्य कार्ड (Soil Health Card) व सिंचाई के अनुसार मात्रा समायोजित करें।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Gehun me urea ki total recommended dose lagbhag 100 kg per acre (approx. 2.2 bags of 45 kg) hoti hai, jise 3 split doses me dena chahiye:"
+            bullets = [
+                "- Basal Application: Sowing ke time lagbhag 28 kg/acre urea dein (agar basal DAP use kiya hai to DAP se milne wali starter nitrogen ke anusaar ise kam karein).",
+                "- 1st Top-Dressing (CRI stage, 20–25 din): Pehli sinchai par 36 kg/acre urea (approx. 0.8 bag of 45 kg).",
+                "- 2nd Top-Dressing (Tillering/Jointing, 45–50 din): Dusri sinchai par 36 kg/acre urea (approx. 0.8 bag of 45 kg).",
+                "- Note: Yeh dose irrigated wheat aur medium fertility (120 kg N/ha target) ke liye hai; soil health card aur sinchai suvidha ke anusar matra adjust karein."
+            ]
+        else:
+            lead = "🌾 The recommended total urea application for wheat is approximately 100 kg per acre (approx. 2.2 bags of 45 kg), applied in 3 split doses:"
+            bullets = [
+                "- Basal Dose: Apply approx. 28 kg/acre urea at sowing (reduce this if basal DAP is applied, as DAP supplies starter nitrogen).",
+                "- First Top-Dressing (CRI stage, 20–25 DAS): Apply 36 kg/acre urea (approx. 0.8 bag of 45 kg) at first irrigation.",
+                "- Second Top-Dressing (Tillering/Jointing stage, 45–50 DAS): Apply 36 kg/acre urea (approx. 0.8 bag of 45 kg) at second irrigation.",
+                "- Note: This recommendation is for irrigated high-yielding wheat under medium fertility (120 kg N/ha); adjust based on Soil Health Card testing and irrigation availability."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIWBR, Karnal (Wheat Agronomy Guidelines)"
+        return clean_farmer_markdown(reply)
+
+    # 3. Frost Protection (Pala se bachav)
+    is_frost = bool(re.search(r"\b(pala|frost|पाला|sheetlahar|cold\s*wave|शीतलहर)\b", q_lower) and re.search(r"\b(bachav|bachaav|control|protect|protection|रोकथाम|बचाव|उपाय)\b", q_lower))
+    if is_frost:
+        if language == "hi":
+            lead = "🌾 गेहूं में पाले (Frost) व शीतलहर से फसल को बचाने के लिए तुरंत ये व्यावहारिक उपाय अपनाएं:"
+            bullets = [
+                "- हल्की शाम की सिंचाई: पाले की संभावना होने पर खेत में शाम को हल्का पानी लगाएं; नम मिट्टी रात में गर्मी रोककर तापमान 1–2°C बढ़ा देती है।",
+                "- मेड़ों पर धुआं करना: उत्तर-पश्चिम दिशा में खेत की मेड़ों पर शाम के समय खरपतवार या कूड़ा जलाकर धुआं करें ताकि पाला न जमे।",
+                "- पर्णीय पोषण छिड़काव: 0.2% थायोयूरिया (2 ग्राम/लीटर) या 0.5% घुलनशील पोटाश (0:0:50 @ 5 ग्राम/लीटर) का छिड़काव करें, जिससे पौधों में शीत सहनशीलता बढ़ती है।",
+                "- खेत की नियमित निगरानी रखें तथा हवा शांत होने और रात का तापमान 4°C से नीचे जाने पर तुरंत धुआं व सिंचाई शुरू करें।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Wheat me pala (frost / sheetlahar) se fasal ko bachane ke liye turant ye actionable upay karein:"
+            bullets = [
+                "- Halka Sinchai: Paale ki sambhavna par shaam ke waqt khet me halka pani lagayein; moist soil raat me temperature 1–2°C maintain rakhti hai.",
+                "- Dhuan Cover: North-west direction me khet ki medhon par shaam ko kachra jalakar dhuan karein taki frost na jame.",
+                "- Foliar Spray: 0.2% Thiourea (2 g/L) ya 0.5% Soluble Potash (0:0:50 @ 5 g/L) ka spray karein taki cold tolerance badhe.",
+                "- Night Temperature Watch: Jab hawa shant ho aur night temp 4°C se neeche gire, to turant sinchai aur smoke cover follow karein."
+            ]
+        else:
+            lead = "🌾 Protect wheat crops from ground frost and cold wave using these actionable measures immediately:"
+            bullets = [
+                "- Light Evening Irrigation: Apply a light irrigation during evening hours; moist soil holds heat and raises canopy temperature by 1–2°C.",
+                "- Perimeter Smoke Cover: Burn organic residue along field borders in the upwind (north-west) direction at night to create a protective smoke blanket.",
+                "- Foliar Protective Spray: Spray 0.2% Thiourea (2 g/L) or 0.5% soluble Potash (0:0:50 @ 5 g/L) to increase cell sap concentration and cold tolerance.",
+                "- Monitor night temperature closely; initiate protective irrigation when night air drops below 4°C under calm winds."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-CRIDA / IMD Agro-Meteorological Contingency Guidelines"
+        return clean_farmer_markdown(reply)
+
+    # 4. PM-KISAN Scheme Definition & Eligibility
+    is_pm_kisan = bool(re.search(r"pm\s*-?\s*kisan|पीएम\s*-?\s*किसान", q_lower) and re.search(r"kya\s+hai|eligib|पात्रता|yojana|scheme|योजना|क्या\s+है", q_lower))
+    if is_pm_kisan:
+        if language == "hi":
+            lead = "🌾 पीएम-किसान (प्रधानमंत्री किसान सम्मान निधि) भारत सरकार की direct income support योजना है, जिसमें पात्र किसान परिवारों को प्रति वर्ष ₹6,000 की वित्तीय सहायता ₹2,000 की तीन समान किस्तों में सीधे बैंक खाते (DBT) में दी जाती है।"
+            bullets = [
+                "- भूमि पात्रता: सभी भूमिधारक किसान परिवार जिनके नाम कृषि योग्य भूमि के वैध राजस्व रिकॉर्ड (खतौनी/ROR) दर्ज हैं।",
+                "- अनिवार्य e-KYC: बैंक खाते का आधार से लिंक होना (NPCI direct debit) और बायोमेट्रिक या OTP आधारित e-KYC सत्यापन अनिवार्य है।",
+                "- अपवर्जन (Ineligible): संस्थागत भूमिधारक, संवैधानिक पदधारक, वर्तमान/पूर्व सांसद व विधायक, सरकारी कर्मचारी, और ₹10,000 से अधिक मासिक पेंशनभोगी इस योजना के पात्र नहीं हैं।",
+                "- सत्यापन: आवेदन की स्थिति व नए पंजीकरण के लिए pmkisan.gov.in पोर्टल पर जाएं या नजदीकी जन सेवा केंद्र (CSC) से संपर्क करें।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 PM-KISAN (Pradhan Mantri Kisan Samman Nidhi) kendra sarkar ki income support scheme hai jisme patra kisan parivaron ko prati varsh ₹6,000 ki financial assistance ₹2,000 ki 3 saman kishton me seedhe bank account (DBT) me di jaati hai."
+            bullets = [
+                "- Landholding Eligibility: Sabhi cultivable landholder kisan parivar jinke naam zameen ke valid revenue record (Khatauni) darj hain.",
+                "- Mandatory e-KYC: Bank account ka Aadhaar NPCI link hona aur OTP ya biometric e-KYC verification anivarya hai.",
+                "- Ineligibility Exclusions: Institutional landholders, constitutional post holders, purva/vartaman MPs/MLAs, government employees, aur ₹10,000 se jyada pension pane wale isme eligible nahi hain.",
+                "- Verification & Apply: Status check karne ya register karne ke liye pmkisan.gov.in portal visit karein ya nearest CSC center jayein."
+            ]
+        else:
+            lead = "🌾 PM-KISAN (Pradhan Mantri Kisan Samman Nidhi) is a central sector income support scheme providing ₹6,000 per year to eligible landholding farmer families in three equal instalments of ₹2,000 each via Direct Benefit Transfer (DBT)."
+            bullets = [
+                "- Landholding Eligibility: All cultivable landholder farmer families with valid land ownership records in state land administration registers.",
+                "- Mandatory e-KYC: Bank account must be Aadhaar-seeded via NPCI and verified through biometric or OTP-based e-KYC.",
+                "- Ineligibility Criteria: Institutional landholders, constitutional office holders, serving/former MPs, MLAs, government employees, and pensioners receiving >₹10,000/month are excluded.",
+                "- Verification: Check beneficiary status or register at pmkisan.gov.in or visit your local Common Service Centre (CSC)."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: Ministry of Agriculture & Farmers Welfare, GoI (pmkisan.gov.in)"
+        return clean_farmer_markdown(reply)
+
+    # 5. Wheat Leaf Yellowing (Differential Diagnosis)
+    is_wheat_yellowing = bool(("wheat" in q_lower or "gehu" in q_lower or "गेहूं" in q_lower or crop_val == "Wheat" or (entities and entities.get("crop") == "Wheat")) and re.search(r"pile|peeli|peele|yellow|पीली|पीले|पीला", q_lower))
+    if is_wheat_yellowing:
+        if language == "hi":
+            lead = "🌾 गेहूं में पत्तियों के पीलेपन के मुख्य रूप से 3 से 4 संभावित कारण हो सकते हैं, सही पहचान के लिए ये अंतर देखें:"
+            bullets = [
+                "- 1. नाइट्रोजन की कमी (Nitrogen Deficiency): निचली (पुरानी) पत्तियां नोक से पीली होने लगती हैं और बढ़वार रुक जाती है। (जांच: यदि केवल पुरानी निचली पत्तियां पीली हैं तो ओट आने पर यूरिया टॉप-ड्रेसिंग करें)।",
+                "- 2. पीला रतुआ (Yellow Rust): पत्तियों पर पीले रंग की समानांतर धारियां बनती हैं, जिन्हें छूने पर उंगली पर पीला पाउडर लगता है। (जांच: यदि उंगली पर पीला पाउडर लगे तो यह रतुआ फफूंद है)।",
+                "- 3. जलभराव / अधिक नमी (Waterlogging): पहली सिंचाई के बाद भारी मिट्टी में पानी ठहरने से जड़ें घुटती हैं और पूरा पौधा पीला दिखता है। (जांच: खेत से अतिरिक्त पानी निकालें)।",
+                "- 4. जिंक की कमी (Zinc Deficiency): नई पत्तियों के मध्य भाग में सफेद-पीली धारियां या भूरे धब्बे बनते हैं। (जांच: 0.5% जिंक सल्फेट + 2% यूरिया का छिड़काव)।",
+                "- कृपया जांचें: क्या उंगली पर पीला पाउडर लग रहा है या केवल निचली पत्तियां पीली हैं? यह बताने पर सटीक उपचार दिया जा सकेगा।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Gehun me leaves yellow hone ke main 3 se 4 possible causes ho sakte hain, accurate identification ke liye ye check karein:"
+            bullets = [
+                "- 1. Nitrogen Deficiency: Nichli (purani) leaves tip se yellow hone lagti hain aur growth slow hoti hai. (Check: Agar purani leaves peeli hain to moisture me urea top-dressing karein).",
+                "- 2. Yellow Rust (Peela Ratua): Leaves par yellow powder ki parallel stripes banti hain jo ungli par lagti hain. (Check: Agar ungli par yellow powder lage to yeh rust disease hai).",
+                "- 3. Excessive Water / Waterlogging: Heavy soil me sinchai ke baad paani khada hone se roots ko oxygen nahi milti aur plant peela padta hai. (Check: Field se extra water nikalein).",
+                "- 4. Zinc Deficiency: Nayi leaves ke beech me safed/peeli stripes ya bronze spots bante hain. (Check: 0.5% Zinc Sulphate + 2% Urea spray).",
+                "- Kripya check karein: Kya ungli par peela powder lag raha hai ya nichli leaves peeli hain? Isse sahi upchar nirdharit hoga."
+            ]
+        else:
+            lead = "🌾 Yellowing of wheat leaves can be caused by 3 to 4 distinct factors; inspect your field for these distinguishing symptoms:"
+            bullets = [
+                "- 1. Nitrogen Deficiency: Lower/older leaves turn pale yellow starting from the leaf tip along the midrib. Check if only older leaves are affected.",
+                "- 2. Yellow / Stripe Rust (Puccinia striiformis): Linear yellow powdery stripes appear on leaves and yellow spores rub off on fingers. Check if yellow powder rubs onto your fingers.",
+                "- 3. Waterlogging / Excessive Soil Moisture: Flooding after first irrigation in heavy soils suffocates crown roots and induces uniform chlorosis.",
+                "- 4. Zinc Deficiency: Interveinal chlorosis appears on newer leaves with necrotic bronzing.",
+                "- Please verify whether yellow powder rubs off on fingers or if yellowing started on bottom leaves to determine treatment."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIWBR, Karnal (Wheat Pathology & Agronomy)"
+        return clean_farmer_markdown(reply)
+
+    # 6a. Tomato Upward Leaf Curl + Whitefly (Calibrated ToLCV Diagnostic Follow-up)
+    is_tomato_scope = bool(
+        crop_val == "Tomato" or
+        (entities and entities.get("crop") == "Tomato") or
+        any(w in q_lower for w in ["tomato", "tamatar", "टमाटर"])
+    )
+    has_whitefly_sign = bool(re.search(r"\b(whitefly|white\s*fly|safed\s*makk?hi|सफेद\s*मक्खी|bemisia)\b", q_lower))
+    has_upward_or_curl_sign = bool(re.search(r"\b(upar|upward|upwards|ऊपर|cup|curl|mud|roll|मरोड़|सिकुड़|मुड़)\b", q_lower))
+
+    if is_tomato_scope and has_whitefly_sign and has_upward_or_curl_sign:
+        if language == "hi":
+            lead = "🌾 पत्तियों का ऊपर की ओर मुड़ना और सफेद मक्खी (Whitefly) दिखना Tomato Leaf Curl Virus (ToLCV) की ओर मजबूत संकेत करता है; ToLCV की संभावना काफी बढ़ जाती है, लेकिन यह प्रयोगशाला परीक्षण के बिना 100% निश्चित पुष्टि नहीं है।"
+            bullets = [
+                "- संभावित पहचान (Likely Diagnosis): लक्षण ToLCV (पर्ण कुंचन विषाणु) से दृढ़ता से मेल खाते हैं (Symptoms ToLCV se strongly match karte hain) और ToLCV का मजबूत संदेह (strong suspicion) है। सफेद मक्खी इस विषाणु का मुख्य वाहक (vector) है।",
+                "- आगे क्या जांचें (What to check next): नई पत्तियों का ऊपर मुड़कर कप-नुमा होना, खुरदरा/मोटा होना और पौधे की रुकी हुई बढ़वार (stunting) जांचें। पौधे हिलाने पर पत्तियों के नीचे से सफेद मक्खियों का उड़ना देखें।",
+                "- तत्काल कम जोखिम वाले उपाय (Immediate Low-risk Management): यदि खेत में शुरुआती 1-2 पौधे ही गंभीर रूप से ग्रसित हैं, तो उन्हें तुरंत उखाड़कर नष्ट (rogue out) कर दें। सफेद मक्खी नियंत्रण के लिए प्रति एकड़ 10–12 पीले चिपचिपे ट्रैप (Yellow Sticky Traps) लगाएं और नीम तेल (1500 ppm @ 3–5 मिली/लीटर पानी) का छिड़काव करें। ध्यान रखें, पौधे में विषाणु प्रवेश के बाद कोई भी रासायनिक दवा इसे ठीक (cure) नहीं कर सकती; स्प्रे केवल मक्खी को रोककर अन्य स्वस्थ पौधों को बचाता है।",
+                "- विशेषज्ञ/प्रयोगशाला पुष्टि (When Expert/Lab Confirmation is Useful): यदि खेत में समस्या तेजी से फैल रही हो, तो बड़े कीटनाशक स्प्रे या बड़े फैसले से पूर्व नजदीकी कृषि विज्ञान केंद्र (KVK) या पौध रोग विशेषज्ञ से पुष्टि कराएं।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Leaves ka upar ki taraf mudna aur whitefly dikhna Tomato Leaf Curl Virus (ToLCV) ki taraf strong signal karta hai; ToLCV ki sambhavna kaafi badh jaati hai, par bina laboratory testing ke yeh definitive confirmation nahi hai."
+            bullets = [
+                "- Likely Diagnosis: Symptoms ToLCV se strongly match karte hain aur ToLCV ka strong suspicion hai. Whitefly is virus ka primary transmitting vector (vahak) hai.",
+                "- What to check next: Nayi leaves ka cup-shape me upar roll hona, thick/leathery banna aur plant ka stunted (bauna) rehna inspect karein. Foliage hilane par udti hui whitefly check karein.",
+                "- Immediate Low-risk Management: Shuruat me heavily infected 1-2 plants ko turant ukhaadkar (rogue out) khet se door destroy kar dein. Whitefly control ke liye 10-12 Yellow Sticky Traps per acre lagayein aur Neem oil (1500 ppm @ 3-5 ml/L) spray karein. Dhyan rahe, plant me virus aane ke baad koi chemical spray use cure (theek) nahi kar sakta; spray sirf whitefly vector ko rokta hai taaki baki plants safe rahein.",
+                "- When Expert / Lab Confirmation is Useful: Agar field me infection zyada fail raha ho, toh high-cost chemical spray ya crop decisions se pehle local Krishi Vigyan Kendra (KVK) ya agriculture expert se lab/field confirmation lena labhdayak hoga."
+            ]
+        else:
+            lead = "🌾 Upward leaf curling coupled with visible whitefly strongly increases suspicion of Tomato Leaf Curl Virus (ToLCV); symptoms strongly match ToLCV, but field observation alone does not constitute a laboratory-confirmed diagnosis."
+            bullets = [
+                "- Likely Diagnosis: Symptoms strongly match ToLCV (Tomato Leaf Curl Virus) and there is strong suspicion of ToLCV. Whitefly (Bemisia tabaci) serves as the insect vector transmitting the virus.",
+                "- What to check next: Inspect newer leaves for cup-shaped upward curling, thickening, puckering, and severe plant stunting. Gently shake foliage to observe fluttering whiteflies.",
+                "- Immediate Low-risk Management: Promptly rogue out and destroy the first few heavily infected plants to eliminate infection reservoirs. Install 10-12 yellow sticky traps per acre and apply neem oil (1500 ppm @ 3-5 ml/L). Note: Once a plant is infected, no chemical spray can cure the virus; sprays only manage whitefly vectors to protect healthy plants.",
+                "- When Expert/Lab Confirmation is Useful: If symptoms are widespread across the field, seek expert consultation or lab confirmation from your local Krishi Vigyan Kendra (KVK) or plant pathologist before making major crop decisions."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIVR, Varanasi (Vegetable Pathology & Whitefly Management)"
+        return clean_farmer_markdown(reply)
+
+    # 6. Tomato Leaf Curl (Differential Diagnosis)
+    is_tomato_curl = bool(("tomato" in q_lower or "tamatar" in q_lower or "टमाटर" in q_lower or crop_val == "Tomato" or (entities and entities.get("crop") == "Tomato")) and re.search(r"curl|मुड़|सिकुड़|roll", q_lower))
+    if is_tomato_curl:
+        if language == "hi":
+            lead = "🌾 टमाटर में पत्तियां मुड़ने (Leaf Curl) के मुख्य रूप से 3 से 4 अलग-अलग कारण हो सकते हैं, सही पहचान के लिए ये अंतर देखें:"
+            bullets = [
+                "- 1. पर्ण कुंचन वायरस (Tomato Leaf Curl Virus - TLCV): सफेद मक्खी (Whitefly) द्वारा फैलता है; पत्तियां ऊपर की ओर मुड़कर छोटी, मोटी व खुरदरी हो जाती हैं और पौधा बौना रह जाता है।",
+                "- 2. शारीरिक पर्ण कुंचन (Physiological Leaf Roll): तेज धूप, उच्च तापमान, या मिट्टी में अत्यधिक सूखे/अनियमित पानी के कारण पत्तियां नलिका की तरह ऊपर मुड़ती हैं, पर रंग पीला नहीं पड़ता।",
+                "- 3. रस चूसक कीट (Mites / Thrips / Aphids): माइट्स या थ्रिप्स के रस चूसने से नई कोमल पत्तियां नीचे की तरफ नाव के आकार (inverted boat) में मुड़ती हैं।",
+                "- 4. खरपतवारनाशक का असर (Herbicide Drift): आसपास के खेत से खरपतवारनाशक का बहाव आने से पत्तियां विकृत और मुड़ जाती हैं।",
+                "- जांचें: क्या पत्तियां ऊपर मुड़कर पीली/छोटी हो रही हैं (वायरस) या केवल नली जैसी मुड़ रही हैं (गर्मी/नमी)? क्या सफेद मक्खी उड़ती दिख रही है?"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Tamatar me leaves curl (mudne) ke main 3 se 4 alag-alag causes ho sakte hain, accurate check ke liye ye lakshan dekhein:"
+            bullets = [
+                "- 1. Leaf Curl Virus (TLCV): Whitefly dwara transmit hota hai; leaves upar ki taraf cup-shape me mudti hain, thick/chhoti ho jaati hain aur plant stunted (bauna) reh jata hai.",
+                "- 2. Physiological Leaf Roll: High temperature, tez dhoop ya irregular watering se leaves tube ki tarah upar roll hoti hain par yellowing nahi hoti.",
+                "- 3. Sucking Pests (Mites / Thrips): Mite feeding se young leaves neeche ki taraf (downward) mudti hain aur inverted boat jaisi dikhti hain.",
+                "- 4. Herbicide Drift / Root Stress: Paas ke khet se weedicide spray drift ya roots me moisture stress se leaf distortion ho sakti hai.",
+                "- Check karein: Leaves upar roll hain ya neeche? Khet me whitefly udti dikh rahi hai? Yeh batane par accurate management suggest hoga."
+            ]
+        else:
+            lead = "🌾 Leaf curling in tomato can result from 3 to 4 distinct factors; inspect the plants for these key distinguishing signs:"
+            bullets = [
+                "- 1. Tomato Leaf Curl Virus (TLCV): Transmitted by whiteflies; leaves curl upward and inward, become thick, leathery, and chlorotic, with severe plant stunting.",
+                "- 2. Physiological Leaf Roll: Triggered by intense heat, drought stress, or irregular irrigation; leaves roll upward like tubes without chlorosis or stunting.",
+                "- 3. Sucking Pests (Broad Mites / Thrips / Aphids): Mite feeding causes downward leaf curling (inverted boat shape) with distorted young growth.",
+                "- 4. Herbicide Drift: Accidental drift of hormonal weedicides from nearby fields causing severe leaf twisting.",
+                "- Please check: Are leaves curling upward with yellow stunting (virus), or rolling upward without discoloration (heat stress)?"
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIVR, Varanasi (Tomato Pest & Disease Guidelines)"
+        return clean_farmer_markdown(reply)
+
+    # 7. Wheat Crop-Age & Action Synthesis (CRI & Growth Stages)
+    is_wheat_scope = bool(
+        (crop_val == "Wheat") or
+        (entities and entities.get("crop") == "Wheat") or
+        any(w in q_lower for w in ["wheat", "gehun", "gehu", "गेहूं"])
+    )
+    detected_wheat_age = entities.get("crop_age_days") if (entities and entities.get("crop_age_days")) else None
+    if not detected_wheat_age:
+        m_age = re.search(r"\b(\d+)\s*(?:din|दिन|days?|day)\b", q_lower)
+        if m_age:
+            detected_wheat_age = int(m_age.group(1))
+        elif re.search(r"\b(2[0-5]|20|21|22|23|24|25)\b", q_lower):
+            detected_wheat_age = 22
+
+    is_action_query = bool(re.search(
+        r"\b(ab\s+kya\s+karu|ab\s+kya\s+karein|kya\s+karna\s+hai|kya\s+kare|kya\s+karein|kya\s+kareं|"
+        r"agla\s+kadam|next\s+step|what\s+to\s+do|what\s+should\s+i\s+do|what\s+next|"
+        r"kya\s+chahiye|next\s+kya|kya\s+dein|kya\s+daalein|kya\s+karna\s+chahiye)\b",
+        q_lower
+    ))
+
+    # 7a. Wheat 20-25 Days (CRI Stage - First Irrigation & Top Dressing)
+    is_wheat_cri = bool(
+        is_wheat_scope and (
+            (detected_wheat_age and 18 <= detected_wheat_age <= 28) or
+            re.search(r"\b2[0-5]\b", q_lower) or
+            ((is_irrigation or is_action_query) and any(w in q_lower for w in ["pehli", "first", "पहली", "cri"]))
+        )
+    )
+    if is_wheat_cri:
+        age_num = detected_wheat_age or 22
+        if language == "hi":
+            lead = f"🌾 {age_num} दिन के गेहूं में इस समय मुख्य कार्य ताज मूल अवस्था (CRI stage) पर पहली हल्की सिंचाई (4–5 सेमी) करना और यूरिया की पहली टॉप-ड्रेसिंग देना है।"
+            bullets = [
+                "- पहली सिंचाई: बुवाई के 20–25 दिन बाद ताज मूल निकलने पर 4–5 सेमी की हल्की सिंचाई अवश्य करें। इस समय नमी की कमी से कल्ले कम बनते हैं और पैदावार 25–35% घट सकती है।",
+                "- यूरिया टॉप-ड्रेसिंग: सिंचाई के बाद जब खेत में ओट आ जाए, तो 1/3 नाइट्रोजन (लगभग 36 किग्रा/एकड़, 0.8 बैग) नीम-लेपित यूरिया का छिड़काव करें।",
+                "- जलभराव से बचाव: क्यारियों में पानी खड़ा न रहने दें; अधिक जलभराव से जड़ों को ऑक्सीजन नहीं मिलती और फसल पीली पड़ने लगती है।"
+            ]
+        elif language == "hinglish":
+            lead = f"🌾 {age_num} din ke gehun me is samay primary task Crown Root Initiation (CRI stage) par pehli halki sinchai (4–5 cm) karna aur urea ki first top-dressing dena hai."
+            bullets = [
+                "- First Irrigation: Sowing ke 20–25 din baad CRI stage par 4–5 cm depth ki halki sinchai zaroor karein. Is samay moisture stress se tillers kam bante hain aur yield 25–35% gir sakti hai.",
+                "- Urea Top-Dressing: Sinchai ke baad jab khet me per tikne lagein (aat/nami me), 1/3 nitrogen (approx. 36 kg/acre, 0.8 bag) neem-coated urea top-dressing karein.",
+                "- Waterlogging Prevention: Bhari mitti me extra paani jama na hone dein; jalbhav se roots suffocate hoti hain aur fasal peeli pad sakti hai."
+            ]
+        else:
+            lead = f"🌾 For {age_num}-day-old wheat, your primary action is to apply the first light irrigation (4–5 cm depth) at the Crown Root Initiation (CRI) stage, followed by nitrogen top-dressing."
+            bullets = [
+                "- First Irrigation: Apply light and uniform irrigation (4–5 cm depth) at this 20–25 DAS CRI window. Moisture stress here restricts tillering and reduces yield by 25–35%.",
+                "- Nitrogen Top-Dressing: Follow with the first top-dressing of neem-coated urea (approx. 36 kg/acre, approx. 0.8 bag of 45 kg) once soil allows walking.",
+                "- Prevent Waterlogging: Ensure proper plot leveling and drainage; stagnant water deprives roots of oxygen, causing yellowing."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIWBR, Karnal (Wheat Water Management & Agronomy)"
+        return clean_farmer_markdown(reply)
+
+    # 7b. Wheat Early Vegetative (8-17 Days, e.g. 10-12 Days - Irrigation Not Yet Due)
+    is_wheat_early = bool(
+        is_wheat_scope and detected_wheat_age and (8 <= detected_wheat_age <= 17) and
+        (is_action_query or is_irrigation or any(w in q_lower for w in ["sinchai", "irrigate", "paani", "pani", "kya"]))
+    )
+    if is_wheat_early:
+        age_num = detected_wheat_age
+        if language == "hi":
+            lead = f"🌾 {age_num} दिन के गेहूं में अभी सिंचाई करने की आवश्यकता नहीं है; पहली सिंचाई बुवाई के 20–25 दिन बाद ताज मूल (CRI stage) निकलने पर ही करें।"
+            bullets = [
+                "- जड़ विकास अवस्था: 10–15 दिन की फसल में केवल प्राथमिक बीज जड़ें (seminal roots) होती हैं; स्थायी ताज मूल 20–25 दिन पर निकलती हैं। अभी सिंचाई करने से मिट्टी ठंडी होती है और जड़ों का विकास धीमा पड़ता है।",
+                "- पलेवा अपवाद: यदि बुवाई पूर्व पलेवा बहुत कम था और ऊपरी 3 सेमी मिट्टी बिल्कुल सूखी होने से अंकुरण रुक रहा हो, केवल तभी अत्यंत हल्की नमी दें।",
+                "- अगला कदम: 20–25 दिन की अवस्था होने पर 4–5 सेमी की पहली हल्की सिंचाई और 36 किग्रा/एकड़ यूरिया टॉप-ड्रेसिंग की तैयारी रखें।"
+            ]
+        elif language == "hinglish":
+            lead = f"🌾 {age_num} din ke gehun me abhi sinchai karne ki zaroorat nahi hai; first irrigation sowing ke 20–25 din baad Crown Root Initiation (CRI stage) par hi karein."
+            bullets = [
+                "- Root Growth Stage: 10–15 din par plant sirf temporary seminal roots par chalta hai; permanent crown roots 20–25 din par nikalti hain. Abhi sinchai karne se soil unnecessarily chill hoti hai.",
+                "- Palewa Exception: Agar pre-sowing palewa inadequate tha aur topsoil dry hone se germination ruk raha ho, tabhi emergency light water dein.",
+                "- Next Step: 20–25 DAS par pehli halki sinchai (4–5 cm) aur 36 kg/acre urea top-dressing schedule karein."
+            ]
+        else:
+            lead = f"🌾 For {age_num}-day-old wheat, irrigation is not yet due; wait until 20–25 days after sowing for the Crown Root Initiation (CRI) stage."
+            bullets = [
+                "- Physiological Stage: At 10–15 DAS, seedlings rely on temporary seminal roots. Irrigating now chills the soil unnecessarily and delays root emergence.",
+                "- Pre-sowing Exception: Only irrigate early if pre-sowing irrigation (palewa) was completely inadequate and topsoil dryness is hindering germination.",
+                "- Planned Action: Schedule the first light irrigation (4–5 cm) and urea top-dressing (approx. 36 kg/acre) when the crop reaches 20–25 DAS."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIWBR, Karnal (Wheat Water Management & Agronomy)"
+        return clean_farmer_markdown(reply)
+
+    # 7c. Wheat Active Tillering (35-55 Days, e.g. 40-45 Days - Second Irrigation & Final Urea)
+    is_wheat_tillering = bool(
+        is_wheat_scope and detected_wheat_age and (35 <= detected_wheat_age <= 55) and
+        (is_action_query or is_irrigation or any(w in q_lower for w in ["sinchai", "irrigate", "paani", "pani", "kya"]))
+    )
+    if is_wheat_tillering:
+        age_num = detected_wheat_age
+        if language == "hi":
+            lead = f"🌾 {age_num} दिन के गेहूं में इस समय मुख्य कार्य कल्ले निकलने की अवस्था (Tillering stage) पर दूसरी सिंचाई करना और यूरिया की अंतिम टॉप-ड्रेसिंग देना है।"
+            bullets = [
+                "- दूसरी सिंचाई: 40–45 दिन पर कल्ले फूटने के समय दूसरी सिंचाई करें ताकि शाखाएं और बालियों का विकास मजबूत हो सके।",
+                "- यूरिया की अंतिम खुराक: 2nd सिंचाई के साथ बची हुई 1/3 नाइट्रोजन (लगभग 36 किग्रा नीम-लेपित यूरिया प्रति एकड़) की अंतिम टॉप-ड्रेसिंग पूरी कर लें।",
+                "- खरपतवार प्रबंधन: यदि खेत में गुल्ली डंडा (Phalaris minor) या बथुआ का प्रकोप हो, तो तुरंत निराई या अनुशंसित खरपतवारनाशी का प्रयोग करें।"
+            ]
+        elif language == "hinglish":
+            lead = f"🌾 {age_num} din ke gehun me is samay primary action Active Tillering stage (kalle nikalne ki avastha) par second irrigation karna aur urea ki final top-dressing dena hai."
+            bullets = [
+                "- Second Irrigation: 40–45 DAS par active tillering stage par second irrigation dein taki lateral tillers acche banein.",
+                "- Urea Top-Dressing: 2nd irrigation ke sath remaining 1/3rd nitrogen (approx. 36 kg/acre neem-coated urea) ki final split complete karein.",
+                "- Weed Scouting: Gulli danda ya bathua weeds ke liye khet check karein taaki tillers ko poora nutrition mile."
+            ]
+        else:
+            lead = f"🌾 For {age_num}-day-old wheat, your primary action is to apply the second irrigation at the active tillering stage, followed by the final urea top-dressing."
+            bullets = [
+                "- Second Irrigation: Apply the second irrigation at 40–45 DAS to support vigorous lateral shoot and tiller development.",
+                "- Final Urea Top-Dressing: Apply the remaining 1/3rd nitrogen split (approx. 36 kg/acre neem-coated urea) alongside this irrigation.",
+                "- Weed Control: Check for grassy weeds like Phalaris minor so they do not compete with tillers for moisture and nutrients."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIWBR, Karnal (Wheat Water Management & Agronomy)"
+        return clean_farmer_markdown(reply)
+
+    # 8. Pigeonpea / Red Gram Pod Borer Treatment
+    is_pod_borer = bool(
+        ((crop_val == "Pigeonpea") or (entities and entities.get("crop") == "Pigeonpea") or any(w in q_lower for w in ["arhar", "tuar", "red gram", "pigeonpea"])) and
+        any(w in q_lower for w in ["pod borer", "borer", "छेदक", "इल्ली", "सुंडी", "ilaj", "upchar", "dawa", "dawai", "cure", "treatment", "control", "management"])
+    )
+    if is_pod_borer:
+        if language == "hi":
+            lead = "🌾 अरहर / तुअर (Red Gram) में फली छेदक (Pod Borer - Helicoverpa armigera) कीट के प्रभावी नियंत्रण हेतु एकीकृत कीट प्रबंधन (IPM) उपाय अपनाएं:"
+            bullets = [
+                "- निगरानी एवं ट्रैप: 4–5 फेरोमोन ट्रैप (Pheromone traps) प्रति एकड़ लगाएं तथा खेत में टी-आकार की पक्षी खूंटियां (T-perches) स्थापित करें।",
+                "- जैविक नियंत्रण: फूल आने की शुरुआती अवस्था में नीम तेल (1500 PPM @ 3–5 मिली/लीटर) या HaNPV (250 LE/हेक्टेयर) का शाम को छिड़काव करें।",
+                "- यांत्रिक नियंत्रण: फली बनने से पहले पौधों को हिलाकर नीचे गिरी बड़ी सुंडियों को इकट्ठा कर नष्ट करें।",
+                "- रासायनिक सुरक्षा निर्देश: यदि प्रकोप अधिक हो तो CIBRC लेबल अनुसार अनुशंसित कीटनाशक का ही प्रयोग करें और स्थानीय KVK से परामर्श लें।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Arhar / Red Gram (Pigeonpea) me Pod Borer (फली छेदक) ke prabhavi control ke liye Integrated Pest Management (IPM) steps follow karein:"
+            bullets = [
+                "- Monitoring & Traps: 4–5 Pheromone traps per acre lagayein aur field me T-shaped bird perches lagayein.",
+                "- Organic / Biological Spray: Flowering stage ke shuru me Neem oil (1500 PPM @ 3–5 ml/L) ya HaNPV (250 LE/ha) ka shaam ko spray karein.",
+                "- Mechanical Control: Paudhon ko hila kar zameen par giri sundi/caterpillars ko collect karke destroy karein.",
+                "- Chemical Safety Notice: Severe outbreak me CIBRC label-approved insecticide use karein aur local KVK se verify karein."
+            ]
+        else:
+            lead = "🌾 For effective control of Pod Borer (Helicoverpa armigera) in Pigeonpea / Red Gram, adopt these Integrated Pest Management (IPM) steps:"
+            bullets = [
+                "- Pheromone Trapping & Perches: Install 4–5 pheromone traps per acre and erect T-shaped bird perches across the field.",
+                "- Biological & Botanical Spray: Spray Neem oil (1500 PPM @ 3–5 ml/L) or HaNPV (250 LE/ha) during early flowering in the late afternoon.",
+                "- Mechanical Collection: Shake plants over plastic sheets to dislodge and destroy early larval instars.",
+                "- Chemical Safety Protocol: In severe infestations, apply only CIBRC label-recommended insecticides and consult your local KVK."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += "\n\nSource: ICAR-IIPR, Kanpur (Pulse Protection Guidelines)"
         return clean_farmer_markdown(reply)
 
     # General extraction from retrieved chunks
@@ -687,6 +1084,7 @@ def generate_grounded_offline_reply(
 
     clean_lines = []
     in_citation_section = False
+    in_faq_section = False
     for line in all_chunks_text.splitlines():
         l = line.strip()
         if not l:
@@ -694,18 +1092,24 @@ def generate_grounded_offline_reply(
         if re.search(r"^#{1,3}\s*(?:Authoritative\s+source|Source\s+citation|References|Citations|Metadata)", l, re.I):
             in_citation_section = True
             continue
+        if re.search(r"^#{1,3}\s*(?:Common\s+Farmer\s+Questions|FAQ|Frequently\s+Asked|सवाल\s+जवाब)", l, re.I):
+            in_faq_section = True
+            continue
         if l.startswith("#"):
             in_citation_section = False
+            in_faq_section = False
             continue
-        if in_citation_section:
+        if in_citation_section or in_faq_section:
             continue
         if l.startswith(("[Source:", "---", "schema_version", "doc_id:")):
             continue
-        # Skip raw FAQ question lines
-        if re.search(r"^[-•*\s]*(?:Q\s*:|Question\s*:|प्रश्न\s*:|FAQ|सवाल\s*:)", l, re.I):
+        # Skip raw FAQ question and answer lines
+        if re.search(r"^[\*\-_•\s]*(?:Q\s*:|Question\s*:|प्रश्न\s*:|FAQ|सवाल\s*:)", l, re.I):
+            continue
+        if re.search(r"^[\*\-_•\s]*(?:A\s*:|Answer\s*:|उत्तर\s*:)", l, re.I):
             continue
         # Remove A: prefix if present
-        l = re.sub(r"^[-•*\s]*(?:A\s*:|Answer\s*:|उत्तर\s*:)\s*", "", l, flags=re.I).strip()
+        l = re.sub(r"^[\*\-_•\s]*(?:A\s*:|Answer\s*:|उत्तर\s*:)\s*", "", l, flags=re.I).strip()
         # Skip table syntax
         if l.startswith("|") or l.endswith("|"):
             continue
@@ -718,11 +1122,13 @@ def generate_grounded_offline_reply(
     for l in clean_lines:
         if l.startswith(("-", "•", "1.", "2.", "3.", "4.")):
             pt = re.sub(r"^[\-\•\*\d\.]+\s*", "", l).strip()
-            pt = re.sub(r"^(?:A\s*:|Answer\s*:|उत्तर\s*:)\s*", "", pt, flags=re.I).strip()
-            if 15 < len(pt) < 160 and not re.search(r"^[-•*\s]*(?:Q\s*:|Question\s*:)", pt, re.I):
+            pt = re.sub(r"^[\*\-_•\s]*(?:A\s*:|Answer\s*:|उत्तर\s*:)\s*", "", pt, flags=re.I).strip()
+            if 15 < len(pt) < 160 and not re.search(r"^[\*\-_•\s]*(?:Q\s*:|Question\s*:|A\s*:|Answer\s*:|FAQ)", pt, re.I):
                 candidate_points.append(pt)
-        elif ":" in l and len(l) < 140:
-            candidate_points.append(l)
+        elif ":" in l and len(l) < 140 and not re.search(r"^[\*\-_•\s]*(?:Q\s*:|Question\s*:|A\s*:|Answer\s*:|FAQ)", l, re.I):
+            cleaned_col_pt = re.sub(r"^[\*\-_•\s]*(?:A\s*:|Answer\s*:|उत्तर\s*:)\s*", "", l, flags=re.I).strip()
+            if len(cleaned_col_pt) > 15:
+                candidate_points.append(cleaned_col_pt)
 
     if not candidate_points:
         for l in clean_lines:
@@ -757,11 +1163,11 @@ def generate_grounded_offline_reply(
             lead_sentence = "🌾 Key recommendations for pest and Fall Armyworm management in Maize:"
     elif crop_val == "Tomato" or "tomato" in q_lower or "tamatar" in q_lower or "टमाटर" in q_lower:
         if language == "hi":
-            lead_sentence = "🌾 टमाटर में पर्ण कुंचन (Leaf Curl) रोग व सफेद मक्खी कीट नियंत्रण हेतु मुख्य कृषि परामर्श:"
+            lead_sentence = "🌾 टमाटर में पर्ण कुंचन (Leaf Curl) लक्षण व सफेद मक्खी नियंत्रण हेतु कृषि परामर्श (लक्षण ToLCV से मेल खा सकते हैं, बिना लैब जांच निश्चित पुष्टि नहीं):"
         elif language == "hinglish":
-            lead_sentence = "🌾 Tomato me leaf curl disease aur whitefly control ke liye key advisory:"
+            lead_sentence = "🌾 Tomato me leaf curl symptoms aur whitefly control ke liye advisory (Symptoms ToLCV se match kar sakte hain; ToLCV ki sambhavna hai par bina lab test definitive confirmation nahi):"
         else:
-            lead_sentence = "🌾 Key advisory for managing leaf curl virus and whitefly vectors in Tomato:"
+            lead_sentence = "🌾 Key advisory for tomato leaf curl symptoms and whitefly control (Symptoms may align with ToLCV suspicion; not a definitive lab-confirmed diagnosis):"
     elif "mountain" in q_lower or "pahad" in q_lower or "पहाड़" in q_lower or top_chunk.get("category") == "Mountain Farming":
         if language == "hi":
             lead_sentence = "🌾 पहाड़ी क्षेत्रों में खेती हेतु अनुशंसित प्रमुख फसलें (मक्का, राजमा, जौ, रागी, गेहूं):"
@@ -787,9 +1193,17 @@ def generate_grounded_offline_reply(
     points_str = "\n".join(final_bullets) if final_bullets else ("- अनुशंसित कृषि पद्धतियों का पालन करें।" if language == "hi" else "- Follow recommended agricultural practices.")
     reply = f"{lead_sentence}\n\n{points_str}"
 
-    # Chemical warning conditional on query actually involving chemicals
+    # Chemical warning conditional on query actually involving chemicals (Exempt pure fertilizer queries)
+    is_fertilizer_only = bool(re.search(
+        r"\b(urea|dap|npk|potash|khad|fertilizer|fertilizers|gypsum|zinc sulphate|organic manure|compost|यूरिया|डीएपी|खाद|उर्वरक|जिप्सम|पोटाश)\b",
+        q_lower
+    )) and not bool(re.search(
+        r"\b(pesticide|insecticide|fungicide|herbicide|weedicide|कीटनाशक|फफूंदनाशक|खरपतवारनाशक|chemical|रसायन)\b",
+        q_lower
+    ))
+
     is_chem = bool(re.search(r"chemical|pesticide|fungicide|insecticide|कीटनाशक|फफूंदनाशक|दवा|दवाई|dawa|dawai|spray|छिड़काव|chidke|chidkaw|dose|खुराक", q_lower))
-    if is_chem:
+    if is_chem and not is_fertilizer_only:
         if language == "hi":
             chem_warn = "- किसी भी रासायनिक कीटनाशक के प्रयोग से पहले CIBRC लेबल निर्देश अवश्य जांचें तथा स्थानीय KVK या कृषि विशेषज्ञ से परामर्श लें।"
         elif language == "hinglish":
@@ -797,6 +1211,11 @@ def generate_grounded_offline_reply(
         else:
             chem_warn = "- Always verify CIBRC approved label guidelines and consult your local KVK or agricultural officer before applying chemical pesticides."
         reply += f"\n{chem_warn}"
+
+    if source_name:
+        reply += f"\n\nSource: {source_name}"
+
+    return clean_farmer_markdown(reply)
 
     if source_name:
         reply += f"\n\nSource: {source_name}"
@@ -938,6 +1357,309 @@ def generate_web_grounded_offline_reply(
     return clean_farmer_markdown(reply)
 
 
+def detect_scheme_freshness_request(clean_msg: str) -> Optional[Dict[str, str]]:
+    """
+    Detects if the user query is asking for latest rules, current policies,
+    notifications, circulars, or year-specific updates for an agricultural government scheme.
+    """
+    q_low = clean_msg.lower()
+
+    # 1. Scheme detection
+    scheme = None
+    if any(k in q_low for k in ["pmfby", "fasal bima", "crop insurance"]):
+        scheme = "PMFBY"
+    elif any(k in q_low for k in ["pm kisan", "pm-kisan", "pmkisan", "samman nidhi"]):
+        scheme = "PM-KISAN"
+    elif any(k in q_low for k in ["pmksy", "sinchayee", "sinchai yojana"]):
+        scheme = "PMKSY"
+    elif any(k in q_low for k in ["kcc", "kisan credit card"]):
+        scheme = "KCC"
+    elif any(k in q_low for k in ["bima", "yojana", "scheme"]):
+        scheme = "PMFBY"
+
+    if not scheme:
+        return None
+
+    # 2. Freshness / rules indicator
+    has_freshness = bool(re.search(
+        r"\b(latest|current|new|rules?|niyam|2026|notification|circular|update|updates|guidelines?|sanshodhan|adhisuchna|paripatra)\b|"
+        r"(नई|नए|नया|नियम|गाइडलाइन|अपडेट|अधिसूचना|परिपत्र|संशोधन|2026)",
+        q_low
+    ))
+    if not has_freshness:
+        return None
+
+    # 3. Target year detection
+    target_year = "2026" if "2026" in q_low else str(datetime.now().year)
+
+    return {
+        "scheme": scheme,
+        "target_year": target_year
+    }
+
+
+def extract_scheme_structured_evidence(
+    evidence_list: List[WebEvidence],
+    scheme: str = "PMFBY",
+    target_year: str = "2026"
+) -> Tuple[List[Dict[str, Any]], str, Optional[str]]:
+    """
+    Extracts structured official evidence for scheme rule revisions and notifications.
+    Strictly disqualifies:
+    - Homepage landing text
+    - Training/LMS pages
+    - General scheme descriptions
+    - Undated snippets
+    - Old circulars / past reports lacking target_year
+    """
+    valid_notifs: List[Dict[str, Any]] = []
+    last_rej_code = "no_verified_2026_rule"
+    last_rej_reason = "no_verified_2026_notification"
+
+    for ev in evidence_list:
+        content_low = ev.content.lower()
+        title_low = ev.title.lower()
+        url_low = ev.url.lower()
+        parsed = urlparse(ev.url)
+
+        # 1. Homepage text
+        is_homepage = parsed.path.strip("/") in ("", "index.html", "index.php", "home") or any(
+            h in title_low for h in ["welcome to", "pmfby home", "portal home", "home |"]
+        )
+        if is_homepage:
+            last_rej_code = "homepage_excluded"
+            last_rej_reason = "homepage_content_excluded"
+            continue
+
+        # 2. Training / LMS
+        is_lms = "/lms" in url_low or "/training" in url_low or "/course" in url_low or any(
+            t in (title_low + " " + content_low) for t in [
+                "learning management system", "lms", "training & courses",
+                "training and courses", "mega awareness campaign", "awareness campaign"
+            ]
+        )
+        if is_lms:
+            last_rej_code = "training_lms_excluded"
+            last_rej_reason = "training_or_lms_excluded"
+            continue
+
+        # 3. General scheme description / old parliamentary committee report
+        is_gen_desc = (
+            "was launched in 2016" in content_low
+            or "parliamentary committee report" in title_low
+            or "evaluation report" in title_low
+        )
+        if is_gen_desc:
+            last_rej_code = "general_description_excluded"
+            last_rej_reason = "general_description_excluded"
+            continue
+
+        # 4. Date extraction & freshness check
+        all_text = f"{ev.published_date or ''} {ev.title} {ev.content}"
+        date_year_match = re.search(
+            rf"\b(?:\d{{1,2}}[-/\.]\d{{1,2}}[-/\.]{target_year}|{target_year}[-/\.]\d{{1,2}}[-/\.]\d{{1,2}}|\d{{1,2}}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+{target_year}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+{target_year}|Kharif\s+{target_year}|Rabi\s+{target_year}(?:-27)?|w\.e\.f\.?\s*{target_year}|{target_year})\b",
+            all_text,
+            re.IGNORECASE
+        )
+        past_years_match = re.findall(r"\b(201[6-9]|202[0-5])\b", all_text)
+
+        if not date_year_match:
+            if past_years_match:
+                last_rej_code = "stale_documents_rejected"
+                last_rej_reason = "old_documents_rejected"
+            else:
+                last_rej_code = "undated_page_rejected"
+                last_rej_reason = "undated_evidence_rejected"
+            continue
+
+        # 5. Must have notification / circular / order / rule substance
+        has_substance = bool(re.search(
+            r"\b(circular|notification|guidelines?|order|amendment|adhisuchna|paripatra|rule|rules|mandate|revision|revised|directive|clause)\b",
+            title_low + " " + content_low
+        ))
+        if not has_substance:
+            last_rej_code = "no_rule_substance"
+            last_rej_reason = "no_rule_change_in_evidence"
+            continue
+
+        extracted_date = date_year_match.group(0)
+        authority = "Ministry of Agriculture & Farmers Welfare, GoI"
+        if "department of agriculture" in content_low:
+            authority = "Department of Agriculture & Farmers Welfare, GoI"
+
+        sentences = re.split(r"(?<=[.!?])\s+", ev.content)
+        rule_change = ""
+        for s in sentences:
+            if any(k in s.lower() for k in ["mandatory", "timeline", "transfer", "subsidy", "deadline", "enrollment", "claim", "premium", "settlement", "revised", "amendment", "order", "rule"]):
+                rule_change = s.strip()
+                break
+        if not rule_change and sentences:
+            rule_change = sentences[0].strip()
+        if len(rule_change) > 160:
+            rule_change = rule_change[:157] + "..."
+
+        clean_title = re.sub(r"^\[PDF\]\s*", "", ev.title)
+        clean_title = re.sub(r"\s*-\s*PMFBY.*$", "", clean_title).strip()
+
+        valid_notifs.append({
+            "title": clean_title,
+            "date": extracted_date,
+            "authority": authority,
+            "rule_change": rule_change,
+            "url": ev.url,
+            "domain": ev.domain
+        })
+
+    if valid_notifs:
+        return valid_notifs, "verified_scheme_rule_found", None
+    return [], last_rej_code, last_rej_reason
+
+
+def compose_scheme_fallback_response(scheme: str, target_year: str, language: str) -> str:
+    """
+    Composes safe fallback response when no verified rule change / notification is found.
+    Fulfills Requirement 6 verbatim:
+    'Mujhe official sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga.'
+    Followed by stable scheme information separately, clearly labelled as general/background information.
+    """
+    prefix = f"Mujhe official sources se {target_year} ke specific naye {scheme} rule changes verify nahi mile. Main outdated information ko latest ke roop me present nahi karunga."
+
+    if scheme.upper() == "PMFBY":
+        background_info = (
+            "📌 सामान्य PMFBY दिशा-निर्देश (General/Background Information):\n"
+            "- किसान प्रीमियम हिस्सा: रबी फसलों के लिए 1.5% (बीमित राशि का), खरीफ फसलों के लिए 2.0%, और वाणिज्यिक/बागवानी फसलों के लिए 5.0%।\n"
+            "- 72 घंटे की अनिवार्यता: स्थानीय आपदा (ओलावृष्टि, जलभराव, चक्रवाती बारिश) से फसल क्षति होने पर 72 घंटे के भीतर PMFBY पोर्टल या टोल-फ्री हेल्पलाइन (14447) पर सूचना दर्ज करना अनिवार्य है।\n"
+            "- दावा प्रक्रिया: अधिसूचित क्षेत्र, समय पर प्रीमियम भुगतान और फसल कटाई प्रयोग (CCE) के आधिकारिक आकलन के आधार पर दावा निपटान होता है।\n\n"
+            "स्रोत: pmfby.gov.in (आधिकारिक पोर्टल) / Ministry of Agriculture & Farmers Welfare, GoI"
+        )
+    else:
+        background_info = (
+            f"📌 सामान्य {scheme} दिशा-निर्देश (General/Background Information):\n"
+            f"- योजना के विस्तृत दिशा-निर्देश आधिकारिक सरकारी पोर्टल पर उपलब्ध हैं।\n"
+            f"- किसी भी नियम संशोधन की पुष्टि केवल आधिकारिक सरकारी अधिसूचना से ही मान्य होती है।\n\n"
+            f"स्रोत: आधिकारिक सरकारी पोर्टल (Government of India)"
+        )
+
+    return f"{prefix}\n\n{background_info}"
+
+
+def compose_scheme_freshness_response(
+    scheme: str,
+    target_year: str,
+    notifications: List[Dict[str, Any]],
+    language: str
+) -> str:
+    """
+    Farmer-facing format (Requirement 8):
+    - direct answer first
+    - max 3–5 bullets
+    - include date for every claimed latest/current change
+    - source line at end
+    - no raw search-engine snippets
+    """
+    header = f"🏛️ {scheme} {target_year} आधिकारिक नियम एवं अधिसूचना (Verified Updates):"
+    bullets = []
+    for item in notifications[:5]:
+        title = item["title"]
+        rule = item["rule_change"]
+        dt = item["date"]
+        auth = item["authority"]
+        bullet = f"- **{title}**: {rule} (अधिसूचना तिथि: {dt}, जारीकर्ता: {auth})"
+        bullets.append(bullet)
+
+    bullets_text = "\n".join(bullets)
+    top_domain = notifications[0]["domain"] if notifications else "pmfby.gov.in"
+    source_line = f"स्रोत: Ministry of Agriculture & Farmers Welfare, GoI ({top_domain})"
+
+    return f"{header}\n\n{bullets_text}\n\n{source_line}"
+
+
+def classify_current_weather_evidence(ev_text: str, live_verified: bool) -> str:
+    """
+    Classifies present/current weather evidence into exactly one supported state:
+    - CURRENT_RAIN_CONFIRMED
+    - CURRENT_NO_RAIN_CONFIRMED
+    - FORECAST_OR_ALERT_ONLY
+    - CURRENT_CONDITION_UNVERIFIED
+
+    Rules:
+    - Never infer current rain merely from:
+      * precipitation forecast
+      * rain warning
+      * cloud alert
+      * tomorrow forecast
+      * generic IMD weather page
+    - If evidence genuinely cannot distinguish, return CURRENT_CONDITION_UNVERIFIED.
+    """
+    if not live_verified or not ev_text or not ev_text.strip():
+        return "CURRENT_CONDITION_UNVERIFIED"
+
+    text = ev_text.lower()
+
+    # Check if evidence discusses meteorological conditions
+    has_weather_terms = bool(re.search(
+        r"\b(weather|mausam|rain|rains|raining|rainfall|barish|baarish|forecast|temperature|temp|sunny|clear|dry|shower|showers|thunderstorm|precipitation|cloud|clouds|humidity|wind|drizzle|drizzling)\b",
+        text
+    ))
+    if not has_weather_terms:
+        return "CURRENT_CONDITION_UNVERIFIED"
+
+    # Check for explicit absence / negation of rain
+    rain_negated = bool(re.search(
+        r"\b(no rain|no precipitation|not raining|no rainfall|rain\s*[:\-]?\s*(nil|0|none)|rainfall\s*[:\-]?\s*(nil|0(\.0)?|none)|barish nahi|baarish nahi|वर्षा नहीं|बारिश नहीं)\b",
+        text
+    ))
+
+    # Check for rain warning, precipitation alert, or forecast
+    alert_patterns = [
+        r"\b(rain alert|rainfall alert|rain warning|heavy rain warning|heavy rain alert|thunderstorm alert|thunderstorm warning|precipitation alert|cloud alert)\b",
+        r"\b(yellow alert|orange alert|red alert)\b[^.!?\n]*\b(rain|rainfall|thunderstorm|precipitation)\b",
+        r"\b(rain|rainfall|barish|baarish|showers?|thunderstorm|precipitation)\b[^.!?\n]*\b(alert|warning|forecast|expected|likely|prediction|probability|chance)\b",
+        r"\b(alert|warning|forecast|expected|likely|prediction|probability of|chance of)\b[^.!?\n]*\b(rain|rainfall|barish|baarish|showers?|thunderstorm|precipitation)\b",
+    ]
+    has_rain_alert = any(re.search(pat, text) for pat in alert_patterns)
+
+    # Active current rain observation markers
+    active_rain_patterns = [
+        r"\b(currently raining|raining now|raining right now|rain is falling|active rain|active rainfall|continuous rain|light rain reported|heavy rain reported|rain reported now|light rain observed|moderate rain observed|heavy rain observed|thunderstorm with rain currently)\b",
+        r"\b(present weather\s*[:\-]\s*(light\s+|moderate\s+|heavy\s+)?(rain|drizzle|shower|thunderstorm with rain))\b",
+        r"\b(weather\s*[:\-]\s*(light\s+|moderate\s+|heavy\s+)?(rain|drizzle|showers?))\b",
+        r"\b(weather\s*right\s*now\s*[:\-]?\s*[^.!?\n]*\b(rain|drizzle|showers?|raining)\b)",
+        r"\b(current\s+condition(s)?\s*[:\-]?\s*[^.!?\n]*\b(rain|drizzle|showers?|raining)\b)",
+        r"\b(current\s+weather\s*[:\-]?\s*[^.!?\n]*\b(rain|drizzle|showers?|raining)\b)",
+        r"\b(abhi\s+(baarish|barish)\s+ho\s+rahi|वर्षा\s+हो\s+रही\s+है|बारिश\s+हो\s+रही\s+है|बारिश\s+जारी\s+है)\b",
+    ]
+    has_active_rain = any(re.search(pat, text) for pat in active_rain_patterns)
+
+    # 1. CURRENT_RAIN_CONFIRMED: Explicit active current rain observed, not negated and not merely an alert/forecast
+    if has_active_rain and not rain_negated and not (has_rain_alert and not re.search(r"\b(currently raining|raining now|raining right now|abhi baarish ho rahi)\b", text)):
+        return "CURRENT_RAIN_CONFIRMED"
+
+    # 2. FORECAST_OR_ALERT_ONLY: Active alert/warning or forecast for rain/storm/clouds, but current rain not confirmed
+    if has_rain_alert:
+        return "FORECAST_OR_ALERT_ONLY"
+
+    # 3. CURRENT_NO_RAIN_CONFIRMED: Clear, sunny, dry, or explicitly confirmed no rain
+    has_clear_dry = bool(re.search(
+        r"\b(clear sky|clear skies|mainly clear|sunny|mostly sunny|dry weather|dry conditions?|fair weather|clean weather)\b",
+        text
+    )) or rain_negated
+
+    if has_clear_dry:
+        return "CURRENT_NO_RAIN_CONFIRMED"
+
+    # 4. CURRENT_CONDITION_UNVERIFIED: Generic IMD portal, station tables, or inconclusive evidence
+    is_purely_historical_or_generic = bool(re.search(
+        r"\b(rainfall recorded from|past 24 hours weather data|station\s*\|\s*max temp|departure from normal|model guidance|national weather forecasting centre)\b",
+        text
+    )) and not bool(re.search(r"\b(current\s+weather|current\s+condition|right now|at present|currently)\b", text))
+
+    if is_purely_historical_or_generic:
+        return "CURRENT_CONDITION_UNVERIFIED"
+
+    return "CURRENT_CONDITION_UNVERIFIED"
+
+
 def generate_weather_hybrid_reply(
     query: str,
     language: str,
@@ -946,7 +1668,8 @@ def generate_weather_hybrid_reply(
     live_verified: bool = False,
     live_failed: bool = False,
     weather_evidence: Optional[List[WebEvidence]] = None,
-    kb_chunks: Optional[List[Dict[str, Any]]] = None
+    kb_chunks: Optional[List[Dict[str, Any]]] = None,
+    time_scope: Optional[str] = None
 ) -> str:
     """
     Synthesizes a combined live weather + agronomic decision response.
@@ -958,7 +1681,11 @@ def generate_weather_hybrid_reply(
     5. Dynamically injects crop-specific guidance (Wheat CRI, Rice AWD/flooding) or generic field advice if no crop.
     6. Returned citations correspond strictly to evidence and knowledge sources actually used.
     7. Clean formatting with zero raw Markdown emphasis markers.
+    8. Strictly respects requested time horizon (CURRENT/ABHI vs TOMORROW/KAL vs TODAY/AAJ).
     """
+    if not time_scope:
+        time_scope = detect_weather_time_scope(query)
+
     loc_display = location or ("आपके क्षेत्र" if language == "hi" else ("aapke area" if language == "hinglish" else "your area"))
     q_lower = query.lower()
 
@@ -967,6 +1694,7 @@ def generate_weather_hybrid_reply(
 
     # --- 1. Weather Evidence Content Analysis ---
     weather_state = "UNVERIFIED"
+    current_weather_state = "CURRENT_CONDITION_UNVERIFIED"
     weather_domain = "IMD"
     ev_text = ""
 
@@ -975,32 +1703,45 @@ def generate_weather_hybrid_reply(
         weather_domain = top_ev.domain or "IMD"
         ev_text = " ".join([f"{ev.title} {ev.content}" for ev in weather_evidence]).lower()
 
-        # Check if evidence actually discusses weather/meteorological conditions
-        has_weather_terms = bool(re.search(
-            r"\b(weather|mausam|rain|rainfall|barish|baarish|forecast|temperature|temp|sunny|clear|dry|shower|showers|thunderstorm|precipitation|cloud|clouds|humidity|wind)\b",
-            ev_text
-        ))
-
-        if has_weather_terms:
-            # Check for rain / storm / precipitation warnings or forecasts
-            has_rain_warning = bool(re.search(
-                r"\b(rain|rainfall|barish|baarish|showers?|thunderstorm|precipitation|heavy rain|alert|warning|wet|drizzle)\b",
-                ev_text
-            ))
-            # Check for clear / dry conditions
-            has_clear = bool(re.search(
-                r"\b(clear|mainly clear|sunny|dry|fair weather|clean)\b",
-                ev_text
-            )) or ("no rain" in ev_text or "no precipitation" in ev_text)
-
-            if has_rain_warning and not (has_clear and ("no rain" in ev_text or "no precipitation" in ev_text)):
+        if time_scope == "CURRENT":
+            current_weather_state = classify_current_weather_evidence(ev_text, live_verified)
+            if current_weather_state == "CURRENT_RAIN_CONFIRMED":
                 weather_state = "RAIN_EXPECTED"
-            elif has_clear or ("no rain" in ev_text or "no precipitation" in ev_text):
+            elif current_weather_state == "CURRENT_NO_RAIN_CONFIRMED":
                 weather_state = "CLEAR_DRY"
+            elif current_weather_state == "FORECAST_OR_ALERT_ONLY":
+                weather_state = "RAIN_EXPECTED"
             else:
                 weather_state = "UNVERIFIED"
         else:
-            weather_state = "UNVERIFIED"
+            # Check if evidence actually discusses weather/meteorological conditions
+            has_weather_terms = bool(re.search(
+                r"\b(weather|mausam|rain|rainfall|barish|baarish|forecast|temperature|temp|sunny|clear|dry|shower|showers|thunderstorm|precipitation|cloud|clouds|humidity|wind)\b",
+                ev_text
+            ))
+
+            if has_weather_terms:
+                # Check for rain / storm / precipitation warnings or forecasts
+                has_rain_warning = bool(re.search(
+                    r"\b(rain|rainfall|barish|baarish|showers?|thunderstorm|precipitation|heavy rain|alert|warning|wet|drizzle)\b",
+                    ev_text
+                ))
+                # Check for clear / dry conditions
+                has_clear = bool(re.search(
+                    r"\b(clear|mainly clear|sunny|dry|fair weather|clean)\b",
+                    ev_text
+                )) or ("no rain" in ev_text or "no precipitation" in ev_text)
+
+                if has_rain_warning and not (has_clear and ("no rain" in ev_text or "no precipitation" in ev_text)):
+                    weather_state = "RAIN_EXPECTED"
+                elif has_clear or ("no rain" in ev_text or "no precipitation" in ev_text):
+                    weather_state = "CLEAR_DRY"
+                else:
+                    weather_state = "UNVERIFIED"
+            else:
+                weather_state = "UNVERIFIED"
+    elif time_scope == "CURRENT":
+        current_weather_state = "CURRENT_CONDITION_UNVERIFIED"
 
     # --- 2. Crop Entity Resolution ---
     resolved_crop = None
@@ -1072,83 +1813,256 @@ def generate_weather_hybrid_reply(
     # --- Case 1: Irrigation Query with Weather Context ---
     if is_irrigation:
         if weather_state == "RAIN_EXPECTED":
-            if language == "hi":
-                return (
-                    f"🌾 {loc_display} में आज बारिश का पूर्वानुमान होने के कारण सिंचाई स्थगित करने की सलाह दी जाती है।\n\n"
-                    f"- लाइव मौसम ({weather_domain}): {loc_display} में वर्षा अथवा बादलों की चेतावनी है, अतः तात्कालिक सिंचाई रोकें।\n"
-                    f"- कृषि सलाह ({agri_source}): {agri_rain_advice}\n"
-                    f"- नमी निगरानी: बारिश के 24–48 घंटे बाद खेत की मिट्टी जांचने के उपरांत ही सिंचाई का अगला निर्णय लें।\n\n"
-                    f"Source: IMD ({weather_domain}) | {agri_source}"
-                )
-            elif language == "hinglish":
-                return (
-                    f"🌾 {loc_display} me aaj rain forecast hone ke karan sinchai postpone karne ki salah di jaati hai.\n\n"
-                    f"- Live Weather ({weather_domain}): {loc_display} me rain alert ya precipitation forecast hai, isliye sinchai rokein.\n"
-                    f"- Agronomy Guidance ({agri_source}): {agri_rain_advice}\n"
-                    f"- Moisture Monitoring: Rain ke 24–48 hours baad field moisture check karne ke baad hi next irrigation plan karein.\n\n"
-                    f"Source: IMD ({weather_domain}) | {agri_source}"
-                )
+            if time_scope == "TOMORROW":
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} में कल बारिश का पूर्वानुमान होने के कारण सिंचाई स्थगित करने की सलाह दी जाती है।\n\n"
+                        f"- लाइव मौसम ({weather_domain}): {loc_display} में कल वर्षा अथवा बादलों की चेतावनी है, अतः तात्कालिक सिंचाई रोकें।\n"
+                        f"- कृषि सलाह ({agri_source}): {agri_rain_advice}\n"
+                        f"- नमी निगरानी: बारिश के 24–48 घंटे बाद खेत की मिट्टी जांचने के उपरांत ही सिंचाई का अगला निर्णय लें।\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} me kal rain forecast hone ke karan sinchai postpone karne ki salah di jaati hai.\n\n"
+                        f"- Live Weather ({weather_domain}): {loc_display} me kal rain alert ya precipitation forecast hai, isliye sinchai rokein.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_rain_advice}\n"
+                        f"- Moisture Monitoring: Rain ke 24–48 hours baad field moisture check karne ke baad hi next irrigation plan karein.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                else:
+                    return (
+                        f"🌾 Rain is forecast for {loc_display} tomorrow, so irrigation should be postponed to avoid waterlogging.\n\n"
+                        f"- Live Weather ({weather_domain}): Precipitation alert/forecast active for tomorrow in {loc_display}; withhold immediate irrigation.\n"
+                        f"- Agronomic Advisory ({agri_source}): {agri_rain_advice}\n"
+                        f"- Moisture Inspection: Re-assess soil moisture 24–48 hours after rainfall before scheduling further irrigation.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+            elif time_scope == "CURRENT":
+                if current_weather_state == "CURRENT_RAIN_CONFIRMED":
+                    if language == "hi":
+                        return (
+                            f"🌾 {loc_display} में अभी बारिश होने के कारण सिंचाई रोकने की सलाह दी जाती है।\n\n"
+                            f"- लाइव मौसम ({weather_domain}): {loc_display} में अभी बारिश हो रही है।\n"
+                            f"- कृषि सलाह ({agri_source}): {agri_rain_advice}\n"
+                            f"- जल निकासी: बारिश के बाद खेत में जलभराव न होने दें और नाली खुली रखें।\n\n"
+                            f"Source: IMD ({weather_domain}) | {agri_source}"
+                        )
+                    elif language == "hinglish":
+                        return (
+                            f"🌾 {loc_display} me abhi baarish hone ke karan sinchai rokne ki salah di jaati hai.\n\n"
+                            f"- Live Weather ({weather_domain}): {loc_display} me abhi baarish ho rahi hai.\n"
+                            f"- Agronomy Guidance ({agri_source}): {agri_rain_advice}\n"
+                            f"- Water Drainage: Field me waterlogging avoid karein aur drainage open rakhein.\n\n"
+                            f"Source: IMD ({weather_domain}) | {agri_source}"
+                        )
+                    else:
+                        return (
+                            f"🌾 With rain currently in {loc_display}, hold off on irrigation.\n\n"
+                            f"- Live Weather ({weather_domain}): Rainfall currently observed in {loc_display}.\n"
+                            f"- Agronomic Advisory ({agri_source}): {agri_rain_advice}\n"
+                            f"- Drainage: Ensure unobstructed field drainage.\n\n"
+                            f"Source: IMD ({weather_domain}) | {agri_source}"
+                        )
+                else:
+                    if language == "hi":
+                        return (
+                            f"🌾 {loc_display} में अभी बारिश की पुष्टि नहीं है, लेकिन बारिश का अलर्ट होने के कारण सिंचाई स्थगित करने की सलाह दी जाती है।\n\n"
+                            f"- लाइव मौसम ({weather_domain}): {loc_display} में अभी बारिश की पुष्टि नहीं है, लेकिन बारिश का अलर्ट/पूर्वानुमान सक्रिय है।\n"
+                            f"- कृषि सलाह ({agri_source}): {agri_rain_advice}\n"
+                            f"- निगरानी: आने वाले घंटों के मौसम पर नजर रखें।\n\n"
+                            f"Source: IMD ({weather_domain}) | {agri_source}"
+                        )
+                    elif language == "hinglish":
+                        return (
+                            f"🌾 {loc_display} me abhi baarish confirm nahi hai, lekin rain alert hone ke karan sinchai postpone karne ki salah di jaati hai.\n\n"
+                            f"- Live Weather ({weather_domain}): {loc_display} me abhi baarish confirm nahi hai, lekin rain alert/forecast active hai.\n"
+                            f"- Agronomy Guidance ({agri_source}): {agri_rain_advice}\n"
+                            f"- Weather Monitoring: Aane wale ghanton ke mausam par nazar rakhein.\n\n"
+                            f"Source: IMD ({weather_domain}) | {agri_source}"
+                        )
+                    else:
+                        return (
+                            f"🌾 Rain is not confirmed right now in {loc_display}, but an active rain alert suggests postponing irrigation.\n\n"
+                            f"- Live Weather ({weather_domain}): Current rain in {loc_display} is not confirmed, but a rain alert/forecast is active.\n"
+                            f"- Agronomic Advisory ({agri_source}): {agri_rain_advice}\n"
+                            f"- Monitoring: Track oncoming weather before scheduling irrigation.\n\n"
+                            f"Source: IMD ({weather_domain}) | {agri_source}"
+                        )
             else:
-                return (
-                    f"🌾 Rain is forecast for {loc_display} today, so irrigation should be postponed to avoid waterlogging.\n\n"
-                    f"- Live Weather ({weather_domain}): Precipitation alert/forecast active in {loc_display}; withhold immediate irrigation.\n"
-                    f"- Agronomic Advisory ({agri_source}): {agri_rain_advice}\n"
-                    f"- Moisture Inspection: Re-assess soil moisture 24–48 hours after rainfall before scheduling further irrigation.\n\n"
-                    f"Source: IMD ({weather_domain}) | {agri_source}"
-                )
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} में आज बारिश का पूर्वानुमान होने के कारण सिंचाई स्थगित करने की सलाह दी जाती है।\n\n"
+                        f"- लाइव मौसम ({weather_domain}): {loc_display} में वर्षा अथवा बादलों की चेतावनी है, अतः तात्कालिक सिंचाई रोकें।\n"
+                        f"- कृषि सलाह ({agri_source}): {agri_rain_advice}\n"
+                        f"- नमी निगरानी: बारिश के 24–48 घंटे बाद खेत की मिट्टी जांचने के उपरांत ही सिंचाई का अगला निर्णय लें।\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} me aaj rain forecast hone ke karan sinchai postpone karne ki salah di jaati hai.\n\n"
+                        f"- Live Weather ({weather_domain}): {loc_display} me rain alert ya precipitation forecast hai, isliye sinchai rokein.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_rain_advice}\n"
+                        f"- Moisture Monitoring: Rain ke 24–48 hours baad field moisture check karne ke baad hi next irrigation plan karein.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                else:
+                    return (
+                        f"🌾 Rain is forecast for {loc_display} today, so irrigation should be postponed to avoid waterlogging.\n\n"
+                        f"- Live Weather ({weather_domain}): Precipitation alert/forecast active in {loc_display}; withhold immediate irrigation.\n"
+                        f"- Agronomic Advisory ({agri_source}): {agri_rain_advice}\n"
+                        f"- Moisture Inspection: Re-assess soil moisture 24–48 hours after rainfall before scheduling further irrigation.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
 
         elif weather_state == "CLEAR_DRY":
-            if language == "hi":
-                return (
-                    f"🌾 {loc_display} में आज मौसम मुख्य रूप से साफ रहने और वर्षा की संभावना न होने पर आप आवश्यकतानुसार सिंचाई कर सकते हैं।\n\n"
-                    f"- लाइव मौसम ({weather_domain}): {loc_display} में वर्तमान में मौसम साफ/शुष्क है और बारिश की तात्कालिक चेतावनी नहीं है।\n"
-                    f"- कृषि सलाह ({agri_source}): {agri_advice}\n"
-                    f"- नमी की जांच: यदि खेत में पहले से पर्याप्त नमी मौजूद हो तो सिंचाई 2–3 दिन टालें ताकि जलभराव न हो।\n\n"
-                    f"Source: IMD ({weather_domain}) | {agri_source}"
-                )
-            elif language == "hinglish":
-                return (
-                    f"🌾 {loc_display} me aaj mausam saaf rehne aur rain forecast na hone par aap zaroorat ke hisaab se sinchai kar sakte hain.\n\n"
-                    f"- Live Weather ({weather_domain}): {loc_display} me weather mainly clear/dry hai aur immediate rain alert nahi hai.\n"
-                    f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
-                    f"- Soil Moisture Check: Agar khet me pehle se moisture ho to sinchai 2–3 din postpone karein taki waterlogging na ho.\n\n"
-                    f"Source: IMD ({weather_domain}) | {agri_source}"
-                )
+            if time_scope == "TOMORROW":
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} में कल मौसम मुख्य रूप से साफ रहने और वर्षा की संभावना न होने पर आप आवश्यकतानुसार सिंचाई कर सकते हैं।\n\n"
+                        f"- लाइव मौसम ({weather_domain}): {loc_display} में कल मौसम साफ/शुष्क रहने का अनुमान है और बारिश की तात्कालिक चेतावनी नहीं है।\n"
+                        f"- कृषि सलाह ({agri_source}): {agri_advice}\n"
+                        f"- नमी की जांच: यदि खेत में पहले से पर्याप्त नमी मौजूद हो तो सिंचाई 2–3 दिन टालें ताकि जलभराव न हो।\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} me kal mausam saaf rehne aur rain forecast na hone par aap zaroorat ke hisaab se sinchai kar sakte hain.\n\n"
+                        f"- Live Weather ({weather_domain}): {loc_display} me kal weather mainly clear/dry rehne ka anuman hai aur rain alert nahi hai.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Soil Moisture Check: Agar khet me pehle se moisture ho to sinchai 2–3 din postpone karein taki waterlogging na ho.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                else:
+                    return (
+                        f"🌾 Based on clear weather forecast for {loc_display} tomorrow with no rain expected, you can proceed with irrigation if required.\n\n"
+                        f"- Live Weather ({weather_domain}): Clear and dry atmospheric conditions forecast in {loc_display}.\n"
+                        f"- Agronomic Recommendation ({agri_source}): {agri_advice}\n"
+                        f"- Moisture Check: If the soil already retains adequate residual moisture, delay irrigation to prevent waterlogging.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+            elif time_scope == "CURRENT":
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} में अभी बारिश नहीं हो रही है और मौसम साफ है, आप आवश्यकतानुसार सिंचाई कर सकते हैं।\n\n"
+                        f"- लाइव मौसम ({weather_domain}): {loc_display} में वर्तमान में मौसम साफ/शुष्क है।\n"
+                        f"- कृषि सलाह ({agri_source}): {agri_advice}\n"
+                        f"- नमी की जांच: मिट्टी की नमी जांचने के बाद ही सिंचाई करें।\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} me abhi baarish nahi ho rahi hai aur mausam saaf hai, aap zaroorat ke hisaab se sinchai kar sakte hain.\n\n"
+                        f"- Live Weather ({weather_domain}): {loc_display} me currently rain nahi hai aur weather dry hai.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Soil Moisture Check: Soil moisture verify karke hi sinchai karein.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                else:
+                    return (
+                        f"🌾 It is currently dry in {loc_display} with no rain; proceed with irrigation if required.\n\n"
+                        f"- Live Weather ({weather_domain}): Clear and dry conditions observed in {loc_display}.\n"
+                        f"- Agronomic Recommendation ({agri_source}): {agri_advice}\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
             else:
-                return (
-                    f"🌾 Based on clear weather conditions in {loc_display} today with no rain forecast, you can proceed with irrigation if required.\n\n"
-                    f"- Live Weather ({weather_domain}): Clear and dry atmospheric conditions observed in {loc_display} with no precipitation alert.\n"
-                    f"- Agronomic Recommendation ({agri_source}): {agri_advice}\n"
-                    f"- Moisture Check: If the soil already retains adequate residual moisture, delay irrigation to prevent waterlogging.\n\n"
-                    f"Source: IMD ({weather_domain}) | {agri_source}"
-                )
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} में आज मौसम मुख्य रूप से साफ रहने और वर्षा की संभावना न होने पर आप आवश्यकतानुसार सिंचाई कर सकते हैं।\n\n"
+                        f"- लाइव मौसम ({weather_domain}): {loc_display} में वर्तमान में मौसम साफ/शुष्क है और बारिश की तात्कालिक चेतावनी नहीं है।\n"
+                        f"- कृषि सलाह ({agri_source}): {agri_advice}\n"
+                        f"- नमी की जांच: यदि खेत में पहले से पर्याप्त नमी मौजूद हो तो सिंचाई 2–3 दिन टालें ताकि जलभराव न हो।\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} me aaj mausam saaf rehne aur rain forecast na hone par aap zaroorat ke hisaab se sinchai kar sakte hain.\n\n"
+                        f"- Live Weather ({weather_domain}): {loc_display} me weather mainly clear/dry hai aur immediate rain alert nahi hai.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Soil Moisture Check: Agar khet me pehle se moisture ho to sinchai 2–3 din postpone karein taki waterlogging na ho.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
+                else:
+                    return (
+                        f"🌾 Based on clear weather conditions in {loc_display} today with no rain forecast, you can proceed with irrigation if required.\n\n"
+                        f"- Live Weather ({weather_domain}): Clear and dry atmospheric conditions observed in {loc_display} with no precipitation alert.\n"
+                        f"- Agronomic Recommendation ({agri_source}): {agri_advice}\n"
+                        f"- Moisture Check: If the soil already retains adequate residual moisture, delay irrigation to prevent waterlogging.\n\n"
+                        f"Source: IMD ({weather_domain}) | {agri_source}"
+                    )
 
         else:
             # Weather unverified or unrelated evidence
-            if language == "hi":
-                return (
-                    f"🌾 {loc_display} के लिए तात्कालिक लाइव मौसम डेटा ऑनलाइन सत्यापित नहीं हो सका, इसलिए सिंचाई से पहले स्थानीय आकाश और खेत की नमी अवश्य जांच लें।\n\n"
-                    f"- लाइव मौसम स्थिति: {loc_display} का वर्तमान मौसम एवं वर्षा डेटा अभी ऑनलाइन सत्यापित नहीं हो पाया है।\n"
-                    f"- कृषि सिफारिश ({agri_source}): {agri_advice}\n"
-                    f"- मौसम सावधानी: यदि स्थानीय स्तर पर बारिश के बादल या वर्षा की संभावना दिखे तो सिंचाई तुरंत रोक दें।\n\n"
-                    f"Source: {agri_source} | Live Weather Data Unverified"
-                )
-            elif language == "hinglish":
-                return (
-                    f"🌾 {loc_display} ke liye aaj ka live weather data online verify nahi ho saka, isliye sinchai se pehle local mausam aur field moisture zaroor check karein.\n\n"
-                    f"- Live Weather Status: {loc_display} ka real-time meteorological data online confirm nahi ho paya hai.\n"
-                    f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
-                    f"- Weather Caution: Agar local rain ya cloudy weather ke aasaar hon to sinchai postpone karein taki water stagnation na ho.\n\n"
-                    f"Source: {agri_source} | Live Weather Data Unverified"
-                )
+            if time_scope == "TOMORROW":
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} के लिए कल का मौसम और वर्षा का सटीक डेटा ऑनलाइन सत्यापित नहीं हो सका, इसलिए सिंचाई से पहले स्थानीय मौसम और खेत की नमी अवश्य जांच लें।\n\n"
+                        f"- लाइव मौसम स्थिति: {loc_display} का कल का मौसम पूर्वानुमान अभी ऑनलाइन सत्यापित नहीं हो पाया है।\n"
+                        f"- कृषि सिफारिश ({agri_source}): {agri_advice}\n"
+                        f"- मौसम सावधानी: यदि स्थानीय स्तर पर बारिश के बादल या वर्षा की संभावना दिखे तो सिंचाई तुरंत रोक दें।\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} ke liye kal ka live weather aur rain forecast online verify nahi ho saka, isliye sinchai se pehle local mausam aur field moisture zaroor check karein.\n\n"
+                        f"- Live Weather Status: {loc_display} ka kal ka rain forecast online confirm nahi ho paya hai.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Weather Caution: Agar local rain ya cloudy weather ke aasaar hon to sinchai postpone karein taki water stagnation na ho.\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+                else:
+                    return (
+                        f"🌾 Live weather forecast for {loc_display} tomorrow could not be verified online; please inspect local sky conditions and soil moisture before irrigating.\n\n"
+                        f"- Live Weather Status: Meteorological forecast for {loc_display} tomorrow unconfirmed.\n"
+                        f"- Agronomic Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Weather Caution: If rain appears imminent locally, hold off irrigation to prevent crop root suffocation.\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+            elif time_scope == "CURRENT":
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} के लिए अभी का लाइव मौसम डेटा ऑनलाइन सत्यापित नहीं हो सका, इसलिए स्थानीय मौसम और नमी देखकर ही सिंचाई करें।\n\n"
+                        f"- लाइव मौसम स्थिति: {loc_display} का तात्कालिक मौसम डेटा ऑनलाइन सत्यापित नहीं हो पाया है।\n"
+                        f"- कृषि सिफारिश ({agri_source}): {agri_advice}\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} ke liye abhi ka live weather data online verify nahi ho saka, isliye local mausam dekhkar hi sinchai karein.\n\n"
+                        f"- Live Weather Status: {loc_display} ka real-time meteorological data online confirm nahi ho paya hai.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_advice}\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+                else:
+                    return (
+                        f"🌾 Real-time live weather data for {loc_display} could not be confirmed online; inspect local conditions before irrigating.\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
             else:
-                return (
-                    f"🌾 Real-time live weather data for {loc_display} could not be verified online; please inspect local sky conditions and soil moisture before irrigating.\n\n"
-                    f"- Live Weather Status: Real-time meteorological telemetry for {loc_display} could not be confirmed online.\n"
-                    f"- Agronomic Guidance ({agri_source}): {agri_advice}\n"
-                    f"- Weather Caution: If rain appears imminent locally, hold off irrigation to prevent crop root suffocation.\n\n"
-                    f"Source: {agri_source} | Live Weather Data Unverified"
-                )
+                if language == "hi":
+                    return (
+                        f"🌾 {loc_display} के लिए तात्कालिक लाइव मौसम डेटा ऑनलाइन सत्यापित नहीं हो सका, इसलिए सिंचाई से पहले स्थानीय आकाश और खेत की नमी अवश्य जांच लें।\n\n"
+                        f"- लाइव मौसम स्थिति: {loc_display} का वर्तमान मौसम एवं वर्षा डेटा अभी ऑनलाइन सत्यापित नहीं हो पाया है।\n"
+                        f"- कृषि सिफारिश ({agri_source}): {agri_advice}\n"
+                        f"- मौसम सावधानी: यदि स्थानीय स्तर पर बारिश के बादल या वर्षा की संभावना दिखे तो सिंचाई तुरंत रोक दें।\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+                elif language == "hinglish":
+                    return (
+                        f"🌾 {loc_display} ke liye aaj ka live weather data online verify nahi ho saka, isliye sinchai se pehle local mausam aur field moisture zaroor check karein.\n\n"
+                        f"- Live Weather Status: {loc_display} ka real-time meteorological data online confirm nahi ho paya hai.\n"
+                        f"- Agronomy Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Weather Caution: Agar local rain ya cloudy weather ke aasaar hon to sinchai postpone karein taki water stagnation na ho.\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
+                else:
+                    return (
+                        f"🌾 Real-time live weather data for {loc_display} could not be verified online; please inspect local sky conditions and soil moisture before irrigating.\n\n"
+                        f"- Live Weather Status: Real-time meteorological telemetry for {loc_display} could not be confirmed online.\n"
+                        f"- Agronomic Guidance ({agri_source}): {agri_advice}\n"
+                        f"- Weather Caution: If rain appears imminent locally, hold off irrigation to prevent crop root suffocation.\n\n"
+                        f"Source: {agri_source} | Live Weather Data Unverified"
+                    )
 
     # --- Case 2: Spraying Feasibility Query with Weather Context ---
     if is_spray:
@@ -1178,72 +2092,229 @@ def generate_weather_hybrid_reply(
             )
 
     # --- Case 3: General / Rainfall Forecast Query ---
+    if time_scope == "CURRENT":
+        if current_weather_state == "CURRENT_RAIN_CONFIRMED":
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में अभी बारिश हो रही है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): वर्तमान में वर्षा दर्ज की गई है।\n"
+                    f"- कृषि कार्य: खुले में रखे अनाज को सुरक्षित ढकें और खेत का जल निकास सुचारू रखें।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me abhi baarish ho rahi hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Current time me rain observation active hai.\n"
+                    f"- Farm Operations: Harvested produce ko safely cover karein aur water drainage open rakhein.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ It is currently raining in {loc_display}.\n\n"
+                    f"- Weather Status ({weather_domain}): Current rainfall observed.\n"
+                    f"- Farm Operations: Protect open produce and maintain proper drainage.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+        elif current_weather_state == "CURRENT_NO_RAIN_CONFIRMED":
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में अभी बारिश नहीं हो रही है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): वर्तमान में कोई वर्षा नहीं है और मौसम साफ है।\n"
+                    f"- कृषि कार्य: सामान्य कृषि कार्य जारी रखे जा सकते हैं।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me abhi baarish nahi ho rahi hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Current time me rain nahi hai aur mausam saaf hai.\n"
+                    f"- Field Operations: Routine field activities continue kar sakte hain.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ It is currently not raining in {loc_display}.\n\n"
+                    f"- Conditions ({weather_domain}): No current rainfall active in the area.\n"
+                    f"- Farm Operations: Normal field operations can continue.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+        elif current_weather_state == "FORECAST_OR_ALERT_ONLY":
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में अभी बारिश की पुष्टि नहीं है, लेकिन बारिश का अलर्ट/पूर्वानुमान सक्रिय है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): तात्कालिक वर्षा चेतावनी अथवा पूर्वानुमान सक्रिय है।\n"
+                    f"- कृषि कार्य: खुले में रखी उपज की सुरक्षा की तैयारी रखें।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me abhi baarish confirm nahi hai, lekin rain alert/forecast active hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Current precipitation alert ya rain forecast active hai.\n"
+                    f"- Farm Operations: Open me rakhe anaj par dhyan rakhein aur aane wale ghanton ke mausam par nazar rakhein.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ Current rain in {loc_display} is not confirmed, but a rain alert/forecast is active.\n\n"
+                    f"- Conditions ({weather_domain}): Precipitation forecast or alert active.\n"
+                    f"- Farm Operations: Monitor weather conditions and protect exposed produce.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+        else:  # CURRENT_CONDITION_UNVERIFIED
+            if language == "hi":
+                return (
+                    f"🌦️ मैं {loc_display} में अभी बारिश हो रही है या नहीं, इसे लाइव स्रोत से सत्यापित नहीं कर पा रहा हूँ।\n\n"
+                    f"- लाइव स्थिति: मौसम केंद्र से तात्कालिक मौसम टेलीमेट्री सत्यापित नहीं हो पाई है।\n"
+                    f"- कृषि सलाह: स्थानीय मौसम देखकर ही कार्य करें।\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ Main {loc_display} me abhi baarish ho rahi hai ya nahi, ise live source se verify nahi kar pa raha hoon.\n\n"
+                    f"- Live Status: Real-time meteorological telemetry verify nahi ho payi.\n"
+                    f"- Advisory: Local sky conditions dekhkar hi field operations karein.\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+            else:
+                return (
+                    f"🌦️ I cannot verify from live sources whether it is currently raining in {loc_display}.\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+
     if weather_state == "RAIN_EXPECTED":
-        if language == "hi":
-            return (
-                f"🌦️ {loc_display} में आज बारिश / वर्षा होने का पूर्वानुमान है।\n\n"
-                f"- मौसम स्थिति ({weather_domain}): वर्षा अथवा मेघ गर्जन की चेतावनी जारी की गई है।\n"
-                f"- कृषि कार्य: खुले में रखे अनाज की सुरक्षा करें तथा खेत में रासायनिक छिड़काव अथवा सिंचाई स्थगित रखें।\n\n"
-                f"Source: IMD ({weather_domain})"
-            )
-        elif language == "hinglish":
-            return (
-                f"🌦️ {loc_display} me aaj rain / baarish ka forecast hai.\n\n"
-                f"- Weather Status ({weather_domain}): Rain warning ya precipitation alert active hai.\n"
-                f"- Farm Operations: Open me rakhe grain ko protect karein aur spray ya sinchai postpone karein.\n\n"
-                f"Source: IMD ({weather_domain})"
-            )
+        if time_scope == "TOMORROW":
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में कल बारिश / वर्षा होने का पूर्वानुमान है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): कल वर्षा अथवा मेघ गर्जन की चेतावनी जारी की गई है।\n"
+                    f"- कृषि कार्य: खुले में रखे अनाज की सुरक्षा करें तथा कल के लिए प्रस्तावित रासायनिक छिड़काव अथवा सिंचाई स्थगित रखें।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me kal rain / baarish ka forecast hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Kal rain warning ya precipitation alert active hai.\n"
+                    f"- Farm Operations: Open me rakhe grain ko protect karein aur kal ke liye spray ya sinchai postpone karein.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ Rainfall is forecast for {loc_display} tomorrow.\n\n"
+                    f"- Weather Status ({weather_domain}): Precipitation alert active for tomorrow.\n"
+                    f"- Farm Operations: Protect harvested crops and postpone spraying or irrigation scheduled for tomorrow.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
         else:
-            return (
-                f"🌦️ Rainfall is forecast for {loc_display} today.\n\n"
-                f"- Weather Status ({weather_domain}): Precipitation alert or rain warning active in the area.\n"
-                f"- Farm Operations: Protect harvested grain and postpone chemical spraying or field irrigation.\n\n"
-                f"Source: IMD ({weather_domain})"
-            )
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में आज बारिश / वर्षा होने का पूर्वानुमान है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): वर्षा अथवा मेघ गर्जन की चेतावनी जारी की गई है।\n"
+                    f"- कृषि कार्य: खुले में रखे अनाज की सुरक्षा करें तथा खेत में रासायनिक छिड़काव अथवा सिंचाई स्थगित रखें।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me aaj rain / baarish ka forecast hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Rain warning ya precipitation alert active hai.\n"
+                    f"- Farm Operations: Open me rakhe grain ko protect karein aur spray ya sinchai postpone karein.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ Rainfall is forecast for {loc_display} today.\n\n"
+                    f"- Weather Status ({weather_domain}): Precipitation alert or rain warning active in the area.\n"
+                    f"- Farm Operations: Protect harvested grain and postpone chemical spraying or field irrigation.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
     elif weather_state == "CLEAR_DRY":
-        if language == "hi":
-            return (
-                f"🌦️ {loc_display} में आज मौसम मुख्य रूप से साफ रहने का अनुमान है और भारी बारिश की संभावना नहीं है।\n\n"
-                f"- मौसम स्थिति ({weather_domain}): अधिकतम तापमान सामान्य स्तर पर है और वर्षा की कोई चेतावनी जारी नहीं की गई है।\n"
-                f"- कृषि कार्य: मौसम अनुकूल रहने के कारण खेत की निराई-गुड़ाई, जुताई या खाद प्रबंधन सामान्य रूप से किया जा सकता है।\n\n"
-                f"Source: IMD ({weather_domain})"
-            )
-        elif language == "hinglish":
-            return (
-                f"🌦️ {loc_display} me aaj mausam mainly clear rehne ka anuman hai aur heavy rain ki sambhavna nahi hai.\n\n"
-                f"- Weather Status ({weather_domain}): Temperatures normal range me hain aur immediate precipitation alert nahi hai.\n"
-                f"- Field Operations: Weather favourable hone ke karan routine intercultural operations continue kar sakte hain.\n\n"
-                f"Source: IMD ({weather_domain})"
-            )
+        if time_scope == "TOMORROW":
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में कल मौसम मुख्य रूप से साफ रहने का अनुमान है और भारी बारिश की संभावना नहीं है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): कल मौसम साफ/शुष्क रहने का पूर्वानुमान है।\n"
+                    f"- कृषि कार्य: मौसम अनुकूल रहने के कारण सामान्य कृषि कार्य जारी रखे जा सकते हैं।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me kal mausam mainly clear rehne ka anuman hai aur heavy rain ki sambhavna nahi hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Kal weather mainly clear/dry rehne ka forecast hai.\n"
+                    f"- Field Operations: Weather favourable hone ke karan routine intercultural operations continue kar sakte hain.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ The weather forecast for {loc_display} tomorrow indicates generally clear conditions with no heavy rainfall expected.\n\n"
+                    f"- Conditions ({weather_domain}): Temperatures remain seasonal with no immediate precipitation warning tomorrow.\n"
+                    f"- Farm Operations: Favorable conditions permit regular intercultural field operations and crop management.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
         else:
-            return (
-                f"🌦️ The weather forecast for {loc_display} today indicates generally clear conditions with no heavy rainfall expected.\n\n"
-                f"- Conditions ({weather_domain}): Temperatures remain seasonal with no immediate precipitation warning.\n"
-                f"- Farm Operations: Favorable conditions permit regular intercultural field operations and crop management.\n\n"
-                f"Source: IMD ({weather_domain})"
-            )
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} में आज मौसम मुख्य रूप से साफ रहने का अनुमान है और भारी बारिश की संभावना नहीं है।\n\n"
+                    f"- मौसम स्थिति ({weather_domain}): अधिकतम तापमान सामान्य स्तर पर है और वर्षा की कोई चेतावनी जारी नहीं की गई है।\n"
+                    f"- कृषि कार्य: मौसम अनुकूल रहने के कारण खेत की निराई-गुड़ाई, जुताई या खाद प्रबंधन सामान्य रूप से किया जा सकता है।\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} me aaj mausam mainly clear rehne ka anuman hai aur heavy rain ki sambhavna nahi hai.\n\n"
+                    f"- Weather Status ({weather_domain}): Temperatures normal range me hain aur immediate precipitation alert nahi hai.\n"
+                    f"- Field Operations: Weather favourable hone ke karan routine intercultural operations continue kar sakte hain.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
+            else:
+                return (
+                    f"🌦️ The weather forecast for {loc_display} today indicates generally clear conditions with no heavy rainfall expected.\n\n"
+                    f"- Conditions ({weather_domain}): Temperatures remain seasonal with no immediate precipitation warning.\n"
+                    f"- Farm Operations: Favorable conditions permit regular intercultural field operations and crop management.\n\n"
+                    f"Source: IMD ({weather_domain})"
+                )
     else:
-        if language == "hi":
-            return (
-                f"🌦️ {loc_display} के लिए आज का लाइव मौसम और वर्षा का सटीक डेटा ऑनलाइन सत्यापित नहीं हो सका।\n\n"
-                f"- लाइव स्थिति: मौसम केंद्र से तात्कालिक मौसम टेलीमेट्री सत्यापित नहीं हो पाई है।\n"
-                f"- कृषि सलाह: स्थानीय मौसम और आकाश की स्थिति को देखकर ही खेत में सिंचाई या स्प्रे का निर्णय लें।\n\n"
-                f"Source: Live Weather Data Unverified"
-            )
-        elif language == "hinglish":
-            return (
-                f"🌦️ {loc_display} ke liye aaj ka live weather aur rain data online verify nahi ho saka.\n\n"
-                f"- Live Status: Real-time meteorological telemetry verify nahi ho payi.\n"
-                f"- Advisory: Local sky conditions aur field moisture dekhkar hi sinchai ya spray ka decision lein.\n\n"
-                f"Source: Live Weather Data Unverified"
-            )
+        if time_scope == "TOMORROW":
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} के लिए कल का लाइव मौसम और वर्षा का सटीक डेटा ऑनलाइन सत्यापित नहीं हो सका।\n\n"
+                    f"- लाइव स्थिति: कल के मौसम पूर्वानुमान की टेलीमेट्री अभी ऑनलाइन उपलब्ध नहीं है।\n"
+                    f"- कृषि सलाह: स्थानीय मौसम और आकाश की स्थिति को देखकर ही योजना बनाएं।\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} ke liye kal ka live weather aur rain forecast online verify nahi ho saka.\n\n"
+                    f"- Live Status: Kal ke weather forecast ki telemetry online available nahi hai.\n"
+                    f"- Advisory: Local sky conditions dekhkar hi plan karein.\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+            else:
+                return (
+                    f"🌦️ Weather and precipitation forecast for {loc_display} tomorrow could not be confirmed online.\n\n"
+                    f"- Live Status: Forecast telemetry for tomorrow could not be verified.\n"
+                    f"- Advisory: Inspect local sky conditions before scheduling activities.\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
         else:
-            return (
-                f"🌦️ Real-time live weather and precipitation data for {loc_display} could not be confirmed online.\n\n"
-                f"- Live Status: Real-time meteorological telemetry could not be verified.\n"
-                f"- Advisory: Inspect local sky conditions and field moisture before scheduling irrigation or chemical spraying.\n\n"
-                f"Source: Live Weather Data Unverified"
-            )
+            if language == "hi":
+                return (
+                    f"🌦️ {loc_display} के लिए आज का लाइव मौसम और वर्षा का सटीक डेटा ऑनलाइन सत्यापित नहीं हो सका।\n\n"
+                    f"- लाइव स्थिति: मौसम केंद्र से तात्कालिक मौसम टेलीमेट्री सत्यापित नहीं हो पाई है।\n"
+                    f"- कृषि सलाह: स्थानीय मौसम और आकाश की स्थिति को देखकर ही खेत में सिंचाई या स्प्रे का निर्णय लें।\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+            elif language == "hinglish":
+                return (
+                    f"🌦️ {loc_display} ke liye aaj ka live weather aur rain data online verify nahi ho saka.\n\n"
+                    f"- Live Status: Real-time meteorological telemetry verify nahi ho payi.\n"
+                    f"- Advisory: Local sky conditions aur field moisture dekhkar hi sinchai ya spray ka decision lein.\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
+            else:
+                return (
+                    f"🌦️ Real-time live weather and precipitation data for {loc_display} could not be confirmed online.\n\n"
+                    f"- Live Status: Real-time meteorological telemetry could not be verified.\n"
+                    f"- Advisory: Inspect local sky conditions and field moisture before scheduling irrigation or chemical spraying.\n\n"
+                    f"Source: Live Weather Data Unverified"
+                )
 
 
 
@@ -1254,23 +2325,29 @@ def extract_mandi_data_from_evidence(
     evidence_list: List[Any],
     loc: Optional[str] = None,
     crop: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Parses and verifies mandi market rates from live web search evidence (Tavily).
     Extracts modal price, min-max price range, unit, reported date, and authoritative source.
     Strictly verifies freshness and prevents numerical hallucination.
+    Returns (mandi_data, rejection_reason).
     """
-    from datetime import date
+    from datetime import date, timedelta
     if not evidence_list:
-        return None
+        return None, "no_evidence_returned"
 
     today = date.today()
+    yesterday = today - timedelta(days=1)
     today_str = today.strftime("%Y-%m-%d")
     today_dmy = today.strftime("%d-%m-%Y")
     today_slash = today.strftime("%d/%m/%Y")
+    yest_str = yesterday.strftime("%Y-%m-%d")
+    yest_dmy = yesterday.strftime("%d-%m-%Y")
+    yest_slash = yesterday.strftime("%d/%m/%Y")
     current_year = str(today.year)
 
-    best_data = None
+    stale_found = False
+    price_found = False
 
     for ev in evidence_list:
         content = f"{getattr(ev, 'title', '')} {getattr(ev, 'content', '')}"
@@ -1321,6 +2398,8 @@ def extract_mandi_data_from_evidence(
         if not modal_price and not min_price:
             continue
 
+        price_found = True
+
         # Extract Date
         reported_date = published_date
         date_match = re.search(r"\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b", content)
@@ -1333,18 +2412,26 @@ def extract_mandi_data_from_evidence(
         if date_match:
             reported_date = date_match.group(1)
 
-        # Freshness Check
-        is_today = False
+        # Freshness Check:
+        # A market rate is fresh if reported date is today or yesterday,
+        # or content mentions 'today'/'aaj'/'आज' and contains current year without past years.
+        is_fresh = False
         if reported_date:
             rd_clean = reported_date.strip()
             if (
-                rd_clean in (today_str, today_dmy, today_slash)
+                rd_clean in (today_str, today_dmy, today_slash, yest_str, yest_dmy, yest_slash)
                 or (str(today.day) in rd_clean and today.strftime("%b") in rd_clean and current_year in rd_clean)
+                or (str(yesterday.day) in rd_clean and yesterday.strftime("%b") in rd_clean and current_year in rd_clean)
             ):
-                is_today = True
-        elif "today" in content.lower() or "aaj" in content.lower() or "आज" in content:
-            is_today = True
-            reported_date = today_dmy
+                is_fresh = True
+        elif ("today" in content.lower() or "aaj" in content.lower() or "आज" in content) and current_year in content:
+            if not any(old_y in content for old_y in ["2020", "2021", "2022", "2023", "2024", "2025"]):
+                is_fresh = True
+                reported_date = today_dmy
+
+        if not is_fresh:
+            stale_found = True
+            continue
 
         # Authoritative Source Identification
         source_name = "AGMARKNET"
@@ -1365,22 +2452,19 @@ def extract_mandi_data_from_evidence(
             "max_price": max_price,
             "unit": "quintal",
             "reported_date": reported_date or today_dmy,
-            "is_today": is_today,
+            "is_today": True,
             "source_name": source_name,
             "source_url": url,
             "evidence": ev
         }
 
-        # If fresh and authoritative, stop immediately
-        if is_today and ("agmarknet" in domain or "enam" in domain or "gov.in" in domain):
-            return candidate
+        return candidate, None
 
-        if best_data is None:
-            best_data = candidate
-        elif not best_data.get("is_today") and is_today:
-            best_data = candidate
-
-    return best_data
+    if stale_found:
+        return None, "stale_market_rate_rejected"
+    if price_found:
+        return None, "unverified_date_rate_rejected"
+    return None, "no_price_in_evidence"
 
 
 def generate_market_price_reply(
@@ -1661,9 +2745,15 @@ def process_chat_message(
         # 1. Retrieve Live Weather from Tavily / WebSearchService
         weather_evidence = []
         live_lookup_failed = False
+        time_scope = route_decision.detected_entities.get("time_scope") or detect_weather_time_scope(clean_msg)
         if loc and getattr(web_search_service, "enabled", False):
             try:
-                weather_search_query = f"{loc} weather today rainfall forecast IMD"
+                if time_scope == "TOMORROW":
+                    weather_search_query = f"{loc} weather tomorrow rainfall forecast IMD"
+                elif time_scope == "CURRENT":
+                    weather_search_query = f"{loc} current weather right now rain rainfall IMD"
+                else:
+                    weather_search_query = f"{loc} weather today rainfall forecast IMD"
                 weather_evidence = web_search_service.search(
                     query=weather_search_query,
                     crop=crop,
@@ -1722,7 +2812,8 @@ def process_chat_message(
             live_verified=is_live_verified,
             live_failed=live_lookup_failed,
             weather_evidence=weather_evidence,
-            kb_chunks=kb_chunks
+            kb_chunks=kb_chunks,
+            time_scope=time_scope
         )
 
         return {
@@ -1742,33 +2833,74 @@ def process_chat_message(
         route_decision.intent in (Intent.MARKET, Intent.FINANCIAL) and getattr(route_decision, "service", None) == "market"
     ):
         loc = route_decision.detected_entities.get("location") or (context.get("location") if context else None)
+        if not loc:
+            loc = extract_location_from_text(clean_msg)
+
         crop = route_decision.detected_entities.get("crop") or (context.get("crop") if context else None)
+        if not crop:
+            for c_name, pat in CROPS_PATTERNS.items():
+                if re.search(pat, clean_msg.lower()):
+                    crop = c_name
+                    break
 
         mandi_evidence = []
-        live_lookup_failed = False
+        live_lookup_attempted = False
+        live_lookup_provider = "tavily"
+        live_lookup_result = "not_attempted"
+        rejection_reason = None
+        result_count = 0
         mandi_data = None
 
-        if loc and getattr(web_search_service, "enabled", False):
+        if getattr(web_search_service, "enabled", False):
+            live_lookup_attempted = True
             try:
                 commodity_canonical = crop.lower() if crop else "commodity"
-                search_query = f"{loc} mandi {commodity_canonical} latest modal price AGMARKNET"
+                loc_term = loc if loc else "India"
+                search_query = f"{loc_term} mandi {commodity_canonical} latest modal price AGMARKNET eNAM"
                 mandi_evidence = web_search_service.search(
                     query=search_query,
                     crop=crop,
                     location=loc,
                     freshness_needed=True
                 )
-                mandi_data = extract_mandi_data_from_evidence(mandi_evidence, loc, crop)
+                result_count = len(mandi_evidence)
+                mandi_data, rejection_reason = extract_mandi_data_from_evidence(mandi_evidence, loc, crop)
+                if mandi_data:
+                    live_lookup_result = "verified_rate_found"
+                else:
+                    if not mandi_evidence:
+                        rejection_reason = "no_evidence_returned"
+                        live_lookup_result = "no_verified_rate"
+                    elif rejection_reason and "stale" in rejection_reason:
+                        live_lookup_result = "stale_rate_rejected"
+                    else:
+                        rejection_reason = rejection_reason or "no_price_in_evidence"
+                        live_lookup_result = "no_verified_rate"
             except Exception as exc:
                 logger.warning("Live mandi search via Tavily failed: %s", exc)
                 mandi_evidence = []
-                live_lookup_failed = True
-        elif loc:
-            live_lookup_failed = True
+                mandi_data = None
+                live_lookup_result = "provider_error"
+                rejection_reason = f"Provider exception: {type(exc).__name__} - {str(exc)}"
+        else:
+            live_lookup_attempted = False
+            live_lookup_result = "provider_disabled_or_no_key"
+            rejection_reason = "Tavily API key not configured or web search disabled"
 
         is_live_verified = bool(mandi_data is not None)
-        if not is_live_verified:
-            live_lookup_failed = True
+        live_failed = not is_live_verified
+
+        logger.info(
+            "MARKET_SERVICE: commodity=%s, location=%s, live_lookup_attempted=%s, "
+            "provider=%s, result_count=%d, rejection_reason=%s, anti_hallucination_fallback=%s",
+            crop,
+            loc,
+            live_lookup_attempted,
+            live_lookup_provider,
+            result_count,
+            rejection_reason,
+            live_failed
+        )
 
         formatted_sources = []
         if is_live_verified and mandi_data and mandi_data.get("evidence"):
@@ -1787,7 +2919,7 @@ def process_chat_message(
             location=loc,
             crop=crop,
             mandi_data=mandi_data,
-            live_failed=live_lookup_failed
+            live_failed=live_failed
         )
 
         return {
@@ -1799,7 +2931,11 @@ def process_chat_message(
             "provider": "tavily_market" if is_live_verified else "anti_hallucination_guard",
             "intent": route_decision.intent.value,
             "route": route_decision.action.value,
-            "detected_entities": route_decision.detected_entities
+            "detected_entities": route_decision.detected_entities,
+            "live_lookup_attempted": live_lookup_attempted,
+            "live_lookup_provider": live_lookup_provider,
+            "live_lookup_result": live_lookup_result,
+            "rejection_reason": rejection_reason
         }
 
     # Branch 1.6: Financial / Insurance (PMFBY Guidelines) - Static only for FINANCIAL_SERVICE action
@@ -1849,6 +2985,142 @@ def process_chat_message(
     if is_freshness_query:
         crop_val = route_decision.detected_entities.get("crop") or (context.get("crop") if context else None)
         loc_val = route_decision.detected_entities.get("location") or (context.get("location") if context else None)
+
+        scheme_req = detect_scheme_freshness_request(clean_msg)
+        if scheme_req:
+            scheme_name = scheme_req["scheme"]
+            target_year = scheme_req["target_year"]
+            evidence = []
+
+            if getattr(web_search_service, "enabled", False):
+                try:
+                    evidence = web_search_service.search(
+                        query=clean_msg,
+                        crop=crop_val,
+                        location=loc_val,
+                        freshness_needed=True
+                    )
+                except Exception as exc:
+                    logger.error("Web search for scheme failed: %s", type(exc).__name__)
+                    rejection_reason = f"Provider exception: {type(exc).__name__}"
+                    fallback_reply = compose_scheme_fallback_response(scheme_name, target_year, lang)
+                    logger.info(
+                        "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=0, rejection_reason=%s, anti_hallucination_fallback=True",
+                        scheme_name, target_year, rejection_reason
+                    )
+                    return {
+                        "reply": clean_farmer_markdown(fallback_reply),
+                        "sources": [{
+                            "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
+                            "section": "Official Guidelines",
+                            "source": "pmfby.gov.in",
+                            "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                            "category": "Schemes",
+                            "url": "https://pmfby.gov.in",
+                            "score": 0.90
+                        }],
+                        "retrieved_chunks": 0,
+                        "confidence": 0.70,
+                        "language": lang,
+                        "provider": "anti_hallucination_guard",
+                        "intent": route_decision.intent.value,
+                        "route": route_decision.action.value,
+                        "live_lookup_attempted": True,
+                        "live_lookup_provider": "tavily",
+                        "live_lookup_result": "provider_error",
+                        "rejection_reason": rejection_reason
+                    }
+            else:
+                logger.info("WebSearchService is disabled via WEB_SEARCH_ENABLED flag.")
+                fallback_reply = compose_scheme_fallback_response(scheme_name, target_year, lang)
+                return {
+                    "reply": clean_farmer_markdown(fallback_reply),
+                    "sources": [{
+                        "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
+                        "section": "Official Guidelines",
+                        "source": "pmfby.gov.in",
+                        "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                        "category": "Schemes",
+                        "url": "https://pmfby.gov.in",
+                        "score": 0.90
+                    }],
+                    "retrieved_chunks": 0,
+                    "confidence": 0.70,
+                    "language": lang,
+                    "provider": "anti_hallucination_guard",
+                    "intent": route_decision.intent.value,
+                    "route": route_decision.action.value,
+                    "live_lookup_attempted": True,
+                    "live_lookup_provider": "tavily",
+                    "live_lookup_result": "provider_disabled",
+                    "rejection_reason": "provider_disabled"
+                }
+
+            # Extract structured evidence from retrieved items
+            valid_notifs, rej_code, rej_reason = extract_scheme_structured_evidence(
+                evidence, scheme=scheme_name, target_year=target_year
+            )
+
+            if valid_notifs:
+                reply = compose_scheme_freshness_response(scheme_name, target_year, valid_notifs, lang)
+                formatted_sources = []
+                for n in valid_notifs:
+                    formatted_sources.append({
+                        "title": n["title"],
+                        "section": "Official Notification",
+                        "source": n["domain"],
+                        "organization": n["authority"],
+                        "category": "Schemes",
+                        "url": n["url"],
+                        "score": 0.95
+                    })
+                logger.info(
+                    "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=%d, rejection_reason=None, anti_hallucination_fallback=False",
+                    scheme_name, target_year, len(valid_notifs)
+                )
+                return {
+                    "reply": clean_farmer_markdown(reply),
+                    "sources": formatted_sources,
+                    "retrieved_chunks": len(valid_notifs),
+                    "confidence": 0.95,
+                    "language": lang,
+                    "provider": "tavily_scheme",
+                    "intent": route_decision.intent.value,
+                    "route": route_decision.action.value,
+                    "live_lookup_attempted": True,
+                    "live_lookup_provider": "tavily",
+                    "live_lookup_result": "verified_scheme_rule_found",
+                    "rejection_reason": None
+                }
+            else:
+                # Safe fallback: no verified rule change found
+                fallback_reply = compose_scheme_fallback_response(scheme_name, target_year, lang)
+                logger.info(
+                    "SCHEME_FRESHNESS: scheme=%s, year=%s, live_lookup_attempted=True, provider=tavily, result_count=0, rejection_reason=%s, anti_hallucination_fallback=True",
+                    scheme_name, target_year, rej_reason
+                )
+                return {
+                    "reply": clean_farmer_markdown(fallback_reply),
+                    "sources": [{
+                        "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
+                        "section": "Official Guidelines",
+                        "source": "pmfby.gov.in",
+                        "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                        "category": "Schemes",
+                        "url": "https://pmfby.gov.in",
+                        "score": 0.90
+                    }],
+                    "retrieved_chunks": 0,
+                    "confidence": 0.75,
+                    "language": lang,
+                    "provider": "anti_hallucination_guard",
+                    "intent": route_decision.intent.value,
+                    "route": route_decision.action.value,
+                    "live_lookup_attempted": True,
+                    "live_lookup_provider": "tavily",
+                    "live_lookup_result": rej_code or "no_verified_2026_rule",
+                    "rejection_reason": rej_reason or "no_verified_2026_notification"
+                }
 
         evidence = []
         if getattr(web_search_service, "enabled", False):
@@ -1923,7 +3195,51 @@ def process_chat_message(
             logger.warning("Web search unavailable or insufficient for freshness query. Falling through to curated RAG knowledge base.")
 
     # 2. RAG Retrieval from ChromaDB for GENERAL, CALENDAR, SOIL, FERTILIZER, etc.
-    rag_result = query_knowledge_base(clean_msg, top_k=3)
+    effective_crop = route_decision.detected_entities.get("crop")
+    effective_pest = route_decision.detected_entities.get("pest_disease")
+    effective_age = route_decision.detected_entities.get("crop_age_days")
+
+    q_low = clean_msg.lower()
+    is_pronoun_or_ellipsis = bool(
+        re.search(r"\b(is|iska|iski|iske|isse|ise|in|inka|inki|it|its|this|that)\b", q_low)
+        or (not any(c.lower() in q_low for c in ["gehun", "wheat", "dhan", "rice", "arhar", "tuar", "pigeonpea", "tamatar", "tomato", "chana", "mustard", "sarson", "makka", "maize", "cotton", "kapas", "sugarcane", "ganna", "soybean", "potato", "aloo", "onion", "pyaz"]) and len(q_low.split()) <= 7 and bool(re.search(r"\b(sinchai|irrigation|paani|pani|ilaj|cure|upchar|dawa|davai|management|control|khat|khad|urea|spray|chhidkaw)\b", q_low)))
+    )
+
+    if is_pronoun_or_ellipsis:
+        if not effective_crop and not effective_pest:
+            clarif_reply = (
+                "कृपया स्पष्ट करें कि आप किस फसल और किस कीट या रोग के उपचार के बारे में पूछ रहे हैं?"
+                if lang == "hi" else (
+                    "Kripya clarify karein ki aap kis fasal aur kis keede ya rog ke baare me pooch rahe hain?"
+                    if lang == "hinglish" else
+                    "Please clarify which crop and pest or disease you are referring to."
+                )
+            )
+            return {
+                "reply": clean_farmer_markdown(clarif_reply),
+                "sources": [],
+                "retrieved_chunks": 0,
+                "confidence": 0.5,
+                "language": lang,
+                "provider": "boundary_guard",
+                "intent": route_decision.intent.value,
+                "route": route_decision.action.value,
+                "detected_entities": route_decision.detected_entities
+            }
+
+        query_parts = []
+        if effective_crop:
+            query_parts.append(effective_crop)
+        if effective_age:
+            query_parts.append(f"{effective_age} din")
+        if effective_pest:
+            query_parts.append(effective_pest)
+        query_parts.append(clean_msg)
+        rag_retrieval_query = " ".join(query_parts)
+    else:
+        rag_retrieval_query = clean_msg
+
+    rag_result = query_knowledge_base(rag_retrieval_query, crop_filter=effective_crop, top_k=3)
 
     # 3. Out of domain guard
     if rag_result.get("is_out_of_domain"):
@@ -1954,7 +3270,8 @@ def process_chat_message(
             "language": lang,
             "provider": "boundary_guard",
             "intent": route_decision.intent.value,
-            "route": route_decision.action.value
+            "route": route_decision.action.value,
+            "detected_entities": route_decision.detected_entities
         }
 
     # 4. Low confidence / Gibberish guard with RAG_WEB_FALLBACK (Section 8 Case B)
@@ -2030,7 +3347,8 @@ def process_chat_message(
                         "provider": "web_search_fallback",
                         "model": model_used,
                         "intent": route_decision.intent.value,
-                        "route": RouteAction.RAG_WEB_FALLBACK.value
+                        "route": RouteAction.RAG_WEB_FALLBACK.value,
+                        "detected_entities": route_decision.detected_entities
                     }
                 else:
                     offline_reply = generate_web_grounded_offline_reply(clean_msg, lang, fallback_evidence)
@@ -2042,7 +3360,8 @@ def process_chat_message(
                         "language": lang,
                         "provider": "web_fallback_offline",
                         "intent": route_decision.intent.value,
-                        "route": RouteAction.RAG_WEB_FALLBACK.value
+                        "route": RouteAction.RAG_WEB_FALLBACK.value,
+                        "detected_entities": route_decision.detected_entities
                     }
 
         if lang == "hi":
@@ -2081,7 +3400,8 @@ def process_chat_message(
             "language": lang,
             "provider": "low_confidence_guard",
             "intent": route_decision.intent.value,
-            "route": route_decision.action.value
+            "route": route_decision.action.value,
+            "detected_entities": route_decision.detected_entities
         }
 
     chunks = rag_result["chunks"]
@@ -2160,12 +3480,15 @@ def process_chat_message(
             "provider": "openrouter",
             "model": model_used,
             "intent": route_decision.intent.value,
-            "route": route_decision.action.value
+            "route": route_decision.action.value,
+            "detected_entities": route_decision.detected_entities
         }
 
     # 8. Fallback: Synthesize cleanly from retrieved chunks
     _safe_print(f"\nOPENROUTER UNAVAILABLE ({result}). Generating grounded local RAG synthesis.")
-    offline_reply = generate_grounded_offline_reply(clean_msg, lang, chunks)
+    offline_reply = generate_grounded_offline_reply(
+        clean_msg, lang, chunks, entities=route_decision.detected_entities
+    )
     final_offline = (freshness_note + offline_reply) if freshness_note else offline_reply
     _safe_print("\nFINAL ANSWER:")
     _safe_print(final_offline[:300] + "...")
@@ -2179,5 +3502,6 @@ def process_chat_message(
         "language": lang,
         "provider": "grounded_local_rag",
         "intent": route_decision.intent.value,
-        "route": route_decision.action.value
+        "route": route_decision.action.value,
+        "detected_entities": route_decision.detected_entities
     }

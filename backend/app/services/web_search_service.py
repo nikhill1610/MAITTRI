@@ -19,11 +19,16 @@ import re
 import time
 import threading
 import logging
+from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 logger = logging.getLogger("maitri.web_search_service")
 
@@ -83,7 +88,9 @@ TIER_1_AUTHORITATIVE_DOMAINS = [
     "icar.gov.in",
     "icar.org.in",
     "agriwelfare.gov.in",
+    "agricoop.nic.in",
     "agriculture.gov.in",
+    "egazette.gov.in",
     "imd.gov.in",
     "mausam.imd.gov.in",
     "agmarknet.gov.in",
@@ -315,7 +322,17 @@ class TavilySearchProvider(BaseSearchProvider):
     ENDPOINT = "https://api.tavily.com/search"
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = (api_key or os.getenv("TAVILY_API_KEY", "")).strip()
+        self._api_key = (api_key or "").strip()
+
+    @property
+    def api_key(self) -> str:
+        if self._api_key:
+            return self._api_key
+        return os.getenv("TAVILY_API_KEY", "").strip()
+
+    @api_key.setter
+    def api_key(self, val: str):
+        self._api_key = val
 
     def search(
         self,
@@ -477,7 +494,11 @@ class WebSearchService:
         # ---------------------------------------------------------------------
         # STAGE 1: AUTHORITATIVE & INSTITUTIONAL SEARCH
         # ---------------------------------------------------------------------
-        stage_1_domains = TIER_1_AUTHORITATIVE_DOMAINS[:15] + TIER_2_INSTITUTIONAL_DOMAINS[:10]
+        stage_1_domains = list(TIER_1_AUTHORITATIVE_DOMAINS[:15] + TIER_2_INSTITUTIONAL_DOMAINS[:10])
+        q_low = query.lower()
+        if any(term in q_low for term in ["pmfby", "bima", "crop insurance", "insurance"]):
+            scheme_pref = ["pmfby.gov.in", "agriwelfare.gov.in", "agricoop.nic.in", "pib.gov.in", "egazette.gov.in"]
+            stage_1_domains = list(dict.fromkeys(scheme_pref + stage_1_domains))
         results_stage_1 = self.provider.search(
             query=enriched_query,
             max_results=self.max_results,

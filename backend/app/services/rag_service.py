@@ -508,9 +508,9 @@ def query_knowledge_base(
                 sim = float(r.get("similarity") or 0.0)
                 distances.append(2.0 * (1.0 - sim))
 
-    # ChromaDB fallback is permitted ONLY during local development (ENVIRONMENT=development) or non-PostgreSQL DB
+    # ChromaDB fallback is permitted ONLY during local development (ENVIRONMENT=development) and NEVER in production
     env = os.getenv("ENVIRONMENT", "production").lower()
-    if not docs and (env == "development" or not is_postgres):
+    if not docs and env != "production" and (env == "development" or not is_postgres):
         collection = get_chroma_collection()
         if collection is not None and collection.count() > 0:
             try:

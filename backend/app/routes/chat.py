@@ -54,6 +54,10 @@ class ChatMessageResponse(BaseModel):
     intent: Optional[str] = None
     route: Optional[str] = None
     requires_context: Optional[List[str]] = None
+    live_lookup_attempted: Optional[bool] = None
+    live_lookup_provider: Optional[str] = None
+    live_lookup_result: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
 
 class ChatDebugRequest(BaseModel):

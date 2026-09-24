@@ -7755,13 +7755,19 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 8px;
   font-size: 11px;
   color: #94a3b8;
+  line-height: 1.4;
 }
 
 .disclaimerText {
   color: #b45309;
+  line-height: 1.4;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 /* Floating Chatbot Launcher Button */
@@ -7809,6 +7815,31 @@ button {
     padding: 14px;
     border-radius: 50%;
   }
+  .krishiInputArea {
+    padding: 10px 12px;
+  }
+  .inputFooterHelp {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-top: 6px;
+    font-size: 11px;
+    width: 100%;
+  }
+  .inputFooterHelp span {
+    width: 100%;
+    line-height: 1.35;
+  }
+  .disclaimerText {
+    color: #b45309;
+    font-weight: 600;
+    display: block;
+  }
+}
+
+/* Guard: hide mobile floating weather widget on assistant pages to prevent chat overlap */
+body:has(.krishiChatContainer) .mobileLowerLeftWeatherBtn {
+  display: none !important;
 }
 
 /* =============================================================

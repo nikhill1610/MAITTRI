@@ -508,6 +508,8 @@ def test_case_23_no_sqlite_in_production():
 def test_case_24_no_chroma_retrieval_in_production():
     with patch.dict("os.environ", {"ENVIRONMENT": "production"}):
         with patch("app.services.rag_service.get_chroma_collection") as mock_chroma:
+            mock_chroma.return_value.count.return_value = 0
+            mock_chroma.return_value.query.return_value = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
             res = query_knowledge_base("Wheat crop irrigation interval", top_k=2)
             if engine.name == "postgresql":
                 # Chroma collection should not be called when PostgreSQL pgvector is active
