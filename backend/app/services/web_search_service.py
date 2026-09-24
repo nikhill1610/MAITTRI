@@ -428,6 +428,24 @@ class TavilySearchProvider(BaseSearchProvider):
 
 
 # -----------------------------------------------------------------------------
+# Scheme Query Detection for Indian Government Authority Gate
+# -----------------------------------------------------------------------------
+SCHEME_QUERY_PATTERN = re.compile(
+    r"\b(?:pmfby|pm[\s-]?kisan|pmksy|kcc|kisan\s*credit\s*card|fasal\s*bima|crop\s*insurance)\b|"
+    r"(?:फसल\s*बीमा|पीएम[\s-]?किसान|किसान\s*सम्मान|किसान\s*क्रेडिट(?:\s*कार्ड)?)",
+    re.IGNORECASE
+)
+
+
+def is_scheme_policy_query(query: str) -> bool:
+    """
+    Detects whether a query is asking about an Indian government agricultural scheme.
+    Latin alternatives are bounded with \b; Devanagari alternatives avoid \b due to combining marks.
+    """
+    return bool(query and SCHEME_QUERY_PATTERN.search(query.lower()))
+
+
+# -----------------------------------------------------------------------------
 # High-Level Web Search Orchestrator (Sections 5, 11, 13, 19, 21)
 # -----------------------------------------------------------------------------
 
@@ -530,7 +548,7 @@ class WebSearchService:
                 logger.warning(f"Stage 2 broader search error: {e}")
 
         # Scheme policy gate: strictly reject foreign or non-Indian domains for scheme queries
-        is_scheme_query = bool(re.search(r"\b(pmfby|pm-?kisan|pmksy|kcc|fasal\s*bima|crop\s*insurance)\b", query.lower()))
+        is_scheme_query = is_scheme_policy_query(query)
         if is_scheme_query:
             scheme_allowed = []
             for ev in evidence:

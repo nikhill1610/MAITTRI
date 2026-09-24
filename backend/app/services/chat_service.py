@@ -492,14 +492,9 @@ def call_gemini(
     try:
         try:
             import httpx
-            has_httpx = True
-        except ImportError:
-            has_httpx = False
-
-        if has_httpx:
             with httpx.Client(timeout=3.0) as client:
                 resp = client.post(url, headers=headers, json=payload)
-        else:
+        except ImportError:
             resp = requests.post(url, headers=headers, json=payload, timeout=3.0)
 
         if resp.status_code == 200:
@@ -544,7 +539,7 @@ def call_openrouter(
         return False, "NO_API_KEY", ""
 
     model_val = model or os.getenv("OPENROUTER_MODEL") or PRIMARY_MODEL
-    primary = str(model_val).strip()
+    primary = model_val.strip()
     models_to_try = [primary]
     if FALLBACK_MODEL not in models_to_try:
         models_to_try.append(FALLBACK_MODEL)
@@ -1213,11 +1208,6 @@ def generate_grounded_offline_reply(
         else:
             chem_warn = "- Always verify CIBRC approved label guidelines and consult your local KVK or agricultural officer before applying chemical pesticides."
         reply += f"\n{chem_warn}"
-
-    if source_name:
-        reply += f"\n\nSource: {source_name}"
-
-    return clean_farmer_markdown(reply)
 
     if source_name:
         reply += f"\n\nSource: {source_name}"
@@ -3020,7 +3010,7 @@ def process_chat_message(
             live_lookup_result = "provider_disabled_or_no_key"
             rejection_reason = "Tavily API key not configured or web search disabled"
 
-        is_live_verified = bool(mandi_data is not None)
+        is_live_verified = mandi_data is not None
         live_failed = not is_live_verified
 
         logger.info(

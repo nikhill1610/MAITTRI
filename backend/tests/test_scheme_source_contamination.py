@@ -10,9 +10,11 @@ from app.services.chat_service import (
 )
 from app.services.web_search_service import (
     web_search_service,
+    _SEARCH_CACHE,
     WebEvidence,
     SourceTier,
     SourceType,
+    is_scheme_policy_query,
 )
 
 
@@ -236,3 +238,163 @@ def test_scheme_gate_g_no_valid_current_evidence_safe_fallback():
         assert "5.0%" in reply
         # No fake new 2026 rule bullet
         assert "Verified Updates" not in reply
+
+
+def test_pm_kisan_query_variants_scheme_gate_and_authority_validation():
+    """
+    Focused Regression Test: PM-KISAN query variants ('pm kisan', 'pm-kisan', 'pmkisan')
+    must all enter the government-scheme freshness/security gate and strictly filter out
+    foreign/unauthorized domains (e.g., fedramp.gov, aspe.hhs.gov).
+    """
+    ev_fedramp = WebEvidence(
+        title="FedRAMP Rules 2026",
+        url="https://fedramp.gov/2026/rules",
+        domain="fedramp.gov",
+        content="FedRAMP cloud security rules 2026",
+        score=0.92,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-01-10"
+    )
+    ev_hhs = WebEvidence(
+        title="HHS Guidelines 2026",
+        url="https://aspe.hhs.gov/guidelines",
+        domain="aspe.hhs.gov",
+        content="HHS federal poverty guidelines 2026",
+        score=0.91,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-01-20"
+    )
+    ev_pmkisan = WebEvidence(
+        title="PM-Kisan Operational Guidelines 2026",
+        url="https://pmkisan.gov.in/guidelines_2026.pdf",
+        domain="pmkisan.gov.in",
+        content="Ministry of Agriculture: PM-Kisan Samman Nidhi revised guidelines 2026",
+        score=0.96,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-02-01"
+    )
+
+    queries = [
+        "pm kisan latest rules 2026",
+        "pm-kisan latest rules 2026",
+        "pmkisan latest rules 2026"
+    ]
+
+    for q in queries:
+        _SEARCH_CACHE.clear()
+        with patch.object(web_search_service.provider, "search", return_value=[ev_fedramp, ev_hhs, ev_pmkisan]):
+            results = web_search_service.search(query=q, freshness_needed=True)
+            domains = [r.domain for r in results]
+            # All three variants must activate the scheme gate
+            assert "fedramp.gov" not in domains
+            assert "aspe.hhs.gov" not in domains
+            assert "pmkisan.gov.in" in domains
+
+    # Verify foreign .gov result cannot bypass authority gate for 'pm kisan latest rules 2026'
+    _SEARCH_CACHE.clear()
+    with patch.object(web_search_service.provider, "search", return_value=[ev_fedramp]):
+        results_foreign = web_search_service.search(query="pm kisan latest rules 2026", freshness_needed=True)
+        # Foreign domain must be completely rejected by the scheme policy gate
+        assert len(results_foreign) == 0
+
+
+def test_all_scheme_query_variants_hindi_and_latin_enter_secure_authority_gate():
+    """
+    Verify all Latin and Hindi scheme query variants enter the SAME secure scheme authority gate:
+    A. 'pm kisan latest rules 2026'
+    B. 'pm-kisan latest rules 2026'
+    C. 'pmkisan latest rules 2026'
+    D. 'kisan credit card latest rules 2026'
+    E. 'फसल बीमा के नए नियम 2026 क्या हैं?'
+    F. 'पीएम किसान के नए नियम 2026 क्या हैं?'
+    G. 'किसान क्रेडिट कार्ड के latest rules क्या हैं?'
+
+    For D-G (and all A-G):
+    - foreign .gov evidence such as fedramp.gov / hhs.gov must be rejected
+    - approved Indian government evidence may proceed through the existing relevance/date gates
+    - no foreign result may bypass the authority filter
+    """
+    queries = [
+        "pm kisan latest rules 2026",
+        "pm-kisan latest rules 2026",
+        "pmkisan latest rules 2026",
+        "kisan credit card latest rules 2026",
+        "फसल बीमा के नए नियम 2026 क्या हैं?",
+        "पीएम किसान के नए नियम 2026 क्या हैं?",
+        "किसान क्रेडिट कार्ड के latest rules क्या हैं?",
+    ]
+
+    ev_fedramp = WebEvidence(
+        title="FedRAMP Cloud Security Guidelines 2026",
+        url="https://fedramp.gov/2026/rules",
+        domain="fedramp.gov",
+        content="FedRAMP cloud security baseline rules 2026",
+        score=0.92,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-01-10"
+    )
+    ev_hhs = WebEvidence(
+        title="HHS Poverty Guidelines 2026",
+        url="https://aspe.hhs.gov/guidelines",
+        domain="aspe.hhs.gov",
+        content="HHS federal poverty guidelines 2026",
+        score=0.91,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-01-20"
+    )
+    ev_approved_gov = WebEvidence(
+        title="Official Government Scheme Notification 2026",
+        url="https://pmfby.gov.in/guidelines_2026.pdf",
+        domain="pmfby.gov.in",
+        content="Official scheme notification guidelines 2026",
+        score=0.96,
+        source_tier=SourceTier.AUTHORITATIVE,
+        source_type=SourceType.LIVE_WEB_OFFICIAL,
+        published_date="2026-02-01"
+    )
+
+    for q in queries:
+        assert is_scheme_policy_query(q) is True, f"Query '{q}' must be recognized as a scheme policy query"
+        _SEARCH_CACHE.clear()
+        with patch.object(web_search_service.provider, "search", return_value=[ev_fedramp, ev_hhs, ev_approved_gov]):
+            results = web_search_service.search(query=q, freshness_needed=True)
+            domains = [r.domain for r in results]
+            # Foreign .gov domains must be rejected by the scheme policy gate
+            assert "fedramp.gov" not in domains, f"fedramp.gov should have been rejected for '{q}'"
+            assert "aspe.hhs.gov" not in domains, f"aspe.hhs.gov should have been rejected for '{q}'"
+            # Approved Indian government domain must proceed
+            assert "pmfby.gov.in" in domains, f"pmfby.gov.in should have been preserved for '{q}'"
+
+    # Verify foreign result cannot bypass the authority filter when returned alone for D-G
+    for q in [
+        "kisan credit card latest rules 2026",
+        "फसल बीमा के नए नियम 2026 क्या हैं?",
+        "पीएम किसान के नए नियम 2026 क्या हैं?",
+        "किसान क्रेडिट कार्ड के latest rules क्या हैं?",
+    ]:
+        _SEARCH_CACHE.clear()
+        with patch.object(web_search_service.provider, "search", return_value=[ev_fedramp]):
+            results = web_search_service.search(query=q, freshness_needed=True)
+            assert len(results) == 0, f"Foreign result bypassed authority gate for '{q}'"
+
+
+def test_unrelated_hindi_sentence_with_kisan_does_not_trigger_scheme_gate():
+    """
+    Negative test proving an unrelated Hindi sentence containing 'किसान' alone
+    does NOT automatically become a scheme-freshness query.
+    """
+    unrelated_queries = [
+        "किसान खेत में हल चला रहा है",
+        "किसान भाई आज कौन सी फसल बोएं?",
+        "एक किसान अपनी फसल को पानी कैसे दे?",
+        "किसान के पास 5 एकड़ जमीन है",
+    ]
+    for q in unrelated_queries:
+        assert is_scheme_policy_query(q) is False, f"Unrelated query '{q}' should NOT match scheme query pattern"
+
+
