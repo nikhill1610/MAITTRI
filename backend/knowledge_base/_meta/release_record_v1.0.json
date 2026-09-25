@@ -1,0 +1,63 @@
+{
+  "release_metadata": {
+    "release_id": "MAITTRI-KB-v1.0.0-RELEASE-FREEZE",
+    "version": "1.0.0",
+    "status": "RELEASE_FROZEN_FOR_PILOT",
+    "freeze_date": "2026-09-22T02:30:00+05:30",
+    "git_commit_sha": "0d8bb25845741eddbe4993cb486a268d4ea476a5",
+    "approved_scope": "Pilot Readiness & Evaluation Stabilization"
+  },
+  "corpus_baseline": {
+    "total_markdown_documents": 62,
+    "total_json_category_registries": 6,
+    "total_chromadb_chunks": 559,
+    "chromadb_collection_name": "maitri_krishi_kb",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "embedding_dimensions": 384,
+    "distance_metric": "cosine",
+    "vector_store_path": "backend/vector_store",
+    "unique_doc_ids_verified": 62,
+    "duplicate_doc_ids": 0,
+    "yaml_frontmatter_valid_percent": 100.0,
+    "evidence_tiers": {
+      "tier_a": 62,
+      "tier_b": 0,
+      "source_research_required": 1
+    },
+    "source_registry_institutes_count": 38,
+    "chemical_safety_gate_compliance_percent": 100.0,
+    "gap_resolutions": {
+      "GAP-001_bundelkhand_pulses": "RESOLVED (chickpea_lentil_bundelkhand_guide.md & pulse_wilt_root_rot.md)",
+      "GAP-002_western_up_sugarcane": "RESOLVED (sugarcane_guide.md & sugarcane_red_rot.md)",
+      "GAP-003_fco_biostimulant_humic": "REGULATED_CAUTION (biofertilizers_organic_manures.md)"
+    }
+  },
+  "integrity_fingerprints": {
+    "file_manifest_sha256": "302f3fd759ef298d15a37fd00b038524d61f726121ba3580d8533ff02287c471",
+    "kb_manifest_sha256": "3a2faa4fdd5a20dae0ff6c604513046fa0dc6a5af2d0bf7055d24db5938e4718"
+  },
+  "test_regression_baseline": {
+    "environment": {
+      "python_version": "3.12.10",
+      "pytest_version": "9.1.1",
+      "operating_system": "Windows 11 (win32)"
+    },
+    "total_test_items": 55,
+    "passed_test_items": 55,
+    "failed_test_items": 0,
+    "pass_rate_percent": 100.0,
+    "test_suite_breakdown": {
+      "test_rag_trustworthy.py": 13,
+      "test_chat_rag.py": 12,
+      "test_smart_rag_router.py": 25,
+      "test_web_search_fallback.py": 5
+    },
+    "discrepancy_audit_note": "Previous interim documentation referenced a '60-test' baseline due to a typographical entry of 10 items for test_web_search_fallback.py in an earlier walkthrough table. The actual codebase file contains exactly 5 test functions. All 55 test items collected by pytest pass cleanly with zero test deletions or coverage regressions."
+  },
+  "pilot_freeze_policy": {
+    "freeze_status": "LOCKED",
+    "policy_statement": "No new agricultural markdown content may be added automatically. Modifications during the pilot period are strictly restricted to: 1) Critical regulatory/chemical safety corrections, 2) Verified factual errors, 3) Documented pilot evaluation failures, or 4) Formally approved pilot requirements.",
+    "change_logging_mandatory": true,
+    "changelog_file": "backend/knowledge_base/_meta/PILOT_CHANGELOG.md"
+  }
+}

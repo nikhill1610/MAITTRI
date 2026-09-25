@@ -1,12 +1,12 @@
 [
   {
     "topic": "In-situ Stubble Management (खेत में पराली प्रबंधन)",
-    "solutions": "1. Happy Seeder / Smart Seeder: Sows wheat directly into standing paddy stubble without prior burning. 2. Super Seeder: Mulches paddy residue into soil and sows wheat in a single tractor pass. 3. Pusa Bio-decomposer: Microbial spray that accelerates in-field residue decomposition in 20-25 days, enriching soil organic carbon by 0.1-0.2%.",
-    "benefits": "Preserves 5.5 kg Nitrogen, 2.3 kg Phosphorus, 25 kg Potash, and 1.2 kg Sulphur per ton of straw, which are completely lost during burning."
+    "solutions": "1. Super Seeder: Cuts, finely chops, and mixes standing paddy stubble into soil while simultaneously drilling wheat seed and basal fertilizer in a single pass (requires 50-60 HP tractor). 2. Happy Seeder: Sows wheat directly into standing residue without tillage, depositing chopped straw as surface mulch that suppresses Phalaris minor weeds and saves first irrigation. 3. Pusa Bio-decomposer: Fungal consortium developed by ICAR-IARI sprayed @ 4 capsules per hectare with jaggery-besan solution, accelerating in-field residue decomposition into rich humus within 20-25 days.",
+    "benefits": "Preserves 5.5 kg Nitrogen, 2.3 kg Phosphorus, 25 kg Potash, 1.2 kg Sulphur, and 400 kg Soil Organic Carbon per ton of straw, which are permanently incinerated during open field burning."
   },
   {
     "topic": "Ex-situ Stubble Utilization (खेत के बाहर पराली का उपयोग)",
-    "solutions": "Straw balers compact loose straw into dense 15-25 kg square or round bales. Bales are purchased by 2G bio-ethanol refineries, biomass co-firing thermal power plants, cardboard mills, and mushroom growers at ₹1,500-2,500 per ton.",
-    "subsidy": "Central CRM (Crop Residue Management) scheme provides up to 50% individual subsidy on machines and 80% to Custom Hiring Centers (CHCs)."
+    "solutions": "Tractor-mounted automatic straw balers collect loose combine straw, compacting it into dense 15-25 kg rectangular bales or large round rolls. Bales are purchased by 2G bio-ethanol refineries (Panipat), biomass co-firing thermal power plants (NTPC mandates 5-10% co-firing), paper/cardboard mills, and commercial mushroom growers at ₹1,500-2,500 per ton.",
+    "subsidy": "Central Crop Residue Management (CRM) scheme provides 50% capital subsidy on individual machinery purchase (Super Seeder, Baler, Happy Seeder) and up to 80% subsidy for establishing Custom Hiring Centers (CHCs) and FPOs via upagriculture.com."
   }
 ]

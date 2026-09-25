@@ -1,0 +1,124 @@
+{
+  "evaluation_timestamp": "2026-09-23T19:36:10.250452",
+  "release_baseline": "MAITTRI-KB-v1.0.0-RELEASE-FREEZE",
+  "total_queries_evaluated": 45,
+  "total_passed": 45,
+  "total_failed": 0,
+  "overall_pass_rate_percent": 100.0,
+  "total_execution_seconds": 82.13,
+  "retrieval_metrics": {
+    "recall_at_3_percent": 100.0,
+    "recall_at_5_percent": 100.0,
+    "top_1_accuracy_percent": 94.59,
+    "crop_filter_precision_percent": 100.0,
+    "duplicate_context_rate_percent": 0.0
+  },
+  "routing_metrics": {
+    "intent_accuracy_percent": 100.0,
+    "overall_routing_accuracy_percent": 100.0,
+    "live_routing_accuracy_percent": 100.0,
+    "clarification_accuracy_percent": 100.0,
+    "abstention_accuracy_percent": 100.0
+  },
+  "safety_metrics": {
+    "pesticide_safety_violations": 0,
+    "stale_weather_violations": 0,
+    "stale_mandi_violations": 0,
+    "wrong_state_leakage_instances": 0,
+    "hallucination_instances": 0,
+    "correct_abstention_percent": 100.0
+  },
+  "generation_metrics": {
+    "citation_integrity_percent": 100.0,
+    "numeric_fidelity_percent": 100.0
+  },
+  "failure_taxonomy_distribution": {},
+  "critical_failures_count": 0,
+  "high_failures_count": 0,
+  "medium_failures_count": 0,
+  "low_failures_count": 0,
+  "language_breakdown": {
+    "hinglish": {
+      "total": 20,
+      "passed": 20
+    },
+    "hi": {
+      "total": 13,
+      "passed": 13
+    },
+    "en": {
+      "total": 12,
+      "passed": 12
+    }
+  },
+  "crop_breakdown": {
+    "Wheat": {
+      "total": 9,
+      "passed": 9
+    },
+    "Rice": {
+      "total": 2,
+      "passed": 2
+    },
+    "Maize": {
+      "total": 1,
+      "passed": 1
+    },
+    "Mustard": {
+      "total": 3,
+      "passed": 3
+    },
+    "Potato": {
+      "total": 1,
+      "passed": 1
+    },
+    "Tomato": {
+      "total": 1,
+      "passed": 1
+    },
+    "Chickpea": {
+      "total": 1,
+      "passed": 1
+    },
+    "Sugarcane": {
+      "total": 1,
+      "passed": 1
+    },
+    "Onion": {
+      "total": 1,
+      "passed": 1
+    },
+    "Soybean": {
+      "total": 1,
+      "passed": 1
+    },
+    "Groundnut": {
+      "total": 1,
+      "passed": 1
+    },
+    "Pigeonpea": {
+      "total": 1,
+      "passed": 1
+    },
+    "Chilli": {
+      "total": 2,
+      "passed": 2
+    },
+    "Banana": {
+      "total": 1,
+      "passed": 1
+    },
+    "Cotton": {
+      "total": 1,
+      "passed": 1
+    },
+    "Non-Crop / General": {
+      "total": 17,
+      "passed": 17
+    },
+    "Apple": {
+      "total": 1,
+      "passed": 1
+    }
+  }
+}

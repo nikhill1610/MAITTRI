@@ -1,0 +1,10 @@
+{
+  "total_expected_queries": 45,
+  "completed_queries": 45,
+  "remaining_queries": 0,
+  "last_completed_query_id": "EVAL-WED-001",
+  "failed_query_ids": [],
+  "run_start_time": "2026-09-22T20:08:17.470221",
+  "run_completion_state": "COMPLETED_SUCCESSFULLY",
+  "pass_rate_percent": 100.0
+}

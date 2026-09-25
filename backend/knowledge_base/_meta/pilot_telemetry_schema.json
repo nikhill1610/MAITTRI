@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MAITTRI Privacy-Safe Farmer Telemetry & Feedback Event",
+  "description": "Standardized schema for logging real farmer interaction events during pilot testing with strict PII masking (names, phone numbers, Aadhaar, account numbers removed).",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp_utc",
+    "detected_language",
+    "detected_intent",
+    "route_action",
+    "retrieved_doc_ids",
+    "answer_status"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique anonymized identifier for the query interaction."
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of the interaction."
+    },
+    "session_hash": {
+      "type": "string",
+      "description": "One-way salted SHA256 hash of the session ID to track conversation turns without retaining identity."
+    },
+    "sanitized_query_text": {
+      "type": "string",
+      "description": "Redacted query text stripped of phone numbers, person names, and financial credentials."
+    },
+    "detected_language": {
+      "type": "string",
+      "enum": ["hi", "hinglish", "en", "other"]
+    },
+    "crop_detected": {
+      "type": ["string", "null"],
+      "description": "Canonical crop entity extracted (e.g. Wheat, Rice, Sugarcane) or null."
+    },
+    "voluntary_geography": {
+      "type": "object",
+      "properties": {
+        "state": { "type": ["string", "null"] },
+        "district": { "type": ["string", "null"] },
+        "agro_climatic_zone": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false,
+      "description": "Location voluntarily stated in the query or farmer profile without GPS coordinates."
+    },
+    "detected_intent": {
+      "type": "string",
+      "enum": ["GENERAL", "CALENDAR", "WEATHER", "SOIL", "FERTILIZER", "PESTICIDE_REFUSAL", "FINANCIAL", "MARKET", "UNSUPPORTED"]
+    },
+    "route_action": {
+      "type": "string",
+      "enum": ["RAG", "WEATHER_SERVICE", "CALENDAR_SERVICE", "SOIL_SERVICE", "FERTILIZER_SERVICE", "FINANCIAL_SERVICE", "MARKET_SERVICE", "SAFE_REFUSAL", "ASK_FOR_CONTEXT", "WEB_SEARCH", "RAG_WEB_FALLBACK"]
+    },
+    "retrieved_doc_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of doc_ids retrieved from ChromaDB (e.g. ['crops/wheat_guide.md', 'diseases/wheat_yellow_rust.md'])."
+    },
+    "retrieval_metrics": {
+      "type": "object",
+      "properties": {
+        "top_similarity_score": { "type": ["number", "null"] },
+        "retrieved_chunk_count": { "type": "integer", "minimum": 0 },
+        "retrieval_latency_ms": { "type": "number" }
+      }
+    },
+    "generation_provider": {
+      "type": "string",
+      "description": "Model or provider used (e.g. 'gemini/gemini-3.8-flash', 'low_confidence_guard', 'chemical_safety_guard')."
+    },
+    "generation_latency_ms": {
+      "type": "number",
+      "description": "End-to-end response generation latency in milliseconds."
+    },
+    "answer_status": {
+      "type": "string",
+      "enum": ["GROUNDED_RAG", "LIVE_ROUTED", "CLARIFICATION_PROMPTED", "SAFETY_REFUSED", "OUT_OF_DOMAIN_REFUSED", "LOW_CONFIDENCE_ABSTAIN"]
+    },
+    "farmer_feedback": {
+      "type": "object",
+      "properties": {
+        "thumbs_up_down": { "type": ["string", "null"], "enum": ["up", "down", null] },
+        "rating_stars": { "type": ["integer", "null"], "minimum": 1, "maximum": 5 },
+        "comment_redacted": { "type": ["string", "null"] }
+      }
+    },
+    "evaluator_failure_tag": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "WRONG_CROP",
+        "WRONG_STATE",
+        "WRONG_STAGE",
+        "WRONG_PEST",
+        "WRONG_DISEASE",
+        "RETRIEVAL_MISS",
+        "LOW_AUTHORITY_SOURCE",
+        "STALE_SOURCE",
+        "NUMERIC_MISMATCH",
+        "MISSING_CITATION",
+        "UNVERIFIED_PESTICIDE",
+        "LIVE_ROUTE_FAILURE",
+        "HALLUCINATION",
+        "OVERCONFIDENT_DIAGNOSIS",
+        "NEEDS_CLARIFICATION",
+        "LANGUAGE_RETRIEVAL_FAILURE",
+        "DUPLICATE_CONTEXT",
+        "OTHER"
+      ],
+      "description": "Post-interaction evaluation tag assigned during pilot review passes."
+    }
+  }
+}

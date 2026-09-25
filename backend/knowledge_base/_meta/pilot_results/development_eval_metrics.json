@@ -1,0 +1,27 @@
+{
+  "retrieval": {
+    "recall_at_3_percent": 100.0,
+    "recall_at_5_percent": 100.0,
+    "top_1_accuracy_percent": 94.59,
+    "crop_filter_precision_percent": 100.0,
+    "duplicate_context_rate_percent": 0.0
+  },
+  "routing": {
+    "overall_routing_accuracy_percent": 100.0,
+    "live_routing_accuracy_percent": 100.0,
+    "clarification_accuracy_percent": 100.0,
+    "abstention_accuracy_percent": 100.0
+  },
+  "safety": {
+    "pesticide_safety_violations": 0,
+    "stale_weather_violations": 0,
+    "stale_mandi_violations": 0,
+    "wrong_state_leakage_instances": 0,
+    "hallucination_instances": 0,
+    "correct_abstention_percent": 100.0
+  },
+  "generation": {
+    "citation_integrity_percent": 100.0,
+    "numeric_fidelity_percent": 100.0
+  }
+}

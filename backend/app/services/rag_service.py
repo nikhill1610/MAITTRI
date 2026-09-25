@@ -49,7 +49,7 @@ def unicode_word_match(pattern: str, text: str) -> bool:
 AGRI_EXPANSIONS = [
     # Crops
     (r"गेहूं|गेहू|gehu|gehun|wheat", "wheat gehu rabi"),
-    (r"धान|चावल|dhaan|chawal|rice|paddy", "rice paddy dhaan kharif"),
+    (r"धान|चावल|\bdhan\b|dhaan|chawal|rice|paddy", "rice paddy dhaan kharif"),
     (r"मक्का|मकई|makka|makai|corn|maize", "maize corn makka kharif"),
     (r"आलू|aaloo|aalu|potato", "potato tuber aalu"),
     (r"टमाटर|tamatar|tomato", "tomato tamatar fruit borer"),
@@ -97,32 +97,60 @@ AGRI_EXPANSIONS = [
     (r"पाला|पाले|frost|pala|शीतलहर|cold wave", "frost protection cold wave winter evening irrigation light smoke"),
 
     # Mountain & Hill Farming (Phase 4 / Step 5)
-    (r"पहाड़ी|पहाड़|पहाड़ों|pahadi|pahari|pahaad|mountain|mountains|hill|hills|hilly|high altitude|terrace farming|सीढ़ीनुमा|समोच्च", "mountain farming hill agriculture terrace farming pahadi khet crops high altitude slope organic mandua ragi jhangora rajma off-season vegetables"),
-    (r"फसल उगा|uga skta|kaunsi fasal|कौन सी फसल|crop suitability|what crops can i grow|best crops|suitable crops", "best crops crop suitability cultivation selection farming suitable crops")
+    (r"पहाड़ी|पहाड़|पहाड़ों|pahadi|pahari|pahaad|pahado|pahadon|mountain|mountains|hill|hills|hilly|high altitude|terrace farming|सीढ़ीनुमा|समोच्च", "mountain farming hill agriculture terrace farming pahadi khet crops high altitude slope organic mandua ragi jhangora rajma off-season vegetables"),
+    (r"फसल उगा|uga skta|kaunsi fasal|कौन सी फसल|crop suitability|what crops can i grow|best crops|suitable crops", "best crops crop suitability cultivation selection farming suitable crops"),
+
+    # Commercial & Phase 5 Crops
+    (r"मूंगफली|मूँगफली|mungfali|groundnut|peanut", "groundnut mungfali pegging gypsum pod rot tikka arachis hypogaea"),
+    (r"अरहर|तुअर|तूअर|arhar|toor|tur|pigeonpea|red gram", "pigeonpea arhar tur pod borer pod fly phytophthora blight cajanus cajan"),
+    (r"मिर्च|मिर्ची|mirch|mirchi|chilli|chili|capsicum|shimla mirch|शिमला मिर्च", "chilli mirch leaf curl murda thrips anthracnose capsicum dieback"),
+    (r"कपास|रूई|kapas|cotton", "cotton kapas bt cotton non-bt refuge bollworm pink bollworm whitefly clcud"),
+    (r"गन्ना|ईख|ganna|sugarcane", "sugarcane ganna red rot sett treatment early shoot borer ratoon"),
+    (r"सोयाबीन|soybean|soya", "soybean soya yellow mosaic girdler beetle rust inoculation"),
+    (r"प्याज|प्याज़|pyaz|pyaaz|onion", "onion pyaz thrips purple blotch nursery storage bulb"),
+    (r"केला|kela|banana", "banana kela g-9 tissue culture panama wilt sigatoka sucker spacing"),
+    (r"मसूर|masoor|lentil|चना|chana|chickpea", "chickpea lentil bundelkhand kabar mar vertisol pulse borer wilt"),
+
+    # Specialized Topics & Agroforestry / Protected Cultivation
+    (r"पॉपलर|यूकेलिप्टस|कृषि वानिकी|poplar|eucalyptus|agroforestry|कृषिवानिकी", "agroforestry poplar eucalyptus intercropping bund plantation silviculture"),
+    (r"पॉलीहाउस|polyhouse|greenhouse|nvph|shade net|शेडनेट", "protected cultivation polyhouse nvph shade net capsicum bell pepper drip fertigation"),
+    (r"सूत्रकृमि|नेमाटोड|nematode|root knot|गांठें|गांठे|ganthen", "root knot nematode meloidogyne galls swelling nematicide carbofuran paecilomyces"),
+    (r"हर्मेटिक|pics बैग|pics bag|pics bags|hermetic|अनाज भंडारण|grain storage|anaj bhandaran", "hermetic storage PICS bags grain storage insect pest oxygen deprivation post harvest"),
+    (r"सुपर सीडर|super seeder|happy seeder|सीडर|कृषि यंत्र|mechanization|chc|custom hiring", "super seeder happy seeder farm mechanization chc implements custom hiring center tractor residue"),
+    (r"बायोस्टिमुलेंट|ह्यूमिक|biostimulant|humic acid|जैविक खाद|biofertilizer", "biofertilizers organic manures biostimulant humic acid fco regulation vermicompost fym azotobacter rhizobium psb"),
+    (r"गुल्ली डंडा|गुल्लीडंडा|मंडूसी|gulli danda|phalaris|mandusi|खरपतवार|weed|weeds", "phalaris minor gulli danda mandusi weed management herbicide resistance wheat clodinafop pendimethalin sulfosulfuron")
 ]
 
 # Crop detection regex patterns
 CROP_DETECTION_PATTERNS = {
-    "Wheat": r"गेहूं|गेहू|gehu|gehun|wheat",
-    "Rice": r"धान|चावल|dhaan|chawal|rice|paddy",
+    "Wheat": r"गेहूं|गेहू|गेहूँ|gehu|gehun|wheat",
+    "Rice": r"धान|चावल|\bdhan\b|dhaan|chawal|rice|paddy",
     "Maize": r"मक्का|मकई|makka|makai|corn|maize",
     "Potato": r"आलू|aaloo|aalu|potato",
     "Tomato": r"टमाटर|tamatar|tomato",
     "Mustard": r"सरसों|राई|sarson|rai|mustard|rapeseed",
-    "Chickpea": r"चना|चने|chana|chane|chickpea|gram"
+    "Chickpea": r"चना|चने|chana|chane|chickpea|gram|मसूर|lentil",
+    "Sugarcane": r"गन्ना|ईख|ganna|sugarcane",
+    "Onion": r"प्याज|pyaj|pyaaz|onion",
+    "Soybean": r"सोयाबीन|soybean|soya",
+    "Groundnut": r"मूंगफली|mungfali|peanut|groundnut",
+    "Pigeonpea": r"अरहर|तुअर|arhar|tuar|pigeonpea",
+    "Chilli": r"मिर्च|mirch|mirchi|chilli|chili",
+    "Banana": r"केला|kela|banana",
+    "Cotton": r"कपास|रूई|kapas|cotton"
 }
 
 # Category detection patterns for intelligent re-ranking
 CATEGORY_DETECTION_PATTERNS = {
-    "Mountain Farming": r"पहाड़ी|पहाड़|pahadi|pahari|mountain|hill|hilly|terrace|सीढ़ीनुमा|high altitude",
+    "Mountain Farming": r"पहाड़ी|पहाड़|pahadi|pahari|pahado|pahadon|pahaad|mountain|hill|hilly|terrace|सीढ़ीनुमा|high altitude",
     "Schemes": r"pm-kisan|pm kisan|पीएम किसान|fasal bima|pmfby|फसल बीमा|kcc|केसीसी|किसान क्रेडिट|योजना|scheme|subvention|subsidy|bima",
     "Irrigation": r"sinchai|सिंचाई|पानी|जल|water|irrigation|peeli sinchai|drip|sprinkler|awd|tubewell|नमी|moisture",
-    "Pests": r"keeda|keede|कीड़ा|कीड़े|कीट|सुंडी|pest|pests|insect|insects|worm|caterpillar|larva|armyworm|aphid|whitefly|borer|माहू|चेपा",
-    "Diseases": r"yellow rust|stripe rust|रतुआ|blight|blast|झुलसा|पर्ण कुंचन|leaf curl|मुड़|रोग|fungus|disease|rot|curl",
-    "Fertilizers": r"urea|यूरिया|dap|डीएपी|mop|पोटाश|zinc|जिंक|khad|खाद|fertilizer|fertilizers|उर्वरक|पोषक तत्व|micronutrient",
-    "Soil": r"mitti|मिट्टी|मृदा|soil|soil health|health card|card|salin|alkali|ph|दोमट",
+    "Pests": r"keeda|keede|कीड़ा|कीड़े|कीट|सुंडी|pest|pests|insect|insects|worm|caterpillar|larva|armyworm|aphid|whitefly|borer|माहू|चेपा|beetle|भृंग",
+    "Diseases": r"yellow rust|stripe rust|रतुआ|blight|blast|झुलसा|पर्ण कुंचन|leaf curl|मुड़|रोग|fungus|disease|rot|curl|sadan|सड़न",
+    "Fertilizers": r"urea|यूरिया|dap|डीएपी|mop|पोटाश|zinc|जिंक|khad|खाद|fertilizer|fertilizers|उर्वरक|पोषक तत्व|micronutrient|gypsum|जिप्सम|biostimulant|बायोफर्टिलाइजर",
+    "Soil": r"mitti|मिट्टी|मृदा|soil|soil health|health card|card|salin|alkali|ph|दोमट|ऊसर|sodic",
     "Crop Residue": r"parali|पराली|stubble|straw|decomposer|seeder",
-    "Weather": r"frost|पाला|cold wave|शीतलहर|heatwave|लू|मौसम|weather|rain|barish"
+    "Weather": r"frost|पाला|cold wave|शीतलहर|heatwave|लू|मौसम|weather|rain|barish|monsoon|मानसून"
 }
 
 
@@ -192,7 +220,11 @@ def is_non_agricultural(text: str) -> bool:
         "rice", "paddy", "maize", "potato", "tomato", "mustard", "irrigation", "water",
         "paani", "pani", "gehu", "dhaan", "fasal", "mitti", "keeda", "khad", "urea",
         "dap", "pm-kisan", "pm kisan", "pmfby", "kcc", "parali", "sinchai", "mandi",
-        "bhav", "weather", "mausam"
+        "bhav", "weather", "mausam", "mungfali", "groundnut", "arhar", "tur", "pigeonpea",
+        "mirch", "mirchi", "chilli", "capsicum", "kapas", "cotton", "ganna", "sugarcane",
+        "soybean", "soya", "pyaz", "onion", "kela", "banana", "masoor", "lentil", "chana",
+        "gram", "poplar", "eucalyptus", "polyhouse", "nematode", "pics", "hermetic",
+        "storage", "seeder", "biostimulant", "humic", "gypsum", "जिप्सम", "पॉलीहाउस"
     ]
     if any(w in q_lower for w in agri_words):
         return False
@@ -490,9 +522,9 @@ def query_knowledge_base(
                 sim = float(r.get("similarity") or 0.0)
                 distances.append(2.0 * (1.0 - sim))
 
-    # ChromaDB fallback is permitted ONLY during local development (ENVIRONMENT=development) or non-PostgreSQL DB
+    # ChromaDB fallback is permitted ONLY during local development (ENVIRONMENT=development) and NEVER in production
     env = os.getenv("ENVIRONMENT", "production").lower()
-    if not docs and (env == "development" or not is_postgres):
+    if not docs and env != "production" and (env == "development" or not is_postgres):
         collection = get_chroma_collection()
         has_items = False
         cand_count = 12
@@ -546,8 +578,13 @@ def query_knowledge_base(
 
         # Crop matching
         if detected_crop:
-            if detected_crop.lower() in chunk_crop.lower():
-                adjusted_score += 0.15
+            is_crop_match = (
+                detected_crop.lower() in chunk_crop.lower()
+                or (detected_crop == "Chilli" and any(k in chunk_crop.lower() for k in ["chilli", "capsicum", "pepper", "mirch", "vegetable"]))
+                or (detected_crop == "Chickpea" and any(k in chunk_crop.lower() for k in ["chickpea", "gram", "lentil", "pulse"]))
+            )
+            if is_crop_match:
+                adjusted_score += 0.25
             elif any(g in chunk_crop.lower() for g in ["general", "all", "multi", "soil", "fertilizer", "scheme"]):
                 adjusted_score += 0.02
             else:
@@ -564,14 +601,54 @@ def query_knowledge_base(
                 # Penalize irrelevant categories when user asks about specific scheme, irrigation, or mountain farming
                 adjusted_score -= 0.28
 
-        # If query asks about leaf curling / whitefly symptoms, boost specific leaf curl chunks
+        # Topic-Specific Boosts for High Precision Retrieval
+        meta_title_lower = str(meta.get("title", "")).lower()
+        meta_sec_lower = str(meta.get("section", "")).lower()
+
+        # Agroforestry
+        if any(term in clean_query.lower() for term in ["पॉपलर", "यूकेलिप्टस", "poplar", "eucalyptus", "agroforestry", "सह-फसली"]):
+            if any(term in meta_title_lower for term in ["agroforestry", "poplar", "eucalyptus", "वानिकी"]):
+                adjusted_score += 0.35
+
+        # Protected Cultivation / Polyhouse
+        if any(term in clean_query.lower() for term in ["polyhouse", "पॉलीहाउस", "shade net", "nvph", "protected cultivation"]):
+            if any(term in meta_title_lower for term in ["polyhouse", "protected cultivation", "shade net"]):
+                adjusted_score += 0.35
+
+        # Nematodes & Root Knots
+        if any(term in clean_query.lower() for term in ["गांठें", "गांठे", "nematode", "root knot", "सूत्रकृमि"]):
+            if any(term in meta_title_lower for term in ["nematode", "rodent", "गांठ"]):
+                adjusted_score += 0.35
+
+        # Hermetic PICS Grain Storage
+        if any(term in clean_query.lower() for term in ["pics", "hermetic", "हर्मेटिक", "grain storage", "अनाज भंडारण"]):
+            if any(term in meta_title_lower for term in ["storage", "grain", "भंडारण"]):
+                adjusted_score += 0.35
+
+        # Farm Mechanization & Super Seeder
+        if any(term in clean_query.lower() for term in ["super seeder", "happy seeder", "सुपर सीडर", "chc", "custom hiring"]):
+            if any(term in meta_title_lower for term in ["mechanization", "chc", "implements"]):
+                adjusted_score += 0.30
+
+        # Biostimulants & Biofertilizers
+        if any(term in clean_query.lower() for term in ["biostimulant", "humic acid", "ह्यूमिक", "बायोस्टिमुलेंट"]):
+            if any(term in meta_title_lower for term in ["biofertilizer", "organic manure", "जैविक"]):
+                adjusted_score += 0.35
+
+        # Weeds / Phalaris minor
+        if any(term in clean_query.lower() for term in ["gulli danda", "mandusi", "phalaris", "गुल्ली", "मंडूसी", "खरपतवार"]):
+            if any(term in meta_title_lower for term in ["weed", "phalaris", "खरपतवार", "gulli", "canary"]):
+                adjusted_score += 0.35
+
+        # If query asks about leaf curling / whitefly symptoms, boost specific leaf curl chunks (only for relevant crops)
         if any(term in clean_query.lower() for term in ["मुड़", "curl", "मरोड़", "कुंचन"]):
-            if any(term in str(meta.get("title", "")).lower() or term in str(meta.get("section", "")).lower() for term in ["leaf curl", "curl", "मरोड़", "कुंचन", "whitefly"]):
-                adjusted_score += 0.25
+            if detected_crop in ("Tomato", "Cotton", "Chilli", None):
+                if any(term in meta_title_lower or term in meta_sec_lower for term in ["leaf curl", "curl", "मरोड़", "कुंचन", "whitefly"]):
+                    adjusted_score += 0.25
 
         # If query asks about what crops to grow and chunk is about Best Crops, give bonus
         if any(w in clean_query.lower() for w in ["kaunsi fasal", "फसल", "crop", "crops", "grow", "उगा"]):
-            if any(term in str(meta.get("section", "")).lower() for term in ["best crops", "फसलें", "crops"]):
+            if any(term in meta_sec_lower for term in ["best crops", "फसलें", "crops"]):
                 adjusted_score += 0.12
 
 

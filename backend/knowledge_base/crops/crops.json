@@ -4,44 +4,143 @@
     "hindi_name": "गेहूं",
     "season": "Rabi (Oct-Dec sowing, Mar-Apr harvest)",
     "soil": "Well-drained loam or clay loam, pH 6.0-7.5",
-    "water_requirement": "4-6 irrigations. Critical stages: Crown Root Initiation (CRI at 21 days), Tillering (40-45 days), Jointing (60-65 days), Flowering (80-85 days), Milking (100-105 days), Dough stage (115-120 days). CRI irrigation is most critical.",
-    "fertilizer_general": "120 kg N : 60 kg P2O5 : 40 kg K2O per hectare. Apply full P & K plus 1/3rd N as basal at sowing. Top dress remaining N in two equal splits at 1st and 2nd irrigations.",
-    "common_issues": "Yellow rust (Puccinia striiformis) appearing as yellow pustules in stripes on leaves; Zinc deficiency (khaira-like chlorosis on 3rd/4th leaf from top); Termite damage in sandy soils."
+    "water_requirement": "4-6 irrigations. Critical stages: Crown Root Initiation (CRI at 20-25 days), Tillering (40-45 days), Jointing (60-65 days), Flowering (80-85 days), Milking (100-105 days), Dough stage (115-120 days). CRI irrigation is most critical.",
+    "fertilizer_general": "120 kg N : 60 kg P2O5 : 40 kg K2O per hectare. Apply full P & K plus 1/3rd N as basal at sowing. Top dress remaining N in two equal splits at 1st (CRI) and 2nd (Tillering) irrigations. Apply 25 kg/ha Zinc Sulphate (21%) in zinc-deficient soils.",
+    "common_issues": "Yellow rust (Puccinia striiformis) appearing as bright yellow pustules in stripes on leaves; Zinc deficiency (khaira-like chlorosis on 3rd/4th leaf from top); Phalaris minor (Gulli Danda) weed infestation; Termite damage in sandy soils."
   },
   {
     "crop": "Rice",
     "hindi_name": "धान",
     "season": "Kharif (June-July transplanting, Oct-Nov harvest)",
-    "soil": "Clayey or heavy loam soils capable of holding standing water, pH 5.5-7.0",
-    "water_requirement": "Needs standing water (2-5 cm) during early tillering and panicle initiation. Avoid deep submergence during flowering. Alternate Wetting and Drying (AWD) saves 25-30% water without yield reduction.",
-    "fertilizer_general": "100-120 kg N : 50-60 kg P2O5 : 40-50 kg K2O per hectare. Apply 25 kg/ha Zinc Sulphate in zinc-deficient soils. Top dress Urea in 3 splits.",
-    "common_issues": "Blast (Pyricularia oryzae) showing spindle-shaped spots with grey centers; Brown Plant Hopper (BPH) causing hopper burn; Bacterial Leaf Blight (BLB) showing wavy yellow-white margins on leaves."
+    "soil": "Clayey or heavy loam soils capable of holding standing water, pH 5.5-7.5",
+    "water_requirement": "Needs shallow standing water (2-3 cm) during first 10 days of seedling establishment and during flowering. Alternate Wetting and Drying (AWD) saves 25-30% water during vegetative tillering without yield reduction. Drain 10 days before harvest.",
+    "fertilizer_general": "120 kg N : 60 kg P2O5 : 40 kg K2O per hectare. Mandatory 25 kg/ha Zinc Sulphate (21%) basal to prevent Khaira disease. Top dress Urea in 3 splits (basal, active tillering 20-25 DAT, panicle initiation 40-45 DAT).",
+    "common_issues": "Leaf & Neck Blast (Pyricularia oryzae) showing spindle-shaped spots with grey centers; Sheath Blight (Rhizoctonia solani); Brown Plant Hopper (BPH) causing hopper burn; Khaira disease (zinc deficiency); Yellow Stem Borer."
   },
   {
     "crop": "Mustard",
     "hindi_name": "सरसों / राई",
-    "season": "Rabi (Late Sep-Oct sowing, Feb-Mar harvest)",
+    "season": "Rabi (Oct 1-25 timely sowing, Feb-Mar harvest)",
     "soil": "Sandy loam to loamy soil, good drainage, pH 6.5-7.5",
-    "water_requirement": "2-3 irrigations. 1st at flowering (30-35 days), 2nd at pod development (60-65 days). Avoid heavy flooding.",
-    "fertilizer_general": "60-80 kg N : 40 kg P2O5 : 20-40 kg K2O per hectare. Crucially requires 20-30 kg/ha Sulphur (via Gypsum or Bentonite Sulphur) to enhance oil content.",
-    "common_issues": "Mustard aphid (Lipaphis erysimi) sucking sap from flowering buds and pods; White rust (Albugo candida) causing white pustules on underside of leaves."
+    "water_requirement": "2-3 light irrigations. 1st at rosette/branching (30-35 days), 2nd at siliquae/pod development (60-65 days). Avoid heavy flooding or waterlogging.",
+    "fertilizer_general": "80 kg N : 40 kg P2O5 : 40 kg K2O per hectare. Crucially requires 20-30 kg/ha Sulphur (via 150-200 kg/ha Agricultural Gypsum or SSP) to synthesize oil and boost yield by 15-20%.",
+    "common_issues": "Mustard aphid (Lipaphis erysimi) sucking sap from flowering buds and pods (spray late afternoon to protect honeybees); White rust (Albugo candida) causing white pustules on leaf underside and floral staghead malformation."
   },
   {
     "crop": "Maize",
     "hindi_name": "मक्का",
-    "season": "Kharif & Rabi/Spring",
-    "soil": "Deep, fertile loam or silt loam, rich in organic matter, pH 6.0-7.5. Susceptible to waterlogging.",
-    "water_requirement": "Requires 500-600 mm water. Critical stages: Tasseling and Silking. Waterlogging for even 24 hours can reduce yield significantly.",
-    "fertilizer_general": "120 kg N : 60 kg P2O5 : 40-60 kg K2O per hectare. Split nitrogen: 1/4th at sowing, 1/2 at knee-high stage, 1/4th at tasseling.",
-    "common_issues": "Fall Armyworm (Spodoptera frugiperda) damaging central whorl leaves with pinholes and sawdust-like frass."
+    "season": "Kharif (June-July) & Rabi/Spring (Oct-Nov or Jan-Feb)",
+    "soil": "Deep, fertile loam or silt loam, rich in organic matter, pH 6.0-7.5. Extremely susceptible to waterlogging.",
+    "water_requirement": "Requires 500-600 mm water. Critical stages: Knee-high (30-35 DAS), Tasseling (50-55 DAS), and Silking (55-65 DAS). Waterlogging for even 24 hours causes root asphyxiation and severe yellowing.",
+    "fertilizer_general": "120 kg N : 60 kg P2O5 : 50 kg K2O per hectare. Split nitrogen: 20% basal, 50% at knee-high stage with earthing up, 30% at tasseling. Apply 25 kg/ha Zinc Sulphate to prevent White Bud.",
+    "common_issues": "Fall Armyworm (Spodoptera frugiperda) damaging central whorl leaves with pinholes and sawdust-like frass; Stem Borer (Chilo partellus); Maydis leaf blight."
   },
   {
     "crop": "Potato",
     "hindi_name": "आलू",
-    "season": "Rabi (Oct sowing, Jan-Feb harvest)",
-    "soil": "Loose, friable sandy loam rich in organic matter, pH 5.2-6.5",
-    "water_requirement": "Frequent light irrigations (every 7-10 days). Never submerge the ridges. Stop irrigation 10-12 days before harvesting to allow skin curing.",
-    "fertilizer_general": "150-180 kg N : 80-100 kg P2O5 : 100-120 kg K2O per hectare. Potassium is vital for tuber size and starch quality.",
-    "common_issues": "Late blight (Phytophthora infestans) causing water-soaked dark lesions during foggy, cool, humid weather; Early blight causing concentric rings (target spots)."
+    "season": "Rabi (Oct 15 - Nov 5 main planting, Jan-Feb harvest)",
+    "soil": "Loose, friable sandy loam rich in organic matter, pH 5.2-6.5 (inhibits common scab)",
+    "water_requirement": "Frequent light furrow irrigations (every 7-10 days). Never allow furrow water to overtop ridge crests. Stop irrigation 10-12 days before harvest to allow skin curing and dehaulming.",
+    "fertilizer_general": "150-180 kg N : 80-100 kg P2O5 : 100-120 kg K2O per hectare. High Potassium is vital for tuber bulking, starch formation, and cold storage shelf-life. SOP preferred for seed/processing potatoes.",
+    "common_issues": "Late blight (Phytophthora infestans) causing water-soaked dark lesions during foggy, cool, humid weather; Early blight causing concentric target rings; Tuber greening from exposed ridges; Black scurf."
+  },
+  {
+    "crop": "Tomato",
+    "hindi_name": "टमाटर",
+    "season": "Autumn-Winter (Aug-Sep transplanting) & Spring-Summer (Jan-Feb transplanting)",
+    "soil": "Well-drained sandy loam or loam rich in organic matter, pH 6.0-7.0",
+    "water_requirement": "Drip or light furrow irrigation every 5-8 days. Avoid moisture fluctuations during fruit ripening to prevent fruit cracking (splitting).",
+    "fertilizer_general": "120-150 kg N : 80-100 kg P2O5 : 100-120 kg K2O per hectare. Requires Calcium and Boron foliar sprays (0.5% Calcium Nitrate + 0.1% Boron) to prevent Blossom End Rot.",
+    "common_issues": "Tomato Leaf Curl Virus (ToLCV) transmitted by Whiteflies (Bemisia tabaci); Blossom End Rot (black sunken dry scar on bottom); Tomato Fruit Borer (Helicoverpa armigera); Early Blight."
+  },
+  {
+    "crop": "Chickpea",
+    "hindi_name": "चना",
+    "season": "Rabi (Late Oct - Mid Nov sowing, Mar-Apr harvest)",
+    "soil": "Mar (deep black), Kabar (clayey), Parwa (loam) soils of Bundelkhand, pH 6.5-8.0",
+    "water_requirement": "Primarily rainfed. 1-2 life-saving sprinkler irrigations if needed: 1st at pre-flowering branching (40-45 DAS) and 2nd at pod filling (70-75 DAS). Strictly avoid irrigation at peak flowering.",
+    "fertilizer_general": "20 kg N : 50 kg P2O5 : 20 kg K2O : 20 kg S per hectare. Mandatory dual seed inoculation with Rhizobium and PSB. Single Super Phosphate (SSP) is preferred for phosphorus and sulphur.",
+    "common_issues": "Fusarium wilt (internal black xylem streak); Dry root rot (Rhizoctonia bataticola) under post-flowering heat and drought; Gram pod borer (Helicoverpa armigera); Pulse beetle in storage."
+  },
+  {
+    "crop": "Lentil",
+    "hindi_name": "मसूर",
+    "season": "Rabi (Late Oct - Mid Nov sowing, Mar-Apr harvest)",
+    "soil": "Well-drained loam, clay loam, and alluvial soils, pH 6.0-7.5",
+    "water_requirement": "1-2 light irrigations. 1st at 30-35 DAS (vegetative) and 2nd at pod development (65-70 DAS). Avoid water stagnation.",
+    "fertilizer_general": "20 kg N : 40 kg P2O5 : 20 kg K2O : 20 kg S per hectare. Inoculate seed with Rhizobium leguminosarum and PSB.",
+    "common_issues": "Rust (Uromyces viciae-fabae); Fusarium wilt; Collar rot; Aphids (Aphis craccivora)."
+  },
+  {
+    "crop": "Sugarcane",
+    "hindi_name": "गन्ना",
+    "season": "Autumn (Sep-Oct), Spring (Feb-Mar), and Ratoon (Annual)",
+    "soil": "Deep fertile alluvial loam and clay loam with good drainage, pH 6.5-7.8",
+    "water_requirement": "Requires 1500-2000 mm water across lifecycle (7-10 irrigations in summer at 10-12 day intervals; 3-4 in winter). Trench planting saves 30% water.",
+    "fertilizer_general": "180-200 kg N : 60-80 kg P2O5 : 60 kg K2O per hectare (Plant crop); 220-250 kg N/ha for Ratoon crop. Apply Zinc Sulphate 25 kg/ha basal.",
+    "common_issues": "Red Rot (Colletotrichum falcatum) breakdown in Co-0238 (replace with Co-15023, Co-0118); Top borer; Early shoot borer; White grub; Trash burning damage."
+  },
+  {
+    "crop": "Onion",
+    "hindi_name": "प्याज",
+    "season": "Rabi (Oct-Nov nursery, Dec-Jan transplant) & Kharif (June nursery, Aug transplant)",
+    "soil": "Friable sandy loam or silt loam rich in organic matter, pH 6.0-7.5",
+    "water_requirement": "Frequent light irrigations every 7-10 days. Stop irrigation 10-15 days before harvest when 20-25% neck-fall begins to prevent bulb rot.",
+    "fertilizer_general": "100-120 kg N : 50-60 kg P2O5 : 80-100 kg K2O : 30-40 kg S per hectare. Stop nitrogen application after 60 DAT to avoid thick neck bulbs.",
+    "common_issues": "Onion thrips (Thrips tabaci) causing silvery leaf curling; Purple blotch (Alternaria porri); Damping off in nursery; Black mold (Aspergillus niger) in storage."
+  },
+  {
+    "crop": "Soybean",
+    "hindi_name": "सोयाबीन",
+    "season": "Kharif (20 June - 10 July sowing, Sep-Oct harvest)",
+    "soil": "Medium to deep black soils (Mar/Kabar) and clay loam, pH 6.5-7.5",
+    "water_requirement": "Rainfed crop. Planting on Broad Bed Furrows (BBF 120 cm) prevents waterlogging during heavy rains and conserves moisture during terminal dry spells.",
+    "fertilizer_general": "20-25 kg N (starter) : 60 kg P2O5 (via SSP) : 40 kg K2O : 20 kg S per hectare. Mandatory Bradyrhizobium japonicum + PSB seed inoculation.",
+    "common_issues": "Yellow Mosaic Virus (YMV) transmitted by whiteflies; Girdle beetle (Obereopsis brevis) cutting petiole rings; Semilooper; Charcoal rot; Seed shattering."
+  },
+  {
+    "crop": "Groundnut",
+    "hindi_name": "मूंगफली",
+    "season": "Kharif (June 20 - July 15) & Summer/Zaid (Feb 15 - March 15)",
+    "soil": "Light well-drained sandy loam rich in calcium, pH 6.0-7.5",
+    "water_requirement": "Requires moist soil especially during flowering and peg entry (pegging). 2-3 protective irrigations during dry spells. Summer crop requires 4-6 sprinkler irrigations.",
+    "fertilizer_general": "20 kg N : 40-50 kg P2O5 : 40 kg K2O per hectare. Crucially requires 250-400 kg/ha Agricultural Gypsum at pegging stage (40-45 DAS) to prevent empty pods (Pops).",
+    "common_issues": "White grub (Holotrichia consanguinea); Collar rot (Aspergillus niger); Tikka leaf spot (Cercospora); Aflatoxin mold contamination in post-harvest storage."
+  },
+  {
+    "crop": "Pigeonpea",
+    "hindi_name": "अरहर / तुअर",
+    "season": "Kharif (June 15 - July 10 sowing, Mar-Apr harvest for long duration Bahar/NDA-1)",
+    "soil": "Deep well-drained alluvial loam or sandy loam without water stagnation, pH 6.5-7.5",
+    "water_requirement": "Deep taproot enables high drought tolerance. Mandatory ridge planting to prevent water stagnation. 1-2 life-saving irrigations at pod development if post-monsoon fails.",
+    "fertilizer_general": "20-25 kg N : 50-60 kg P2O5 : 30 kg K2O : 20 kg S per hectare. Inoculate seed with Rhizobium and PSB.",
+    "common_issues": "Phytophthora stem blight in waterlogged fields; Pod fly (Melanagromyza obtusa) destroying seeds inside pods; Gram pod borer; Sterility Mosaic Disease (SMD)."
+  },
+  {
+    "crop": "Chilli",
+    "hindi_name": "मिर्च",
+    "season": "Kharif (July-Aug transplant) & Spring-Summer (Jan-Feb transplant)",
+    "soil": "Well-drained sandy loam or clay loam rich in organic matter, pH 6.0-7.0",
+    "water_requirement": "Drip or light furrow irrigation every 5-7 days. Silver-black plastic mulch conserves 40% water and suppresses weeds.",
+    "fertilizer_general": "120-150 kg N : 60-80 kg P2O5 : 80-100 kg K2O per hectare applied in weekly fertigation splits. Calcium Nitrate and Boron foliar sprays prevent blossom drop.",
+    "common_issues": "Murda leaf curl complex (Thrips causing upward curling, Yellow mites causing downward curling, Whitefly viral transmission); Anthracnose fruit rot and dieback."
+  },
+  {
+    "crop": "Banana",
+    "hindi_name": "केला",
+    "season": "Monsoon (July-August) & Spring (February-March)",
+    "soil": "Deep rich alluvial loam or clay loam with exceptional drainage, pH 6.5-7.5",
+    "water_requirement": "High water requirement (1800-2200 mm/year). Drip irrigation (15-20 liters/plant/day in summer; 8-10 liters in winter) ensures high bunch weight.",
+    "fertilizer_general": "200 g N : 60 g P2O5 : 300 g K2O per plant per year applied in weekly drip fertigation splits. High potassium is vital for 28-35 kg bunch weights.",
+    "common_issues": "Sigatoka leaf spot (Pseudocercospora musae); Panama wilt TR4; Pseudostem borer; Excessive side suckers; Bunch sunburn and thrips scarring (prevented by bunch bagging)."
+  },
+  {
+    "crop": "Cotton",
+    "hindi_name": "कपास",
+    "season": "Kharif / Spring (15 April - 15 May sowing, Oct-Nov picking)",
+    "soil": "Deep fertile alluvial loam with good drainage, pH 7.0-8.2",
+    "water_requirement": "4-5 irrigations. Critical stages: Flowering, squaring, and boll development. Ridge-furrow planting prevents waterlogging during monsoon.",
+    "fertilizer_general": "120-150 kg N : 60 kg P2O5 : 60 kg K2O per hectare. Split N into 3 doses. Foliar spray 1% Magnesium Sulphate at 60 and 80 DAS prevents leaf reddening.",
+    "common_issues": "Whitefly (Bemisia tabaci) transmitting Cotton Leaf Curl Virus Disease (CLCuD); Pink bollworm (Pectinophora gossypiella); Rosette flowers; Non-Bt refuge compliance."
   }
 ]

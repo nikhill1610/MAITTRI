@@ -28,6 +28,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 try:
     import chromadb
     from chromadb.config import Settings
@@ -298,18 +303,26 @@ def collect_all_chunks() -> List[Dict[str, Any]]:
     all_chunks = []
     # Markdown files
     for md_file in sorted(KB_DIR.rglob("*.md")):
+        if "_meta" in md_file.parts or md_file.name.startswith("_"):
+            continue
         all_chunks.extend(chunk_markdown_document(md_file))
 
     # Plain text files
     for txt_file in sorted(KB_DIR.rglob("*.txt")):
+        if "_meta" in txt_file.parts or txt_file.name.startswith("_"):
+            continue
         all_chunks.extend(chunk_markdown_document(txt_file))
 
     # Official PDF files
     for pdf_file in sorted(KB_DIR.rglob("*.pdf")):
+        if "_meta" in pdf_file.parts or pdf_file.name.startswith("_"):
+            continue
         all_chunks.extend(chunk_pdf_document(pdf_file))
 
     # JSON database files
     for json_file in sorted(KB_DIR.rglob("*.json")):
+        if "_meta" in json_file.parts or json_file.name.startswith("_"):
+            continue
         all_chunks.extend(chunk_json_document(json_file))
 
     return all_chunks

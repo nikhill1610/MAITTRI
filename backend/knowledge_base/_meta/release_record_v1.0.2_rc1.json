@@ -1,0 +1,103 @@
+{
+  "release_candidate_metadata": {
+    "release_id": "MAITTRI-v1.0.2-PILOT-RC1",
+    "version": "1.0.2-rc1",
+    "status": "PILOT_RELEASE_CANDIDATE_1",
+    "date": "2026-09-22T21:05:00+05:30",
+    "parent_baseline_sha": "0d8bb25845741eddbe4993cb486a268d4ea476a5",
+    "baseline_release_id": "MAITTRI-KB-v1.0.0-RELEASE-FREEZE",
+    "git_commit_sha": "0d8bb25845741eddbe4993cb486a268d4ea476a5",
+    "worktree_state": "DIRTY",
+    "worktree_state_description": "Working tree contains uncommitted pilot release candidate runtime improvements (Smart RAG Router, Celphos RUP gate, NPIC toxicology contacts, pilot eval harness, and test suite expansion) on top of frozen baseline commit 0d8bb25845741eddbe4993cb486a268d4ea476a5.",
+    "identity_statement": "MAITTRI-v1.0.2-PILOT-RC1 is NOT identical to v1.0.0. While the core 62-document agricultural knowledge base and 559 vector chunks are frozen and bit-for-bit identical, RC1 incorporates runtime routing boundaries, poison contact corrections, and test coverage improvements."
+  },
+  "corpus_baseline": {
+    "total_markdown_documents": 62,
+    "total_json_category_registries": 6,
+    "total_chromadb_chunks": 559,
+    "chromadb_collection_name": "maitri_krishi_kb",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "embedding_dimensions": 384,
+    "distance_metric": "cosine",
+    "vector_store_path": "backend/vector_store",
+    "unique_doc_ids_verified": 62,
+    "duplicate_doc_ids": 0,
+    "yaml_frontmatter_valid_percent": 100.0,
+    "evidence_tiers": {
+      "tier_a": 62,
+      "tier_b": 0,
+      "source_research_required": 0
+    },
+    "source_registry_institutes_count": 38,
+    "chemical_safety_gate_compliance_percent": 100.0
+  },
+  "integrity_fingerprints": {
+    "file_manifest_sha256": "302f3fd759ef298d15a37fd00b038524d61f726121ba3580d8533ff02287c471",
+    "kb_manifest_sha256": "3a2faa4fdd5a20dae0ff6c604513046fa0dc6a5af2d0bf7055d24db5938e4718",
+    "manifest_reconciliation_status": "MATCHES_BASELINE_FREEZE_100_PERCENT",
+    "classification_of_corpus_diffs": "KB_CONTENT_FROZEN (0 file content modifications since v1.0.0 freeze)"
+  },
+  "runtime_changes_since_v1_0_0": {
+    "CODE_CHANGE": [
+      "backend/app/services/smart_rag_router.py (Pesticide regex boundaries, Celphos RUP domestic gate, NPIC AIIMS contacts)",
+      "backend/app/services/rag_service.py (Synonym expansion, crop match boost, grounded fallback synthesis)",
+      "backend/app/services/chat_service.py (Pesticide refusal integration, low-confidence routing)",
+      "backend/app/routes/chat.py (Session telemetry logging)",
+      "backend/scripts/run_pilot_eval.py (45-query pilot benchmark harness with batch progress checkpointing)",
+      "backend/tests/test_smart_rag_router.py (25 test cases for routing, safety, prompt injection)",
+      "backend/tests/test_web_search_fallback.py (5 test cases for domain tiering and PII sanitization)"
+    ],
+    "GOVERNANCE_CHANGE": [
+      "backend/knowledge_base/_meta/pilot_gold_eval_set.json (Restored EVAL-WED-001, total_queries=45)",
+      "backend/knowledge_base/_meta/pilot_benchmark_history.md (Authoritative 45-query reconciliation record)",
+      "backend/knowledge_base/_meta/test_suite_history.md (Authoritative 55-test suite accounting record)",
+      "backend/knowledge_base/_meta/field_pilot_readiness_checklist.md (Emergency contact decoupling: NPIC vs KCC vs ERSS 112)",
+      "backend/knowledge_base/_meta/pilot_results/pilot_human_review_queue.json (4 cases strictly marked HUMAN_SPECIALIST_REVIEW_PENDING)",
+      "backend/knowledge_base/_meta/pilot_results/pilot_human_review_queue.md (Audit queue with specialist role assignments)"
+    ]
+  },
+  "test_regression_baseline": {
+    "total_test_items": 55,
+    "passed_test_items": 55,
+    "failed_test_items": 0,
+    "pass_rate_percent": 100.0,
+    "runtime_seconds": 22.04,
+    "test_suite_breakdown": {
+      "test_rag_trustworthy.py": 13,
+      "test_chat_rag.py": 12,
+      "test_smart_rag_router.py": 25,
+      "test_web_search_fallback.py": 5
+    }
+  },
+  "development_benchmark_baseline": {
+    "authoritative_queries_count": 45,
+    "evaluated_queries_count": 45,
+    "passed_queries_count": 45,
+    "failed_queries_count": 0,
+    "overall_pass_rate_percent": 100.0,
+    "recall_at_3_percent": 100.0,
+    "recall_at_5_percent": 100.0,
+    "top_1_accuracy_percent": 94.59,
+    "crop_filter_precision_percent": 100.0,
+    "duplicate_context_rate_percent": 0.0,
+    "overall_routing_accuracy_percent": 100.0,
+    "safety_violations_count": 0,
+    "safety_breakdown": {
+      "pesticide_safety_violations": 0,
+      "stale_weather_violations": 0,
+      "stale_mandi_violations": 0,
+      "wrong_state_leakage_instances": 0,
+      "hallucination_instances": 0
+    }
+  },
+  "human_specialist_review_queue": {
+    "total_items": 4,
+    "items": {
+      "REV-001": "HUMAN_SPECIALIST_REVIEW_PENDING (Senior Vegetable Pathologist, KVK Varanasi / IIVR)",
+      "REV-002": "HUMAN_SPECIALIST_REVIEW_PENDING (Regional University Agronomist, RLBCAU Jhansi / Banda Agri University)",
+      "REV-003": "HUMAN_SPECIALIST_REVIEW_PENDING (Soil Scientist, ICAR-CSSRI / IIWBR)",
+      "REV-004": "HUMAN_SPECIALIST_REVIEW_PENDING (Toxicology & Safety Board, CIBRC Safety Officer / Entomology Chair)"
+    },
+    "governance_rule": "Model evaluations or automated benchmark scores do NOT constitute agricultural expert sign-off. All items must remain PENDING until real field agronomist sign-off."
+  }
+}

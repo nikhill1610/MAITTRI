@@ -370,17 +370,51 @@ export default function KrishiAssistantPage() {
                       <div className="compactSourcesContent">
                         {m.sources.slice(0, 3).map((s, sIdx) => {
                           const title = typeof s === "object" ? s.title : s;
-                          const srcOrg = typeof s === "object" ? (s.organization || s.source) : null;
-                          const isOfficial = typeof s === "object" && s.source_type === "official_verified";
+                          const srcOrg = typeof s === "object" ? (s.organization || s.source || s.domain) : null;
+                          const url = typeof s === "object" ? s.url : null;
+                          const tier = typeof s === "object" ? (s.source_tier || "") : "";
+                          const srcType = typeof s === "object" ? (s.source_type || "") : "";
+                          const pubDate = typeof s === "object" ? s.published_date : null;
+                          const isOfficial = srcType === "official_verified" || tier === "AUTHORITATIVE" || srcType === "LIVE_WEB_OFFICIAL";
+                          const isInstitutional = tier === "INSTITUTIONAL" || srcType === "LIVE_WEB_INSTITUTIONAL";
+                          const isGeneralWeb = tier === "GENERAL_WEB" || srcType === "LIVE_WEB_GENERAL";
+
                           return (
                             <div key={sIdx} className="compactSourceItem">
                               <span className="compactSourceDot">•</span>
                               <span className="compactSourceText">
                                 {srcOrg ? <strong>{srcOrg} — </strong> : null}
-                                {title}
+                                {url ? (
+                                  <a
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: "#1d4ed8", textDecoration: "underline" }}
+                                    title={url}
+                                  >
+                                    {title}
+                                  </a>
+                                ) : (
+                                  title
+                                )}
                                 {isOfficial && (
                                   <span style={{ marginLeft: "6px", fontSize: "0.72rem", color: "#15803d", fontWeight: 600 }}>
                                     ✓ Official
+                                  </span>
+                                )}
+                                {isInstitutional && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.72rem", color: "#2563eb", fontWeight: 600 }}>
+                                    🏛️ Institutional
+                                  </span>
+                                )}
+                                {isGeneralWeb && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.72rem", color: "#4b5563", fontWeight: 600 }}>
+                                    🌐 Web
+                                  </span>
+                                )}
+                                {pubDate && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.70rem", color: "#6b7280" }}>
+                                    ({pubDate})
                                   </span>
                                 )}
                               </span>
