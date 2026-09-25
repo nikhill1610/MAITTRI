@@ -3,40 +3,64 @@
     "name": "Yellow Rust (Stripe Rust) in Wheat",
     "hindi_name": "गेहूं का पीला रतुआ",
     "crops": ["Wheat"],
-    "symptoms": "Bright yellow pustules forming parallel narrow stripes along leaf veins. Dust rubs off on fingers as yellow powder. Thrives in cool (10-15°C) and moist/humid weather.",
-    "management": "Consult KVK / local agricultural officer immediately. Propiconazole 25% EC (1 ml/litre) or Tebuconazole 25.9% EC is commonly recommended by universities upon initial detection at ETL. Spray on calm days.",
-    "precautions": "Do not delay spraying once stripes are seen. Grow resistant varieties like HD-2967, HD-3086, DBW-187, DBW-222."
+    "symptoms": "Bright lemon-yellow powdery pustules forming continuous narrow parallel stripes along leaf veins. Spores rub off easily on fingertips like yellow turmeric powder. Thrives in cool (10-15°C) and moist/humid weather in January-February.",
+    "management": "Consult KVK / local agricultural officer immediately upon first appearance of stripes. Propiconazole 25% EC (1.0 ml/litre) or Tebuconazole 25.9% EC (1.0 ml/litre) is recommended under university supervision. Spray on calm, sunny afternoons.",
+    "precautions": "Do not delay spraying once yellow stripes are confirmed. Plant certified rust-resistant varieties like DBW-187, DBW-222, HD-3086."
   },
   {
-    "name": "Leaf Blast in Rice",
-    "hindi_name": "धान का झुलसा / ब्लास्ट रोग",
+    "name": "Leaf & Neck Blast in Rice",
+    "hindi_name": "धान का झुलसा / ब्लास्ट एवं गर्दन-तोड़ रोग",
     "crops": ["Rice"],
-    "symptoms": "Spindle-shaped or diamond-shaped lesions with ash-grey centers and brownish-red borders on leaves. Lesions coalesce and kill the leaf blade.",
-    "management": "Avoid excess nitrogen fertilizer application. Recommended treatments include Tricyclazole 75% WP (0.6 g/litre) or Isoprothiolane 40% EC at first appearance.",
-    "precautions": "Drain standing water temporarily and maintain balanced potassium nutrition."
+    "symptoms": "Spindle-shaped or diamond-shaped lesions with ash-grey centers and brownish-red borders on leaf blades. In neck blast phase, the panicle neck turns shiny black, rots, and snaps, leaving empty erect white panicles (chaffy grain).",
+    "management": "Avoid excessive nitrogen/urea fertilizer. Spray Tricyclazole 75% WP (0.6 g/litre) or Isoprothiolane 40% EC (1.5 ml/litre). Apply prophylactic spray at 5-10% panicle emergence to prevent neck blast.",
+    "precautions": "Drain standing water temporarily for 2-3 days during active foliar outbreak; maintain balanced potassium nutrition."
   },
   {
-    "name": "Aphids in Mustard",
-    "hindi_name": "सरसों का चेपा / माहू",
+    "name": "Sheath Blight in Rice",
+    "hindi_name": "धान का शीथ ब्लाइट रोग",
+    "crops": ["Rice"],
+    "symptoms": "Greenish-grey, water-soaked oval or irregular lesions forming a banded snake-skin pattern on leaf sheaths just above the water line. Lesions ascend into upper canopy, causing tillers to rot and lodge into water.",
+    "management": "Create 30 cm alleyways every 2.5-3 meters for canopy ventilation. Drain field water for 2-3 days. Spray Hexaconazole 5% SC (2.0 ml/litre) or Validamycin 3% L (2.0-2.5 ml/litre) directed strictly at the lower stem base.",
+    "precautions": "Spray must be directed at lower leaf sheaths, not top leaves; avoid dense planting and excessive nitrogen."
+  },
+  {
+    "name": "White Rust in Mustard",
+    "hindi_name": "सरसों का सफेद रतुआ / सफेद फफोला",
     "crops": ["Mustard"],
-    "symptoms": "Tiny green or brown soft-bodied insects clustering in large colonies on growing tips, flowers, and developing pods. Excrete sticky honeydew causing sooty mold.",
-    "management": "Early sowing before Oct 20 reduces infestation. For biological control, encourage ladybird beetles. For chemical control at ETL (15-20 aphids/plant), Dimethoate 30% EC or Thiamethoxam 25% WG under KVK guidance.",
-    "precautions": "Spray during late afternoon to protect honeybee pollinators."
+    "symptoms": "Prominent chalky-white or creamy raised blisters on underside of leaves with corresponding yellow spots on top. In floral stage, flower stalks swell, twist, and deform into sterile antler-like 'stagheads'.",
+    "management": "Seed treatment with Apron 35 SD (Metalaxyl @ 6 g/kg seed). Prophylactic spray of Mancozeb 75% WP (2.0 g/litre). For active outbreaks, spray Metalaxyl 8% + Mancozeb 64% WP (Ridomil MZ @ 2.0-2.5 g/litre).",
+    "precautions": "Sow timely before Oct 20 to escape disease; hand-clip and destroy stagheads; spray in late afternoon."
   },
   {
     "name": "Late Blight in Potato and Tomato",
     "hindi_name": "आलू / टमाटर का पछेती झुलसा",
     "crops": ["Potato", "Tomato"],
-    "symptoms": "Water-soaked irregular blackish-brown spots on leaf tips and margins. White cottony fungal growth visible on underside of leaves in morning under high humidity (>90%) and cool weather (12-18°C).",
-    "management": "Prophylactic spray of Mancozeb 75% WP (2-2.5 g/litre) before disease onset. After symptoms appear, systemic fungicides like Metalaxyl + Mancozeb (2 g/litre) or Cymoxanil + Mancozeb.",
-    "precautions": "Avoid overhead sprinkler irrigation; burn or bury infected haulms."
+    "symptoms": "Rapidly expanding water-soaked irregular brownish-black lesions on leaf tips and margins. Delicate white cottony mildew visible on leaf underside on foggy dewy mornings. Entire fields can collapse within 4-5 days.",
+    "management": "Prophylactic spray of Mancozeb 75% WP (2.0-2.5 g/litre) before foggy weather sets in. Upon initial detection, immediately spray systemic Metalaxyl 8% + Mancozeb 64% WP (2.5 g/litre) or Cymoxanil + Mancozeb (2.5 g/litre).",
+    "precautions": "Never allow furrow water to overtop potato ridges; avoid sprinkler irrigation during blight alerts; dehaulm potato crops 10-12 days before harvest."
   },
   {
-    "name": "Fall Armyworm in Maize",
-    "hindi_name": "मक्के का फॉल आर्मीवर्म",
-    "crops": ["Maize"],
-    "symptoms": "Pinholes in young leaves, skeletonized leaf whorls, large chunks eaten, accompanied by coarse brown fecal pellets (frass) inside leaf whorls.",
-    "management": "Apply dry sand or neem cake (5 g/plant) inside whorls in early stages. Biological: Bacillus thuringiensis (Bt) or Metarhizium anisopliae. Chemical: Emamectin Benzoate 5% SG (0.4 g/litre) or Chlorantraniliprole 18.5% SC directed into the whorl.",
-    "precautions": "Use pheromone traps (5/acre) for monitoring."
+    "name": "Early Blight in Tomato and Potato",
+    "hindi_name": "टमाटर / आलू का अगेती झुलसा",
+    "crops": ["Tomato", "Potato"],
+    "symptoms": "Dark brown circular spots with distinct concentric rings resembling an archery target-board on older lower leaves. Surrounding tissue turns yellow, leading to premature defoliation and sunscald on fruits.",
+    "management": "Stake tomatoes on trellises and prune foliage within 20 cm of soil surface. Spray Mancozeb 75% WP (2.0-2.5 g/litre) or Copper Oxychloride 50% WP (2.5 g/litre) at first spot. Use Difenoconazole 25% EC (1.0 ml/litre) for curative control.",
+    "precautions": "Avoid overhead irrigation; mulch beds to prevent soil spore splash; collect and destroy fallen leaves."
+  },
+  {
+    "name": "Fusarium Wilt & Root Rot Complex in Pulses",
+    "hindi_name": "दलहन उकठा एवं जड़ सड़न रोग (चना, मसूर, अरहर)",
+    "crops": ["Chickpea", "Lentil", "Pigeonpea"],
+    "symptoms": "Sudden wilting and petiole drooping while leaves are dull green. Splitting taproot reveals dark brown or black internal xylem vascular streak. In dry root rot, taproot bark shreds with tiny black sclerotial bodies under post-flowering heat.",
+    "management": "Standing foliar sprays are ineffective against soilborne wilt. Apply pre-sowing seed treatment with Carboxin 37.5% + Thiram 37.5% DS @ 2.5 g/kg seed or Carbendazim 50% WP (1 g) + Thiram 75% WP (2 g)/kg seed. Enrich soil with Trichoderma viride 1% WP (2.5 kg in 100 kg FYM/ha).",
+    "precautions": "Rogue out infected plants; avoid pulse-after-pulse rotation in wilt-sick plots; plant wilt-resistant cultivars (Radhey, JG-14, Shekhar-3, Narendra Arhar-1)."
+  },
+  {
+    "name": "Red Rot in Sugarcane",
+    "hindi_name": "गन्ना लाल सड़न रोग (कैंसर ऑफ शुगरकेन)",
+    "crops": ["Sugarcane"],
+    "symptoms": "Yellowing and withering of 3rd/4th leaf from top spindle; canopy withers to straw-colored dead bunch. Split cane displays longitudinal red internal pith interrupted by characteristic white transverse chalky bands with strong sour/fermented alcohol odour.",
+    "management": "Foliar chemical sprays cannot cure infected stalks. Eradication requires varietal replacement (replace Co-0238 with resistant Co-15023, Co-0118, CoLk-14201). Treat setts with hot water (52°C, 30 min) and dip setts in Carbendazim 50% WP @ 2.0 g/L for 15 min.",
+    "precautions": "Never retain ratoon crops in red rot affected fields; dig out and incinerate infected clumps; disinfect pits with bleaching powder (10-15 g/hole)."
   }
 ]

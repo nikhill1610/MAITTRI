@@ -13,6 +13,12 @@
     "claim_procedure": "In case of localized disaster or post-harvest loss, farmer must report within 72 hours via Crop Insurance App, toll-free helpline, or bank/agriculture office."
   },
   {
+    "scheme": "KCC (Kisan Credit Card)",
+    "hindi_name": "किसान क्रेडिट कार्ड योजना",
+    "benefit": "Timely and affordable institutional agricultural credit up to ₹3.00 Lakh at a net effective interest rate of 4% per annum (with 2% interest subvention and 3% prompt repayment incentive). Collateral-free up to ₹1.60 Lakh (up to ₹3.00 Lakh with processing tie-ups).",
+    "eligibility": "All owner cultivators, tenant farmers, oral lessees, sharecroppers, and SHGs/JLGs engaged in agriculture or allied animal husbandry/fisheries activities."
+  },
+  {
     "scheme": "Soil Health Card Scheme",
     "hindi_name": "मृदा स्वास्थ्य कार्ड योजना",
     "benefit": "Provides farmers with crop-wise nutrient status and dosage recommendations for 12 parameters (N, P, K, S, Zn, Fe, Cu, Mn, Bo, pH, EC, OC) every 3 years to curb over-fertilization."

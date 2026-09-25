@@ -3,16 +3,22 @@
     "topic": "Soil Moisture Thresholds & Sensor Guidelines",
     "hindi_topic": "मृदा नमी स्तर एवं सिंचाई समय",
     "guidelines": "For most field crops, optimal soil moisture is 50-70% of Field Capacity. If capacitive/resistive sensor reads below 30-35% moisture in the root zone, light irrigation should be initiated. For loamy soil, moisture levels between 40-60% ensure active root respiration without anaerobic waterlogging.",
-    "precautions": "Avoid heavy flood irrigation before forecasted rainfall to prevent root rot and lodging."
+    "precautions": "Avoid heavy flood irrigation before forecasted rainfall to prevent root rot, aeration deficit, and lodging."
   },
   {
     "topic": "Critical Irrigation Stages by Crop",
     "hindi_topic": "फसलों में सिंचाई की प्रमुख अवस्थाएं",
-    "stages": "Wheat: Crown root initiation (20-25 days), flowering (80-85 days). Mustard: Rosette stage (30 days) and siliquae formation (60 days). Gram/Pulses: Pre-flowering and pod development (DO NOT irrigate during peak flowering as flowers drop). Rice: Tillering to grain filling. Potato: Tuber initiation and tuber bulking."
+    "stages": "Wheat: Crown root initiation (20-25 days - most critical), tillering (40-45 days), jointing (60-65 days), flowering (80-85 days), milking (100-105 days). Mustard: Rosette/branching (30-35 days) and siliquae formation (60-65 days). Gram/Pulses: Pre-flowering and early pod development (DO NOT irrigate during peak flowering to prevent flower drop). Rice: Continuous shallow ponding for first 10 days, Alternate Wetting & Drying (AWD) during tillering, and continuous ponding during panicle emergence to flowering. Potato: Tuber initiation and bulking."
   },
   {
-    "topic": "Micro-Irrigation (Drip & Sprinkler)",
-    "hindi_topic": "ड्रिप एवं स्प्रिंकलर सिंचाई",
-    "benefits": "Drip irrigation delivers 90%+ water use efficiency with 30-40% fertilizer savings through fertigation. Sprinkler irrigation is ideal for closely spaced crops like mustard, wheat, and pulses on undulating terrain. PMKSY scheme offers up to 55% subsidy for small/marginal farmers."
+    "topic": "Micro-Irrigation (Drip & Sprinkler) & PMKSY Subsidy",
+    "hindi_topic": "ड्रिप एवं स्प्रिंकलर सिंचाई एवं पीएमकेएसवाई अनुदान",
+    "benefits": "Drip irrigation delivers 90-95% water use efficiency with 30-40% fertilizer savings through precision fertigation (19:19:19, 0:52:34). Sprinkler irrigation provides 75-85% efficiency, ideal for closely spaced crops like mustard, wheat, and pulses on undulating sandy terrain. PMKSY Per Drop More Crop (PDMC) offers up to 55% capital subsidy for small/marginal farmers (<5 acres) and 45% for general farmers in Uttar Pradesh via upagriculture.com."
+  },
+  {
+    "topic": "Safe Alternate Wetting and Drying (AWD) in Rice",
+    "hindi_topic": "धान में सुरक्षित वैकल्पिक गीला और सूखा (AWD) तकनीक",
+    "guidelines": "Uses a 30 cm perforated PVC/plastic field tube installed 15 cm deep into puddled soil. Re-irrigate to 5 cm depth only when water level drops 15 cm below soil surface inside the tube. Saves 25-30% irrigation water, cuts pumping energy costs, stimulates deep root anchorage, suppresses sheath blight, and lowers methane greenhouse gas emissions by 30-50% with zero yield penalty.",
+    "precautions": "Suspend AWD and maintain 3-5 cm continuous standing water during the reproductive stage (panicle initiation to flowering)."
   }
 ]

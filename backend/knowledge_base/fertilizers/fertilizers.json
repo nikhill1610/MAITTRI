@@ -1,32 +1,38 @@
 [
   {
-    "topic": "Nitrogen (N) & Urea Management",
-    "hindi_topic": "नाइट्रोजन एवं यूरिया प्रबंधन",
-    "details": "Nitrogen promotes vegetative growth, dark green foliage, and protein synthesis. Deficiency causes generalized yellowing (chlorosis) starting from older lower leaves. Never apply entire Urea at sowing because of leaching and volatilization losses. Use neem-coated urea and apply in 2-3 split doses coinciding with irrigation.",
-    "tips": "Foliar spray of 2% Urea solution provides rapid greening during active tillering/vegetative stages if yellowing is due to nitrogen starvation."
+    "topic": "Nitrogen (N) & Neem-Coated Urea Management",
+    "hindi_topic": "नाइट्रोजन एवं नीम लेपित यूरिया प्रबंधन",
+    "details": "Nitrogen promotes vegetative growth, dark green foliage, and protein synthesis. Deficiency causes generalized 'V'-shaped chlorosis starting from the tip of older lower leaves. Commercial Urea contains 46% N (conversion: 120 kg N/ha requires 260.8 kg Urea/ha or 104.3 kg Urea/acre). Never apply the entire Urea dose at sowing due to leaching and volatilization. Apply in 3 calibrated splits: 25% basal, 45-50% at active tillering/CRI stage, and 25-30% at panicle initiation before booting.",
+    "tips": "Neem-coated urea slows nitrification by 15-20 days. Liquid Nano Urea can be sprayed @ 2-4 ml/litre (500 ml/acre) at active tillering and pre-flowering to reduce conventional granular urea demand by one bag per acre."
   },
   {
-    "topic": "Phosphorus (P) & DAP / SSP",
-    "hindi_topic": "फॉस्फोरस एवं डीएपी / एसएसपी",
-    "details": "Phosphorus stimulates root elongation, vigorous early seedling growth, and grain development. Deficiency results in purplish or dark bronze discoloration along leaf margins and stunted root systems. Phosphorus is immobile in soil; always place DAP or Single Super Phosphate (SSP) 4-5 cm below and beside seed during sowing (basal dose).",
-    "tips": "For oilseeds and pulses, SSP is preferred over DAP because SSP also contains 11-12% Sulphur and 19-21% Calcium."
+    "topic": "Phosphorus (P) & DAP / SSP Placement Mechanics",
+    "hindi_topic": "फॉस्फोरस एवं डीएपी / एसएसपी प्लेसमेंट यांत्रिकी",
+    "details": "Phosphorus stimulates root elongation, early seedling anchorage, tillering, and grain fill. Deficiency causes purplish-bronze discoloration on older leaves and severely stunted roots. Phosphorus is chemically immobile in soil (moves only 2-3 mm by diffusion) and must strictly be placed 4-5 cm below and beside the seed at sowing using a seed-cum-fertilizer drill. Surface broadcasting leaves 70% of phosphorus trapped in the dry top crust where roots cannot reach.",
+    "tips": "For oilseeds (Mustard) and pulses (Gram, Lentil), Single Super Phosphate (SSP 16% P2O5) is superior to DAP because SSP automatically delivers 11-12% Sulphur and 20% Calcium. Always treat seed with PSB (Phosphate Solubilizing Bacteria @ 200 g/10 kg seed) to solubilize locked soil phosphates."
   },
   {
-    "topic": "Potassium (K) & MOP",
-    "hindi_topic": "पोटाश (MOP) एवं रोग प्रतिरोधक क्षमता",
-    "details": "Potassium regulates stomatal movement, water use efficiency, lodging resistance, and disease defense. Deficiency shows scorching or burnt appearance along leaf margins of older leaves. Muriate of Potash (MOP / 0-0-60) is applied basally at sowing.",
-    "tips": "Avoid MOP for chloride-sensitive crops like tobacco and potato seed tubers; use Sulphate of Potash (SOP) instead."
+    "topic": "Potassium (K) & MOP vs. SOP Management",
+    "hindi_topic": "पोटाश (MOP बनाम SOP) एवं फसल मजबूती प्रबंधन",
+    "details": "Potassium regulates stomatal movement, plant water balance, starch translocation, and straw strength. It thickens stem cell walls to prevent crop lodging during winds and irrigation at heading. Deficiency causes distinctive marginal leaf scorch (firing) where leaf margins turn burnt dry brown while the center stays green. Muriate of Potash (MOP 0:0:60) contains 60% K2O (40 kg K2O/ha requires 66.7 kg MOP/ha or 26.7 kg MOP/acre).",
+    "tips": "For seed potatoes, processing potato chips varieties (Kufri Chipsona), and tobacco, use Sulphate of Potash (SOP 0:0:50) instead of MOP because chloride ions from MOP make potatoes watery and reduce dry matter. Emergency spray of 1% Potassium Nitrate (13:0:45) provides rapid lodging and frost protection."
   },
   {
-    "topic": "Micronutrients: Zinc, Iron & Sulphur",
-    "hindi_topic": "सूक्ष्म पोषक तत्व (जिंक, लोहा, गंधक)",
-    "details": "Zinc deficiency causes khaira disease in paddy (chlorotic patches between veins turning rusty brown) and white bud in maize. Rectified by soil application of 25 kg/ha Zinc Sulphate (21% Zn) or foliar spray of 0.5% Zinc Sulphate + 0.25% Lime. Iron deficiency causes ivory-white bleaching of young top leaves in calcareous or high pH soils.",
-    "tips": "Do not mix Zinc Sulphate directly with DAP in the same spray tank as insoluble Zinc Phosphate precipitates."
+    "topic": "Micronutrients: Zinc, Iron & Sulphur Management",
+    "hindi_topic": "सूक्ष्म पोषक तत्व: जिंक, लोहा एवं गंधक प्रबंधन",
+    "details": "Over 45% of UP soils are zinc deficient, causing Khaira disease in paddy (rusty brown patches on 3rd/4th leaves from top) and White Bud in maize. Corrected by soil application of 25 kg/ha Zinc Sulphate (21% Zn) as basal. Iron deficiency causes interveinal chlorosis (ivory-white bleaching of youngest top leaves with sharp green veins) in calcareous high pH soils. Sulphur deficiency causes uniform yellowing on young upper leaves first, critical for mustard oil synthesis.",
+    "tips": "CRITICAL RULE: When spraying Zinc Sulphate (0.5%), ALWAYS add 0.25% slaked lime (chuna) to neutralize acid scorch. NEVER mix Zinc Sulphate and DAP in the same tank because they react to form insoluble rock-like Zinc Phosphate."
   },
   {
-    "topic": "Soil pH & Salinity Management",
-    "hindi_topic": "मृदा पीएच एवं क्षारीयता सुधार",
-    "details": "Optimum crop soil pH is 6.5-7.5. Acidic soils (pH < 6.0) fix phosphorus and require agricultural lime or dolomite application. Alkaline/Sodic soils (pH > 8.5) contain excess exchangeable sodium and require agricultural Gypsum (calcium sulphate) followed by leaching with clean water.",
-    "tips": "Adding organic farmyard manure (FYM), compost, or green manuring (Dhaincha/Sunhemp) buffers both acidic and alkaline soils."
+    "topic": "Soil pH & Salinity / Sodic Usar Reclamation",
+    "hindi_topic": "मृदा पीएच एवं ऊसर (क्षारीय) भूमि सुधार",
+    "details": "Optimum crop soil pH is 6.5-7.5. Acidic soils (pH < 6.0) fix phosphorus and require Agricultural Lime or Dolomite. Alkaline / Sodic Usar soils (pH > 8.5) contain excess exchangeable sodium that disperses soil clay, preventing water percolation. Sodic soils are reclaimed by applying Agricultural Gypsum (calcium sulphate) based on Gypsum Requirement (GR) test, followed by deep ponding with clean water to leach sodium sulphate through drainage channels.",
+    "tips": "Green manuring with Dhaincha (Sesbania aculeata) incorporated at 45 days decomposes to produce carbonic acids that accelerate sodic soil reclamation."
+  },
+  {
+    "topic": "Biofertilizers, Microbial Inoculants & Organic Manures",
+    "hindi_topic": "जैव उर्वरक, सूक्ष्मजीवी संजीवक एवं जैविक खाद प्रबंधन",
+    "details": "Integrating microbial inoculants restores depleted soil organic carbon and cuts chemical N and P fertilizer demand by 20-25%. Rhizobium inoculants fix 30-50 kg N/ha in grain pulses. Azotobacter and Azospirillum fix 20-30 kg N/ha in cereals and sugarcane. Phosphate Solubilizing Bacteria (PSB) dissolve native insoluble rock phosphates by secreting organic acids. Vesicular Arbuscular Mycorrhiza (VAM) expands root exploration 100-fold to mobilize soil water and zinc. Well-decomposed FYM (10-15 t/ha) or Vermicompost (2.5-3 t/ha) provides balanced organic carbon.",
+    "tips": "Follow strict FIR Sequence (Fungicide first -> Insecticide second -> Biofertilizer last). Mix biofertilizer with cooled 10% jaggery (gud) water and dry in deep shade for 30 min before sowing. Never expose living cultures to direct sunlight. Commercial biostimulants/amino-acid cocktails remain unvalidated marketing products unless registered under Schedule VI of FCO."
   }
 ]
