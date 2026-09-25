@@ -1078,6 +1078,58 @@ def generate_grounded_offline_reply(
         reply += "\n\nSource: ICAR-IIPR, Kanpur (Pulse Protection Guidelines)"
         return clean_farmer_markdown(reply)
 
+    # 4b. Stem Borer / Yellow Stem Borer in Rice - requires Rice match and no conflicting crop
+    chunk_crop = top_chunk.get("crop") or top_chunk.get("metadata", {}).get("crop")
+    chunk_title_lower = str(top_chunk.get("title", "")).lower()
+
+    is_rice_explicit = (crop_val == "Rice") or bool(re.search(r"\b(rice|dhaan|dhan|paddy)\b", q_lower)) or "धान" in q_lower
+    is_chunk_rice = (
+        chunk_crop == "Rice"
+        or any(w in chunk_title_lower for w in ["in rice", "rice stem borer", "धान का पीला तना छेदक", "dhaan"])
+    )
+    is_non_rice_query = bool(re.search(r"\b(wheat|gehun|maize|makka|cotton|kapas|sugarcane|ganna|potato|aloo|mustard|sarson)\b", q_lower))
+    is_chunk_non_rice = (chunk_crop is not None and chunk_crop != "Rice") or any(w in chunk_title_lower for w in ["wheat", "gehun", "maize", "makka", "cotton", "kapas", "sugarcane", "ganna", "potato", "mustard"])
+
+    has_conflicting_crop = (crop_val is not None and crop_val != "Rice") or is_chunk_non_rice or (is_non_rice_query and not is_rice_explicit)
+
+    has_stem_borer_query = any(w in q_lower for w in ["stem borer", "yellow stem borer", "तना छेदक", "पीला तना छेदक", "tana chhedak", "डेड हार्ट", "dead heart", "white earhead", "सफेद बाली", "scirpophaga"])
+    has_stem_borer_chunk = "stem borer" in chunk_title_lower or "तना छेदक" in chunk_title_lower
+
+    is_stem_borer = (
+        not has_conflicting_crop
+        and (is_rice_explicit or is_chunk_rice)
+        and (has_stem_borer_query or has_stem_borer_chunk)
+    )
+    if is_stem_borer:
+        source_val = top_chunk.get("source") or top_chunk.get("metadata", {}).get("source") or "ICAR - National Rice Research Institute (NRRI), Cuttack & PPQS-CIBRC"
+        if language == "hi":
+            lead = "🌾 धान में पीला तना छेदक (Yellow Stem Borer - Scirpophaga incertulas) कीट नियंत्रण एवं एकीकृत प्रबंधन (IPM) हेतु मुख्य सिफारिशें:"
+            bullets = [
+                "- निगरानी एवं फेरोमोन ट्रैप: खेत में Scirpolure ल्यूर युक्त फेरोमोन ट्रैप (3 ट्रैप प्रति एकड़ निगरानी हेतु) लगाएं ताकि वयस्क पतंगों की निगरानी व ट्रैपिंग हो सके।",
+                "- पौध शीर्ष कटाई (Seedling Tip Clipping): रोपाई से पहले पौध के ऊपरी 2-3 सेमी पत्ती के सिरों को काट दें, जिससे पत्तियों पर मौजूद अंड-समूह नष्ट हो जाते हैं।",
+                "- जैविक नियंत्रण: ट्राइकोग्रामा जैपोनिकम (Trichogramma japonicum) ट्राइको-कार्ड @ 1 कार्ड प्रति एकड़ की दर से 4-5 साप्ताहिक विमोचन करें।",
+                "- रासायनिक सुरक्षा निर्देश: प्रमाणित आर्थिक क्षति स्तर (ETL - 5% डेड हार्ट अथवा ट्रैप कैच थ्रेशोल्ड) पार होने पर ही CIBRC अनुमोदित कीटनाशक (जैसे कार्टाप हाइड्रोक्लोराइड 4% G या क्लोरेंट्रानिलिप्रोल 18.5% SC) का नियमानुसार प्रयोग करें और KVK से परामर्श लें।"
+            ]
+        elif language == "hinglish":
+            lead = "🌾 Dhaan / Rice me Yellow Stem Borer (पीला तना छेदक) control aur Integrated Pest Management (IPM) ke mukhya upay:"
+            bullets = [
+                "- Monitoring & Pheromone Traps: Khet me Scirpolure lure wale pheromone traps (monitoring ke liye 3 traps per acre) lagayein adult moths ki tracking aur trapping ke liye.",
+                "- Seedling Tip Clipping: Ropai (transplanting) se pehle nursery paudh ke upri 2-3 cm leaf tips kaat dein, jisse deposited egg masses destroy ho jate hain.",
+                "- Biological Control: Trichogramma japonicum Tricho-cards @ 1 card per acre weekly intervals par (4-5 releases) khet me lagayein.",
+                "- Chemical Safety Guidance: Certified Economic Threshold Level (ETL - 5% dead heart ya advisory trap threshold) cross hone par hi CIBRC approved insecticide (jaise Cartap hydrochloride 4% G ya Chlorantraniliprole 18.5% SC) label guidelines ke mutabik use karein aur KVK se consult karein."
+            ]
+        else:
+            lead = "🌾 Integrated Pest Management (IPM) recommendations for Yellow Stem Borer (Scirpophaga incertulas) in Rice:"
+            bullets = [
+                "- Pheromone Traps & Monitoring: Install pheromone traps baited with Scirpolure (3 traps per acre for monitoring) at 20-25 DAT for adult moth trapping and population tracking.",
+                "- Seedling Tip Clipping: Clip the top 2-3 cm of nursery seedling leaf tips before transplanting to eliminate deposited egg clusters.",
+                "- Biological Control: Release Trichogramma japonicum egg parasitoid Tricho-cards @ 1 card per acre at weekly intervals (4-5 releases) during active tillering.",
+                "- Chemical Safety Guidance: Apply chemical control only if verified Economic Threshold Level (ETL - 5% dead hearts or advisory trap threshold) is crossed, using CIBRC label-approved insecticides (such as Cartap hydrochloride 4% G or Chlorantraniliprole 18.5% SC) with local KVK consultation."
+            ]
+        reply = f"{lead}\n\n" + "\n".join(bullets)
+        reply += f"\n\nSource: {source_val}"
+        return clean_farmer_markdown(reply)
+
     # General extraction from retrieved chunks
     title = top_chunk.get("title", "कृषि परामर्श")
     all_chunks_text = "\n".join(c.get("text", "") for c in retrieved_chunks[:2])
@@ -1147,7 +1199,14 @@ def generate_grounded_offline_reply(
             lead_sentence = "🌾 Dhaan me tillering aur flowering stage par khet me paryapt nami aur sinchai maintain karna zaroori hai."
         else:
             lead_sentence = "🌾 For rice, maintaining adequate moisture and timely irrigation during tillering and flowering stages is critical."
-    elif crop_val and ("yellow" in q_lower or "पील" in q_lower):
+    elif is_stem_borer:
+        if language == "hi":
+            lead_sentence = f"🌾 {crop_val or 'धान'} में तना छेदक (Yellow Stem Borer) कीट नियंत्रण एवं एकीकृत प्रबंधन (IPM) हेतु मुख्य सिफारिशें:"
+        elif language == "hinglish":
+            lead_sentence = f"🌾 {crop_val or 'Rice'} me Yellow Stem Borer (तना छेदक) control aur integrated pest management (IPM) ke mukhya upay:"
+        else:
+            lead_sentence = f"🌾 Key integrated pest management (IPM) recommendations for Yellow Stem Borer in {crop_val or 'Rice'}:"
+    elif crop_val and ("yellow" in q_lower or "पील" in q_lower) and not any(w in q_lower for w in ["stem borer", "तना छेदक", "tana chhedak", "dead heart", "white earhead"]):
         if language == "hi":
             lead_sentence = f"🌾 {crop_val} में पत्तियों के पीलेपन के मुख्य संभावित कारणों में पोषक तत्वों की कमी (विशेषकर नाइट्रोजन) या पीला रतुआ रोग हो सकते हैं।"
         elif language == "hinglish":
@@ -3337,9 +3396,58 @@ def process_chat_message(
     effective_age = route_decision.detected_entities.get("crop_age_days")
 
     q_low = clean_msg.lower()
+    is_general_conceptual_query = any(w in q_low for w in ["what", "why", "how", "explain", "benefit", "benefits", "advantage", "advantages", "fayde", "fayda", "labh", "kya hai", "kya hain", "kaise"])
+    if lang == "en":
+        # English: check genuine pronouns; distinguish standalone demonstratives from demonstrative noun phrases (e.g. 'this fertilizer', 'this crop')
+        has_it_match = re.search(r"\b(it|its)\b", q_low)
+        has_it_pronoun = False
+        if has_it_match:
+            # Check if there is an explicit antecedent noun/entity in the current message
+            text_before_it = q_low[:has_it_match.start()]
+            intra_sentence_antecedent_pattern = (
+                r"\b(compost|fertilizer|fertilizers|manure|fym|vermicompost|soil|soils|irrigation|"
+                r"drip|sprinkler|mulch|mulching|rotation|rotations|crop rotation|pesticide|pesticides|"
+                r"insecticide|insecticides|fungicide|fungicides|herbicide|herbicides|weed|weeds|"
+                r"seed|seeds|seedling|seedlings|borer|stem borer|rust|yellow rust|blight|blast|"
+                r"pest|pests|disease|diseases|gypsum|lime|biofertilizer|biofertilizers|urea|dap|"
+                r"potash|nitrogen|phosphorus|zinc|chlorosis|tillage|residue|stubble|straw|parali|"
+                r"wheat|rice|dhaan|paddy|maize|makka|cotton|kapas|sugarcane|ganna|potato|aloo|"
+                r"tomato|tamatar|mustard|sarson|chana|gram|soybean|crop|crops|plant|plants)\b"
+            )
+            has_intra_antecedent = bool(re.search(intra_sentence_antecedent_pattern, text_before_it)) or any(
+                str(val).lower() in q_low
+                for val in route_decision.detected_entities.values()
+                if val and isinstance(val, str)
+            )
+            if not has_intra_antecedent:
+                has_it_pronoun = True
+
+        dem_noun_pat = (
+            r"\b(this|that|these|those)\s+"
+            r"(?:(?!for\b|in\b|to\b|with\b|on\b|at\b|is\b|are\b|about\b)[a-z\-]+\s+)?"
+            r"(fertilizer|fertilizers|crop|crops|disease|diseases|method|methods|practice|practices|"
+            r"soil|soils|treatment|treatments|pesticide|pesticides|insecticide|insecticides|fungicide|fungicides|"
+            r"chemical|chemicals|medicine|medicines|variety|varieties|seed|seeds|weed|weeds|insect|insects|"
+            r"pest|pests|fungus|fungi|scheme|schemes|technology|technologies|technique|techniques|system|systems|"
+            r"rotation|rotations|irrigation|irrigations|compost|composts|manure|manures|nutrient|nutrients|"
+            r"spray|sprays|dose|doses|dosage|problem|problems|symptom|symptoms|plant|plants|field|fields|land|water)\b"
+        )
+        subbed_dem = re.sub(dem_noun_pat, "", q_low)
+        has_standalone_dem = bool(re.search(r"\b(this|that|these|those)\b", subbed_dem))
+        is_pronoun_signal = has_it_pronoun or has_standalone_dem
+    else:
+        # Hindi / Hinglish: check demonstratives/pronouns (including Devanagari)
+        is_pronoun_signal = bool(
+            re.search(r"\b(is|iska|iski|iske|isse|ise|in|inka|inki|ye|yeh|wo|woh|voh|unka|unki|unke|use|usse|us|it|its|this|that)\b", q_low)
+            or re.search(r"(इस|इसका|इसकी|इसके|इससे|इसे|इनका|इनकी|ये|यह|वो|वह|उनका|उनकी|उसके|उसे)", q_low)
+        )
+
     is_pronoun_or_ellipsis = bool(
-        re.search(r"\b(is|iska|iski|iske|isse|ise|in|inka|inki|it|its|this|that)\b", q_low)
-        or (not any(c.lower() in q_low for c in ["gehun", "wheat", "dhan", "rice", "arhar", "tuar", "pigeonpea", "tamatar", "tomato", "chana", "mustard", "sarson", "makka", "maize", "cotton", "kapas", "sugarcane", "ganna", "soybean", "potato", "aloo", "onion", "pyaz"]) and len(q_low.split()) <= 7 and bool(re.search(r"\b(sinchai|irrigation|paani|pani|ilaj|cure|upchar|dawa|davai|management|control|khat|khad|urea|spray|chhidkaw)\b", q_low)))
+        is_pronoun_signal
+        or (not is_general_conceptual_query
+            and not any(c.lower() in q_low for c in ["gehun", "wheat", "dhan", "rice", "arhar", "tuar", "pigeonpea", "tamatar", "tomato", "chana", "mustard", "sarson", "makka", "maize", "cotton", "kapas", "sugarcane", "ganna", "soybean", "potato", "aloo", "onion", "pyaz"])
+            and len(q_low.split()) <= 7
+            and bool(re.search(r"\b(sinchai|irrigation|paani|pani|ilaj|cure|upchar|dawa|davai|management|control|khat|khad|urea|spray|chhidkaw)\b", q_low)))
     )
 
     if is_pronoun_or_ellipsis:

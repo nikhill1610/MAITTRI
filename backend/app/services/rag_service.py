@@ -70,7 +70,7 @@ AGRI_EXPANSIONS = [
     (r"तना छेदक|stem borer|dead heart", "rice stem borer scirpophaga incertulas dead heart white earhead"),
 
     # Diseases & Symptoms
-    (r"पीला|पीली|पीले|पीलापन|peela|peeli|peele|peelapan|yellow|yellowing", "yellow leaves chlorosis nitrogen deficiency yellow rust stripe rust puccinia"),
+    (r"पीला(?![\s_-]*तना)|पीली|पीले|पीलापन|peela(?![\s_-]*(?:tana|stem))|peeli|peele|peelapan|yellow(?![\s_-]*stem[\s_-]*borer)|yellowing", "yellow leaves chlorosis nitrogen deficiency yellow rust stripe rust puccinia"),
     (r"रतुआ|rust|स्ट्राइप|stripe", "yellow rust stripe rust puccinia striiformis propiconazole tebuconazole"),
     (r"झुलसा|ब्लास्ट|blight|blast", "blast sheath blight late blight early blight tricyclazole copper oxychloride"),
     (r"मुड़|मुड़ना|curl|curling", "leaf curl virus whitefly transmission upward curling"),
@@ -118,7 +118,8 @@ AGRI_EXPANSIONS = [
     (r"हर्मेटिक|pics बैग|pics bag|pics bags|hermetic|अनाज भंडारण|grain storage|anaj bhandaran", "hermetic storage PICS bags grain storage insect pest oxygen deprivation post harvest"),
     (r"सुपर सीडर|super seeder|happy seeder|सीडर|कृषि यंत्र|mechanization|chc|custom hiring", "super seeder happy seeder farm mechanization chc implements custom hiring center tractor residue"),
     (r"बायोस्टिमुलेंट|ह्यूमिक|biostimulant|humic acid|जैविक खाद|biofertilizer", "biofertilizers organic manures biostimulant humic acid fco regulation vermicompost fym azotobacter rhizobium psb"),
-    (r"गुल्ली डंडा|गुल्लीडंडा|मंडूसी|gulli danda|phalaris|mandusi|खरपतवार|weed|weeds", "phalaris minor gulli danda mandusi weed management herbicide resistance wheat clodinafop pendimethalin sulfosulfuron")
+    (r"गुल्ली डंडा|गुल्लीडंडा|मंडूसी|gulli danda|phalaris|mandusi|खरपतवार|weed|weeds", "phalaris minor gulli danda mandusi weed management herbicide resistance wheat clodinafop pendimethalin sulfosulfuron"),
+    (r"फसल चक्र|फसल चक्रीकरण|फसल विविधीकरण|crop rotation|crop diversification|rotational cropping|rotation", "crop rotation fasal chakra crop diversification soil fertility legume nitrogen fixation green manure benefits")
 ]
 
 # Crop detection regex patterns
@@ -148,7 +149,7 @@ CATEGORY_DETECTION_PATTERNS = {
     "Pests": r"keeda|keede|कीड़ा|कीड़े|कीट|सुंडी|pest|pests|insect|insects|worm|caterpillar|larva|armyworm|aphid|whitefly|borer|माहू|चेपा|beetle|भृंग",
     "Diseases": r"yellow rust|stripe rust|रतुआ|blight|blast|झुलसा|पर्ण कुंचन|leaf curl|मुड़|रोग|fungus|disease|rot|curl|sadan|सड़न",
     "Fertilizers": r"urea|यूरिया|dap|डीएपी|mop|पोटाश|zinc|जिंक|khad|खाद|fertilizer|fertilizers|उर्वरक|पोषक तत्व|micronutrient|gypsum|जिप्सम|biostimulant|बायोफर्टिलाइजर",
-    "Soil": r"mitti|मिट्टी|मृदा|soil|soil health|health card|card|salin|alkali|ph|दोमट|ऊसर|sodic",
+    "Soil": r"mitti|मिट्टी|मृदा|soil|soil health|health card|card|salin|alkali|ph|दोमट|ऊसर|sodic|crop rotation|crop diversification|rotational cropping|फसल चक्र|फसल चक्रीकरण|फसल विविधीकरण|rotation",
     "Crop Residue": r"parali|पराली|stubble|straw|decomposer|seeder",
     "Weather": r"frost|पाला|cold wave|शीतलहर|heatwave|लू|मौसम|weather|rain|barish|monsoon|मानसून"
 }
@@ -646,9 +647,14 @@ def query_knowledge_base(
                 if any(term in meta_title_lower or term in meta_sec_lower for term in ["leaf curl", "curl", "मरोड़", "कुंचन", "whitefly"]):
                     adjusted_score += 0.25
 
-        # If query asks about what crops to grow and chunk is about Best Crops, give bonus
+        # Crop Rotation & Diversification
+        if any(term in clean_query.lower() for term in ["crop rotation", "rotation", "fasal chakra", "फसल चक्र", "चक्रीकरण", "विविधीकरण", "diversification"]):
+            if any(term in meta_title_lower or term in meta_sec_lower for term in ["crop rotation", "fasal chakra", "फसल चक्र", "diversification", "विविधीकरण"]):
+                adjusted_score += 0.30
+
+        # If query asks about what crops to grow and chunk is about Best Crops, give bonus only if semantically close
         if any(w in clean_query.lower() for w in ["kaunsi fasal", "फसल", "crop", "crops", "grow", "उगा"]):
-            if any(term in meta_sec_lower for term in ["best crops", "फसलें", "crops"]):
+            if base_sim >= 0.65 and any(term in meta_sec_lower for term in ["best crops", "फसलें", "crops"]):
                 adjusted_score += 0.12
 
 
@@ -673,7 +679,7 @@ def query_knowledge_base(
     scored_candidates.sort(key=lambda x: x["score"], reverse=True)
 
     # 6. Apply relevance threshold (only keep chunks that are genuinely relevant)
-    RELEVANCE_THRESHOLD = 0.42
+    RELEVANCE_THRESHOLD = 0.50
     filtered_chunks = [c for c in scored_candidates if c["score"] >= RELEVANCE_THRESHOLD]
 
     # If no chunk met threshold, take top candidate if not abysmal, else empty

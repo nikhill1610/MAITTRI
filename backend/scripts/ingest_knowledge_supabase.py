@@ -358,6 +358,16 @@ def chunk_json_document(file_path: Path, raw_bytes: bytes) -> Tuple[Dict[str, An
 # Core Ingestion Engine
 # -----------------------------------------------------------------------------
 
+def normalize_postgres_url(url: str) -> str:
+    """Normalize PostgreSQL URL scheme for psycopg2 compatibility (e.g. postgresql+psycopg2:// -> postgresql://)."""
+    url = (url or "").strip()
+    if url.startswith("postgresql+"):
+        return "postgresql://" + url.split("://", 1)[1]
+    if url.startswith("postgres://"):
+        return "postgresql://" + url[len("postgres://"):]
+    return url
+
+
 def run_ingestion(rebuild: bool = False, dry_run: bool = False) -> Dict[str, Any]:
     """
     Executes end-to-end ingestion from backend/knowledge_base/ into Supabase pgvector.
@@ -366,9 +376,18 @@ def run_ingestion(rebuild: bool = False, dry_run: bool = False) -> Dict[str, Any
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
-    db_url = os.getenv("DATABASE_URL", "").strip()
-    if not (db_url.startswith("postgresql://") or db_url.startswith("postgres://")):
-        raise RuntimeError("DATABASE_URL is not configured for Supabase PostgreSQL. Halting ingestion.")
+    raw_db_url = os.getenv("DATABASE_URL", "").strip() or os.getenv("SUPABASE_DATABASE_URL", "").strip()
+    db_url = normalize_postgres_url(raw_db_url)
+    is_postgres = db_url.startswith("postgresql://")
+
+    if not is_postgres:
+        if dry_run:
+            logger.warning(
+                "DATABASE_URL is not configured for Supabase PostgreSQL. "
+                "[DRY RUN] Proceeding with knowledge asset discovery and inspection only."
+            )
+        else:
+            raise RuntimeError("DATABASE_URL is not configured for Supabase PostgreSQL. Halting ingestion.")
 
     stats = {
         "files_discovered": 0,
@@ -552,7 +571,10 @@ def inspect_supabase_knowledge_base():
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
-    db_url = os.getenv("DATABASE_URL", "")
+    raw_db_url = os.getenv("DATABASE_URL", "").strip() or os.getenv("SUPABASE_DATABASE_URL", "").strip()
+    db_url = normalize_postgres_url(raw_db_url)
+    if not db_url.startswith("postgresql://"):
+        raise RuntimeError("DATABASE_URL is not configured for Supabase PostgreSQL. Cannot inspect database.")
     conn = psycopg2.connect(dsn=db_url)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT COUNT(*) AS count FROM public.knowledge_documents;")
