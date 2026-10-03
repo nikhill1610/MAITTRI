@@ -555,6 +555,63 @@ class TestFinding5AuthLocalInsertOptIn:
         assert "nulluser@example.com" not in combined_log
         assert "StrongPassword123!" not in combined_log
 
+    def test_auth_api_error_logged_safely_with_status_and_message(self):
+        """AuthApiError logs exc_type, status, code, and bounded message without leaking secrets."""
+        import logging
+        from app.routes.auth import register
+        from supabase_auth.errors import AuthApiError
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value.first.return_value = None
+
+        mock_sb_admin = MagicMock()
+        auth_error = AuthApiError(
+            message="Email signup is disabled for this project",
+            status=400,
+            code="email_provider_disabled"
+        )
+        mock_sb_admin.auth.admin.create_user.side_effect = auth_error
+
+        payload = RegisterRequest(
+            email="farmer_test@example.com",
+            password="SuperSecretPassword123!",
+            full_name="Farmer Test",
+            phone_number="9876543210"
+        )
+
+        log_records = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record):
+                log_records.append(record)
+
+        capturing = CapturingHandler()
+        auth_logger = logging.getLogger("maitri.auth")
+        auth_logger.addHandler(capturing)
+        auth_logger.setLevel(logging.DEBUG)
+        try:
+            with patch("app.routes.auth.engine") as mock_engine, \
+                 patch("app.routes.auth.get_supabase_admin_client", return_value=mock_sb_admin), \
+                 patch.dict(os.environ, {"ENVIRONMENT": "production", "ALLOW_LOCAL_AUTH_INSERT": "false"}):
+                mock_engine.name = "postgresql"
+                with pytest.raises(HTTPException) as exc_info:
+                    register(payload=payload, db=mock_db)
+        finally:
+            auth_logger.removeHandler(capturing)
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to register user in authoritative store."
+
+        assert log_records, "Expected at least one log record from maitri.auth on Supabase failure"
+        combined_log = " ".join(r.getMessage() for r in log_records)
+        assert "exc_type=AuthApiError" in combined_log
+        assert "status=400" in combined_log
+        assert "[email_provider_disabled]" in combined_log
+        assert "Email signup is disabled" in combined_log
+        assert "stage=supabase_create_user" in combined_log
+        assert "SuperSecretPassword123!" not in combined_log
+        assert "farmer_test@example.com" not in combined_log
+
 
 # =============================================================================
 # Finding 6: Crop Recommendation Pea & Compound Aliasing

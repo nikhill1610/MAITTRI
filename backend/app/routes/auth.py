@@ -71,10 +71,19 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
             raise
         except Exception as e:
             exc_type = type(e).__name__
-            # Sanitize: log only the exception class and a truncated, lowercased message.
-            # Never log email, password, tokens, or any PII.
-            safe_msg = str(e)[:200].lower()
-            err = safe_msg
+            status_val = getattr(e, "status", getattr(e, "status_code", "None"))
+            err_code = getattr(e, "code", None)
+            raw_msg = getattr(e, "message", None) or str(e) or ""
+            safe_msg = str(raw_msg).replace("\r", " ").replace("\n", " ").strip()
+            if payload.password and payload.password in safe_msg:
+                safe_msg = safe_msg.replace(payload.password, "[REDACTED]")
+            if payload.email and payload.email in safe_msg:
+                safe_msg = safe_msg.replace(payload.email, "[REDACTED]")
+            if err_code and str(err_code) not in safe_msg:
+                safe_msg = f"[{err_code}] {safe_msg}"
+            safe_msg = safe_msg[:200]
+
+            err = safe_msg.lower()
             if "already registered" in err or "already exists" in err:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -110,8 +119,10 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
                     )
             else:
                 logger.error(
-                    "Supabase create_user failed. exc_type=%s stage=supabase_create_user",
+                    "Supabase create_user failed. exc_type=%s status=%s message=%s stage=supabase_create_user",
                     exc_type,
+                    status_val,
+                    safe_msg,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
