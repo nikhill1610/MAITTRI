@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError, OperationalError, DatabaseError
 from sqlalchemy.orm import Session
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, sanitize_db_error
 from .routes import (
     auth, farms, recommendations, weather, location, nutrients, soil,
     parali, market_prices, fertilizer, government_schemes, insurance,
@@ -115,7 +115,11 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 
 @app.exception_handler(OperationalError)
 async def operational_error_handler(request: Request, exc: OperationalError):
-    logger.error("Database operational error: %s", exc.__class__.__name__)
+    safe_msg = sanitize_db_error(exc)
+    if safe_msg:
+        logger.error("Database operational error: %s - %s", exc.__class__.__name__, safe_msg)
+    else:
+        logger.error("Database operational error: %s", exc.__class__.__name__)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Database service temporarily unavailable. Please retry shortly."}
@@ -123,7 +127,11 @@ async def operational_error_handler(request: Request, exc: OperationalError):
 
 @app.exception_handler(DatabaseError)
 async def database_error_handler(request: Request, exc: DatabaseError):
-    logger.error("Database error: %s", exc.__class__.__name__)
+    safe_msg = sanitize_db_error(exc)
+    if safe_msg:
+        logger.error("Database error: %s - %s", exc.__class__.__name__, safe_msg)
+    else:
+        logger.error("Database error: %s", exc.__class__.__name__)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Database service temporarily unavailable. Please retry shortly."}

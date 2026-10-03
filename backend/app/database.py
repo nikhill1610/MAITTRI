@@ -107,6 +107,19 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
 
+def sanitize_db_error(exc: Exception) -> str:
+    """
+    Safely extracts a bounded, sanitized error message from a database exception
+    without leaking credentials, connection strings, query parameters, or PII.
+    """
+    orig = getattr(exc, "orig", None)
+    raw = str(orig) if orig is not None else str(exc)
+    if not raw:
+        return ""
+    clean = raw.split("[SQL:")[0].split("[parameters:")[0]
+    return " ".join(clean.split())[:200]
+
+
 def get_db():
     """
     FastAPI dependency for scoped database sessions.
@@ -116,7 +129,8 @@ def get_db():
     try:
         db = SessionLocal()
     except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database session allocation failed: {e.__class__.__name__}")
+        safe_msg = sanitize_db_error(e)
+        logger.error(f"Database session allocation failed: {e.__class__.__name__} - {safe_msg}")
         if ENVIRONMENT != "development":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -128,7 +142,11 @@ def get_db():
         yield db
     except Exception as e:
         db.rollback()
-        logger.error(f"Database operation failed during transaction: {e.__class__.__name__}")
+        safe_msg = sanitize_db_error(e)
+        if safe_msg:
+            logger.error(f"Database operation failed during transaction: {e.__class__.__name__} - {safe_msg}")
+        else:
+            logger.error(f"Database operation failed during transaction: {e.__class__.__name__}")
         raise
     finally:
         db.close()

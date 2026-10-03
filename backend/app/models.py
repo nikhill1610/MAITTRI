@@ -1,5 +1,6 @@
+import json
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB
 from sqlalchemy.types import CHAR, TypeDecorator
 from datetime import datetime, timezone
 from .database import Base
@@ -33,6 +34,41 @@ class GUID(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         return str(value) if value is not None else None
+
+class JSONType(TypeDecorator):
+    """Platform-independent JSON type.
+    Uses PostgreSQL's JSONB type, otherwise falls back to Text on SQLite.
+    Preserves dict/list structures and transparently parses valid JSON strings on bind.
+    Returns strings to preserve backward compatibility with existing route code.
+    """
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_JSONB())
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except (ValueError, TypeError):
+                    return value
+            return value
+        if isinstance(value, (dict, list)):
+            return json.dumps(value)
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, (dict, list)):
+            return json.dumps(value)
+        return str(value)
 
 class User(Base):
     __tablename__ = "users"
@@ -178,7 +214,7 @@ class NutrientAnalysisRecord(Base):
     id = Column(Integer, primary_key=True)
     farm_id = Column(Integer, ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(GUID, nullable=True, index=True)
-    analysis_json = Column(Text, nullable=False)
+    analysis_json = Column(JSONType, nullable=False)
     created_at = Column(DateTime, default=utcnow)
 
 class ParaliAnalysisRecord(Base):

@@ -980,3 +980,41 @@ class TestFinding10IntegrityErrorLogging:
             # Ensure the raw SQL and params were not in the log message
             assert "secret_farmer@gmail.com" not in str(log_args)
             assert "INSERT INTO" not in str(log_args)
+
+
+class TestDatabaseErrorSanitizedLogging:
+    def test_sanitize_db_error_strips_sql_and_parameters(self):
+        from app.database import sanitize_db_error
+        from sqlalchemy.exc import ProgrammingError
+
+        statement = "INSERT INTO nutrient_analyses (farm_id, user_id, analysis_json) VALUES (1, 'secret-uid', 'sensitive_data')"
+        params = {"farm_id": 1, "user_id": "secret-uid", "analysis_json": "sensitive_data"}
+        orig_err = Exception('column "analysis_json" is of type jsonb but expression is of type character varying')
+        exc = ProgrammingError(statement, params, orig_err)
+
+        sanitized = sanitize_db_error(exc)
+        assert 'column "analysis_json" is of type jsonb but expression is of type character varying' in sanitized
+        assert "sensitive_data" not in sanitized
+        assert "secret-uid" not in sanitized
+        assert "INSERT INTO" not in sanitized
+
+    @pytest.mark.anyio
+    async def test_database_error_handler_sanitized_logging(self):
+        from app.main import database_error_handler
+        from sqlalchemy.exc import ProgrammingError
+
+        mock_request = MagicMock()
+        statement = "INSERT INTO test (secret) VALUES ('secret_value')"
+        params = {"secret": "secret_value"}
+        orig_err = Exception('column "analysis_json" is of type jsonb but expression is of type character varying')
+        exc = ProgrammingError(statement, params, orig_err)
+
+        with patch("app.main.logger") as mock_logger:
+            response = await database_error_handler(mock_request, exc)
+            assert response.status_code == 503
+            mock_logger.error.assert_called_once()
+            log_str = str(mock_logger.error.call_args)
+            assert "ProgrammingError" in log_str
+            assert 'column "analysis_json" is of type jsonb' in log_str
+            assert "secret_value" not in log_str
+            assert "INSERT INTO" not in log_str
