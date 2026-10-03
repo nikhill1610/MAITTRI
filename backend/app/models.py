@@ -355,7 +355,7 @@ class FertilizerRecommendation(Base):
     previous_crop = Column(String(80), nullable=True)
     stage = Column(String(80), nullable=True)
     soil_type = Column(String(80), nullable=True)
-    recommendation_json = Column(Text, nullable=False)
+    recommendation_json = Column(JSONType, nullable=False)
     confidence = Column(String(20), default="Medium")
     explanation_summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)

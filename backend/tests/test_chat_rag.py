@@ -1059,6 +1059,153 @@ def test_crop_age_action_query_synthesis_wheat_cri():
         assert "A: Only if" not in rep
 
 
+def test_clean_model_output_removes_internal_planning_and_reasoning():
+    """
+    Verifies that clean_model_output strips internal planning, scratchpad, rule analysis,
+    drafting steps, and word count verification from LLM completions.
+    """
+    from app.services.chat_service import clean_model_output
 
+    # Case 1: Structured planning block with 'Final Answer:' heading
+    raw_output_with_final = """**1. Identify Core Requirements from Rules:**
+- Rule 1: Direct answer in first sentence
+- Rule 8: Target 60-120 words
+- Rule 10: Question intent fidelity
+
+**2. Retrieve Knowledge:**
+- Knowledge Piece #1: Wheat irrigation stages, CRI is 20-25 DAS.
+
+**3. Draft first sentence:**
+Wheat crop requires 4 to 6 irrigations during its growth cycle.
+
+**4. Verify against rules:**
+- Word count: 75 words
+- Question intent fidelity: Verified
+
+**Final Answer:**
+Wheat crop requires 4 to 6 irrigations during its growth cycle, with Crown Root Initiation (CRI) at 20-25 days after sowing being the most critical stage.
+- CRI stage (20-25 DAS): Most critical; first irrigation must be applied now.
+- Tillering stage (40-45 DAS): Second irrigation.
+- Late jointing and flowering: Ensure moisture during reproductive phase.
+
+Source: ICAR-IIWBR, Karnal"""
+
+    cleaned = clean_model_output(raw_output_with_final)
+    assert "Identify Core Requirements" not in cleaned
+    assert "Retrieve Knowledge" not in cleaned
+    assert "Draft first sentence" not in cleaned
+    assert "Verify against rules" not in cleaned
+    assert "Word count" not in cleaned
+    assert "Final Answer" not in cleaned
+    assert "Wheat crop requires 4 to 6 irrigations" in cleaned
+    assert "Source: ICAR-IIWBR, Karnal" in cleaned
+
+    # Case 2: Planning preambles without any 'Final Answer' header
+    raw_output_no_header = """1. Identify Core Requirements from Rules:
+Rule 1: Direct answer about wheat critical stages.
+Rule 8: Keep within 60-120 words.
+Question intent fidelity: checked.
+
+2. Retrieve Knowledge:
+[Knowledge Piece #1: Wheat critical irrigation stages]
+
+3. Draft response:
+Wheat crop requires 4 to 6 irrigations during its lifecycle.
+
+4. Verify against rules:
+Word count: 80 words.
+
+Wheat crop requires 4 to 6 irrigations during its growth cycle, with Crown Root Initiation (CRI) at 20-25 days after sowing being the most critical stage.
+- CRI stage (20-25 DAS): First irrigation must be applied now.
+- Tillering stage (40-45 DAS): Second irrigation.
+- Flowering and milking stages: Additional irrigations as needed.
+
+Source: ICAR-IIWBR, Karnal"""
+
+    cleaned2 = clean_model_output(raw_output_no_header)
+    assert "Identify Core Requirements" not in cleaned2
+    assert "Retrieve Knowledge" not in cleaned2
+    assert "Word count" not in cleaned2
+    assert "Question intent fidelity" not in cleaned2
+    assert "Knowledge Piece" not in cleaned2
+    assert "Wheat crop requires 4 to 6 irrigations" in cleaned2
+    assert "Source: ICAR-IIWBR, Karnal" in cleaned2
+
+    # Case 3: Trailing verification and word count block
+    raw_output_trailing = """Wheat crop requires 4 to 6 irrigations across critical stages:
+- CRI stage (20-25 DAS): Most critical for root development.
+- Tillering stage (40-45 DAS): Apply second irrigation.
+
+Source: ICAR-IIWBR, Karnal
+
+Word count: 72 words
+Verify against rules: All rules satisfied."""
+
+    cleaned3 = clean_model_output(raw_output_trailing)
+    assert "Word count" not in cleaned3
+    assert "Verify against rules" not in cleaned3
+    assert "Wheat crop requires 4 to 6 irrigations" in cleaned3
+    assert "Source: ICAR-IIWBR, Karnal" in cleaned3
+
+    # Case 4: XML thinking tags
+    raw_output_xml = """<think>
+User is asking for critical irrigation stages for wheat.
+Need to prioritize CRI at 20-25 DAS.
+</think>
+Wheat requires 4 to 6 irrigations during its crop cycle.
+- CRI stage (20-25 DAS): Crown root initiation is the most critical period.
+
+Source: ICAR-IIWBR"""
+
+    cleaned4 = clean_model_output(raw_output_xml)
+    assert "<think>" not in cleaned4
+    assert "</think>" not in cleaned4
+    assert "User is asking" not in cleaned4
+    assert "Wheat requires 4 to 6 irrigations" in cleaned4
+    assert "Source: ICAR-IIWBR" in cleaned4
+
+
+def test_process_chat_message_strips_internal_planning_e2e():
+    """
+    End-to-end verification: Even if the LLM provider returns internal planning
+    and scratchpad reasoning, process_chat_message returns ONLY the clean farmer advisory.
+    """
+    from app.services.chat_service import process_chat_message
+
+    raw_leaked_response = """**1. Identify Core Requirements from Rules:**
+- Rule 1: Direct answer in first sentence
+- Rule 8: 60-120 words
+- Rule 10: Question intent fidelity
+
+**2. Retrieve Knowledge:**
+- Knowledge Piece #1: Wheat irrigation stages.
+
+**3. Draft first sentence:**
+Wheat crop requires 4 to 6 irrigations during its growth cycle.
+
+**4. Verify against rules:**
+- Word count: 75 words
+
+**Final Answer:**
+Wheat crop requires 4 to 6 irrigations during its growth cycle, with Crown Root Initiation (CRI) at 20-25 days after sowing being the most critical stage.
+- CRI stage (20-25 DAS): Most critical; first irrigation must be applied now.
+- Tillering stage (40-45 DAS): Second irrigation.
+
+Source: ICAR-IIWBR, Karnal"""
+
+    with patch("app.services.chat_service.call_openrouter") as mock_openrouter:
+        mock_openrouter.return_value = (True, raw_leaked_response, "mock-model")
+
+        res = process_chat_message("What are the critical irrigation stages for wheat, especially CRI stage?")
+        reply = res.get("reply", "")
+
+        assert "Identify Core Requirements" not in reply
+        assert "Retrieve Knowledge" not in reply
+        assert "Draft first sentence" not in reply
+        assert "Verify against rules" not in reply
+        assert "Word count" not in reply
+        assert "Final Answer" not in reply
+        assert "Wheat crop requires 4 to 6 irrigations" in reply
+        assert "Source: ICAR-IIWBR, Karnal" in reply
 
 

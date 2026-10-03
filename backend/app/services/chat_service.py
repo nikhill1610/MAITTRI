@@ -101,6 +101,17 @@ def clean_farmer_markdown(text: str) -> str:
     cleaned = re.sub(r"^[ \t]*-[ \t]*(?:A|Q|Answer|Question|उत्तर|प्रश्न)\s*[:：]\s*", "- ", cleaned, flags=re.MULTILINE | re.I)
     cleaned = re.sub(r"^[ \t]*(?:A|Q|Answer|Question|उत्तर|प्रश्न)\s*[:：]\s*", "", cleaned, flags=re.MULTILINE | re.I)
 
+    # 7c. Strip residual 'Final Answer:' / 'Farmer Advisory:' standalone header lines
+    cleaned = re.sub(
+        r"^[ \t]*(?:Final\s+(?:Answer|Response|Reply|Advisory|Farmer\s+Advisory)|"
+        r"Farmer[- ]Facing\s+(?:Answer|Response|Advisory)|"
+        r"Farmer\s+Advisory|Final\s+Direct\s+Answer|Direct\s+Answer|"
+        r"अंतिम\s+उत्तर|किसान\s+सलाह)\s*[:：]?\s*$",
+        "",
+        cleaned,
+        flags=re.MULTILINE | re.I
+    )
+
     # 8. Clean up extra blank lines (no more than 2 consecutive newlines)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 
@@ -324,6 +335,12 @@ def build_rag_system_prompt(
 
 Your goal is to provide a helpful, safe, and strictly grounded answer to the farmer's question using ONLY the retrieved agricultural knowledge provided below.
 
+CRITICAL INSTRUCTION - ZERO INTERNAL PLANNING OR REASONING EXPOSURE:
+- You must output ONLY the clean, final farmer-facing advisory.
+- NEVER include chain-of-thought, internal planning, reasoning scratchpad, rule analysis, drafting steps, or verification checks.
+- Do NOT output headings like "Identify Core Requirements", "Retrieve Knowledge", "Draft", "Verify against rules", "Word count", "Question intent fidelity", or "Final Answer:".
+- Start immediately with the direct answer in the very first sentence.
+
 CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
 1. DIRECT ANSWER IN FIRST SENTENCE: Answer the farmer's actual question directly in the very first sentence.
 2. CONCISE HYPHEN BULLETS: Prefer 3 to 5 short bullet points maximum using hyphen bullets (- ).
@@ -367,6 +384,9 @@ CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
      * If crop age is outside the CRI window (e.g. 10–12 days), clearly explain that first irrigation is not yet due and advise waiting until 20–25 DAS. If 40–45 days, advise that 2nd irrigation at tillering stage and final urea split are due.
      * Never output raw FAQ markers like "Q:" or "A:".
 
+FINAL DIRECTIVE:
+Generate ONLY the final farmer-facing text. Do not expose internal thoughts, analysis of the rules, drafting, or word-count checks.
+
 {context_str}### RETRIEVED AGRICULTURAL KNOWLEDGE PIECES:
 {knowledge_str}
 """
@@ -377,69 +397,109 @@ CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
 # Clean Reasoning / Thinking Tokens
 # -----------------------------------------------------------------------------
 def clean_model_output(raw_text: str) -> str:
-    """Removes thinking process or reasoning blocks from reasoning models."""
+    """Removes thinking process, reasoning blocks, scratchpad, and planning preambles from model output."""
+    if not raw_text:
+        return ""
+
     cleaned = raw_text.strip()
 
-    # 1. Remove XML think / thought / reasoning tags
+    # 1. Remove XML / bracketed think / thought / reasoning / scratchpad / plan tags
     cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
     cleaned = re.sub(r"<thought>.*?</thought>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
     cleaned = re.sub(r"<reasoning>.*?</reasoning>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"<scratchpad>.*?</scratchpad>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"<plan>.*?</plan>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"<planning>.*?</planning>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"\[THOUGHT\].*?\[/THOUGHT\]", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"\[REASONING\].*?\[/REASONING\]", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    # Strip unclosed leading tag if present
+    cleaned = re.sub(r"^<(?:think|thought|reasoning|scratchpad|plan|planning)>\s*", "", cleaned, flags=re.IGNORECASE)
 
-    # 2. Strip "Here's a thinking process..." or similar preamble
-    # Many reasoning models start with: "Here's a thinking process that leads to..."
-    thinking_match = re.search(
-        r"^(?:here'?s (?:a )?(?:thinking|thought) process.*?|thinking process:?|internal analysis:?|chain[- ]of[- ]thought:?)",
-        cleaned,
-        re.IGNORECASE
+    # 2. Check for explicit Final Answer / Final Advisory / Farmer Response divider
+    final_marker_pattern = (
+        r"(?:^|\n)(?:\*\*|#+)?\s*"
+        r"(?:Final\s+(?:Answer|Response|Reply|Advisory|Farmer\s+Advisory)|"
+        r"Farmer[- ]Facing\s+(?:Answer|Response|Advisory)|"
+        r"Farmer\s+Advisory|Final\s+Direct\s+Answer|Direct\s+Answer|"
+        r"अंतिम\s+उत्तर|किसान\s+सलाह|सलाह)\s*[:：]?\s*(?:\*\*)?\n*"
     )
-    if thinking_match:
-        # Check if there is a divider like '---' or '***'
-        parts = re.split(r"\n\s*(?:---+|\*\*\*+)\s*\n", cleaned)
-        if len(parts) > 1:
-            cleaned = parts[-1].strip()
-        else:
-            # Drop paragraphs until we hit the actual response
-            paragraphs = cleaned.split("\n\n")
-            actual_paragraphs = []
-            skipping = True
-            for p in paragraphs:
-                p_str = p.strip()
-                p_lower = p_str.lower()
-                if skipping:
-                    if any(marker in p_lower for marker in [
-                        "thinking process", "analyze the", "analyze user", "identify key",
-                        "retrieved knowledge", "drafting the", "draft the response",
-                        "user is asking", "user wants", "constraints:"
-                    ]):
-                        continue
-                    else:
-                        skipping = False
-                        actual_paragraphs.append(p_str)
-                else:
-                    actual_paragraphs.append(p_str)
-            if actual_paragraphs:
-                cleaned = "\n\n".join(actual_paragraphs).strip()
+    m_final = re.search(final_marker_pattern, cleaned, re.IGNORECASE)
+    if m_final and m_final.start() > 0:
+        candidate = cleaned[m_final.end():].strip()
+        if len(candidate) > 20:
+            cleaned = candidate
 
-    # 3. If any start marker is found past position 25, verify if prefix is meta-commentary
-    start_markers = [
-        r"(?:^|\n)(?:\*\*|#+)?\s*(🌾|🌱|✅|🔎|⚠️)",
-        r"(?:^|\n)(Namaste|नमस्ते|Hello|पहाड़ी|Wheat|Rice|Maize|गेहूं|धान|मक्का|आम तौर|In mountain|In hill)",
-        r"(?:^|\n)(#{1,3}\s+[^\n]+)",
+    # 3. Check for horizontal rules (---, ***, ___) separating reasoning/planning from the actual reply
+    parts = re.split(r"\n\s*(?:---+|\*\*\*+|___+)\s*\n", cleaned)
+    if len(parts) > 1:
+        p0_lower = parts[0].lower()
+        if any(marker in p0_lower for marker in [
+            "thinking process", "identify core requirements", "retrieve knowledge",
+            "retrieved knowledge", "draft", "verify against rules", "word count",
+            "question intent fidelity", "knowledge piece", "internal analysis",
+            "user is asking", "constraints:", "rules:", "user wants"
+        ]):
+            cleaned = "\n\n".join(parts[1:]).strip()
+
+    # 4. Strip leading planning / reasoning preambles paragraph by paragraph
+    planning_indicators = [
+        "thinking process", "thought process", "internal analysis", "chain of thought",
+        "identify core requirements", "core requirements from rules",
+        "retrieve knowledge", "retrieved agricultural knowledge", "retrieved knowledge",
+        "knowledge piece", "draft first sentence", "drafting the response",
+        "draft response", "drafting:", "verify against rules", "verification against rules",
+        "verify rules", "rule check", "question intent fidelity", "word count",
+        "target length", "analyze user", "analyzing the query", "user is asking",
+        "user query analysis", "constraints check", "let's analyze", "let's map",
+        "step 1: identify", "step 2: retrieve", "step 3: draft", "step 4: verify",
+        "i will draft", "i will formulate", "i should provide", "i need to follow"
     ]
-    for marker in start_markers:
-        m = re.search(marker, cleaned, re.IGNORECASE)
-        if m and m.start() > 25:
-            prefix = cleaned[:m.start()]
-            if any(term in prefix.lower() for term in [
-                "thinking", "analyze", "retrieved knowledge", "draft", "let's map",
-                "user is asking", "chain of thought", "here's a"
-            ]):
-                cleaned = cleaned[m.start():].strip()
-                break
 
-    # 4. Strip any trailing meta-analysis blocks
-    trail_marker = r"(?:\n\d+\.\s+\*\*(?:Refine|Check|Review)\b.*)"
-    cleaned = re.sub(trail_marker, "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    paragraphs = cleaned.split("\n\n")
+    actual_paragraphs = []
+    skipping = True
+    for p in paragraphs:
+        p_str = p.strip()
+        if not p_str:
+            continue
+        p_lower = p_str.lower()
+        if skipping:
+            is_planning = any(ind in p_lower for ind in planning_indicators)
+            if not is_planning:
+                if re.match(r"^(?:\*\*|\d+\.|\#+)?\s*(?:identify|retrieve|draft|verify|check|rule|intent|step \d)\b", p_lower):
+                    is_planning = True
+            if is_planning:
+                continue
+            else:
+                skipping = False
+                actual_paragraphs.append(p_str)
+        else:
+            actual_paragraphs.append(p_str)
+
+    if actual_paragraphs:
+        cleaned = "\n\n".join(actual_paragraphs).strip()
+    elif not cleaned:
+        cleaned = raw_text.strip()
+
+    # 5. Strip trailing verification blocks (e.g. Word count: 85 words, Verify against rules...)
+    trail_pattern = (
+        r"(?:\n+(?:\*\*|#+)?\s*(?:\d+\.\s*)?"
+        r"(?:Verify against rules|Verification against rules|Verification|"
+        r"Word count|Rule check|Check against rules|Question intent fidelity|"
+        r"Constraints check)[\s\S]*$)"
+    )
+    cleaned = re.sub(trail_pattern, "", cleaned, flags=re.IGNORECASE)
+
+    # Standalone trailing word count line
+    cleaned = re.sub(
+        r"(?:\n+(?:\*\*|#+)?\s*Word\s+count\s*[:：]?\s*\d+\s*(?:words)?\s*(?:\*\*)?\s*)$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE
+    )
+
+    # 6. Remove any stray 'Knowledge Piece #X' citations if left in text
+    cleaned = re.sub(r"\[?Knowledge Piece #\d+[^\]\n]*\]?:?\s*", "", cleaned, flags=re.IGNORECASE)
 
     return clean_farmer_markdown(cleaned.strip())
 
@@ -1349,6 +1409,12 @@ def build_web_grounded_system_prompt(
 
 Your task is to answer the farmer's question using ONLY the verified web search evidence provided below.
 
+CRITICAL INSTRUCTION - ZERO INTERNAL PLANNING OR REASONING EXPOSURE:
+- You must output ONLY the clean, final farmer-facing advisory.
+- NEVER include chain-of-thought, internal planning, reasoning scratchpad, rule analysis, drafting steps, or verification checks.
+- Do NOT output headings like "Identify Core Requirements", "Retrieve Knowledge", "Draft", "Verify against rules", "Word count", "Question intent fidelity", or "Final Answer:".
+- Start immediately with the direct answer in the very first sentence.
+
 CRITICAL GROUNDING & FORMATTING RULES:
 1. STRICT GROUNDING: Answer ONLY from the provided web evidence. Do NOT invent facts, rules, dates, or numbers absent from the sources.
 2. DIRECT FIRST SENTENCE: Answer the farmer's question directly in the very first sentence.
@@ -1367,6 +1433,9 @@ CRITICAL GROUNDING & FORMATTING RULES:
    - If agricultural chemicals or pesticides are mentioned, insist strictly on CIBRC-registered label dosages and protective PPE. Never advise unauthorized chemical mixing.
 8. PROVISIONAL NON-DEFINITIVE DIAGNOSIS:
    - For symptom/pest/disease questions, frame advice non-definitively ('Possible causes based on reported symptoms...') and advise field confirmation with the local KVK or agricultural officer.
+
+FINAL DIRECTIVE:
+Generate ONLY the final farmer-facing text. Do not expose internal thoughts, analysis of the rules, drafting, or word-count checks.
 
 ### VERIFIED LIVE WEB EVIDENCE:
 {evidence_str}
@@ -3632,7 +3701,7 @@ def process_chat_message(
             success, result, model_used = call_openrouter(messages, model=model)
             if success:
                 return {
-                    "reply": clean_farmer_markdown(result),
+                    "reply": clean_model_output(result),
                     "sources": formatted_sources,
                     "retrieved_chunks": len(evidence),
                     "confidence": max((e.score for e in evidence), default=0.85),
@@ -3986,7 +4055,8 @@ def process_chat_message(
     if success:
         _safe_print(f"\nOPENROUTER SUCCESS (model: {model_used})")
         _safe_print("\nFINAL ANSWER:")
-        final_reply = (freshness_note + result) if freshness_note else result
+        cleaned_result = clean_model_output(result)
+        final_reply = (freshness_note + cleaned_result) if freshness_note else cleaned_result
         _safe_print(final_reply[:300] + "..." if len(final_reply) > 300 else final_reply)
         _safe_print("\nSOURCES USED:")
         for s in sources:
