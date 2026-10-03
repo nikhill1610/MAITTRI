@@ -452,6 +452,109 @@ class TestFinding5AuthLocalInsertOptIn:
                 register(payload=payload, db=mock_db)
             assert exc_info.value.status_code == 500
 
+    def test_production_failure_logs_exc_type_not_pii(self):
+        """Production Supabase failure logs exc_type only — no email, password, or PII."""
+        import logging
+        from app.routes.auth import register
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value.first.return_value = None
+
+        mock_sb_admin = MagicMock()
+        # Use an exception whose message contains a realistic Supabase error
+        # that could inadvertently include user-supplied data if logged naively.
+        exc_message = "Connection timeout reaching supabase endpoint"
+        mock_sb_admin.auth.admin.create_user.side_effect = Exception(exc_message)
+
+        payload = RegisterRequest(
+            email="sensitiveuser@example.com",
+            password="SuperSecret999!",
+            full_name="Sensitive User",
+            phone_number="9876543210"
+        )
+
+        log_records = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record):
+                log_records.append(record)
+
+        capturing = CapturingHandler()
+        auth_logger = logging.getLogger("maitri.auth")
+        auth_logger.addHandler(capturing)
+        auth_logger.setLevel(logging.DEBUG)
+        try:
+            with patch("app.routes.auth.engine") as mock_engine, \
+                 patch("app.routes.auth.get_supabase_admin_client", return_value=mock_sb_admin), \
+                 patch.dict(os.environ, {"ENVIRONMENT": "production", "ALLOW_LOCAL_AUTH_INSERT": "false"}):
+                mock_engine.name = "postgresql"
+                with pytest.raises(HTTPException) as exc_info:
+                    register(payload=payload, db=mock_db)
+        finally:
+            auth_logger.removeHandler(capturing)
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to register user in authoritative store."
+
+        # At least one log record must have been emitted
+        assert log_records, "Expected at least one log record from maitri.auth on Supabase failure"
+
+        # The log record must contain exc_type, but MUST NOT contain PII
+        combined_log = " ".join(r.getMessage() for r in log_records)
+        assert "Exception" in combined_log, "Log should include the exception type name"
+        assert "sensitiveuser@example.com" not in combined_log, "Email must not appear in logs"
+        assert "SuperSecret999!" not in combined_log, "Password must not appear in logs"
+
+    def test_null_user_response_logs_and_returns_500(self):
+        """If Supabase returns a response with no user object, a 500 is returned and logged."""
+        import logging
+        from app.routes.auth import register
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value.first.return_value = None
+
+        mock_sb_admin = MagicMock()
+        # Simulate Supabase returning a response but with user=None
+        null_response = MagicMock()
+        null_response.user = None
+        mock_sb_admin.auth.admin.create_user.return_value = null_response
+
+        payload = RegisterRequest(
+            email="nulluser@example.com",
+            password="StrongPassword123!",
+            full_name="Null User",
+            phone_number="9876543210"
+        )
+
+        log_records = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record):
+                log_records.append(record)
+
+        capturing = CapturingHandler()
+        auth_logger = logging.getLogger("maitri.auth")
+        auth_logger.addHandler(capturing)
+        auth_logger.setLevel(logging.DEBUG)
+        try:
+            with patch("app.routes.auth.engine") as mock_engine, \
+                 patch("app.routes.auth.get_supabase_admin_client", return_value=mock_sb_admin), \
+                 patch.dict(os.environ, {"ENVIRONMENT": "production"}):
+                mock_engine.name = "postgresql"
+                with pytest.raises(HTTPException) as exc_info:
+                    register(payload=payload, db=mock_db)
+        finally:
+            auth_logger.removeHandler(capturing)
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to register user in authoritative store."
+
+        # Must log the NullUserResponse path
+        combined_log = " ".join(r.getMessage() for r in log_records)
+        assert "NullUserResponse" in combined_log
+        assert "nulluser@example.com" not in combined_log
+        assert "StrongPassword123!" not in combined_log
+
 
 # =============================================================================
 # Finding 6: Crop Recommendation Pea & Compound Aliasing

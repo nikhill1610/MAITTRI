@@ -1,4 +1,5 @@
 import uuid
+import logging
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,6 +11,8 @@ from ..schemas import RegisterRequest, LoginRequest, TokenResponse
 from ..security import hash_password, verify_password, create_token
 from ..supabase_client import get_supabase_admin_client
 from ..deps import get_current_user
+
+logger = logging.getLogger("maitri.auth")
 
 router = APIRouter()
 
@@ -54,11 +57,24 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
                 }
             )
             res = supabase_admin.auth.admin.create_user(attrs)
+            if not res or not res.user or not res.user.id:
+                logger.error(
+                    "Supabase create_user returned no user object. "
+                    "exc_type=NullUserResponse stage=supabase_create_user"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to register user in authoritative store."
+                )
             uid_str = str(res.user.id)
         except HTTPException:
             raise
         except Exception as e:
-            err = str(e).lower()
+            exc_type = type(e).__name__
+            # Sanitize: log only the exception class and a truncated, lowercased message.
+            # Never log email, password, tokens, or any PII.
+            safe_msg = str(e)[:200].lower()
+            err = safe_msg
             if "already registered" in err or "already exists" in err:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -93,6 +109,10 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
                         detail="Email already registered"
                     )
             else:
+                logger.error(
+                    "Supabase create_user failed. exc_type=%s stage=supabase_create_user",
+                    exc_type,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to register user in authoritative store."
