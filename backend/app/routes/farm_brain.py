@@ -15,7 +15,7 @@ from ..database import get_db
 from ..models import (
     User, Farm, Farmer, SoilTestReport, IoTSensorReading, FarmPlan, FarmPlanTask
 )
-from ..deps import get_current_user, is_same_user
+from ..deps import get_current_user, is_same_user, is_elevated_user, get_authorized_farm
 from ..services.farm_brain_service import (
     generate_today_decisions, generate_weekly_outlook
 )
@@ -26,13 +26,19 @@ router = APIRouter()
 
 def _fetch_farm_weather(farm: Farm) -> Optional[Dict[str, Any]]:
     """Fetches real weather for farm coordinates; returns None on failure without fabricating mock data."""
-    if not farm.latitude or not farm.longitude:
+    if farm.latitude is None or farm.longitude is None:
         return None
     try:
         from .weather import fetch_weather_data
         w = fetch_weather_data(farm.latitude, farm.longitude, forecast_days=7)
         if w and "daily" in w:
-            return {"daily": w["daily"]}
+            is_fallback = bool(w.get("is_fallback") or w.get("status") == "fallback")
+            return {
+                "daily": w["daily"],
+                "current": w.get("current"),
+                "is_fallback": is_fallback,
+                "weather_available": not is_fallback
+            }
     except Exception as e:
         logger.warning(f"Live weather lookup failed for farm {farm.id}: {e}")
     return None
@@ -48,17 +54,11 @@ def get_farm_brain_today(
     Returns 'WHAT SHOULD I DO TODAY?' priority recommendations for the specified farm.
     Enforces multi-tenant ownership: only farm owners and authorized operators can access.
     """
-    farm = db.query(Farm).filter(Farm.id == farm_id).first()
-    if not farm:
-        raise HTTPException(status_code=404, detail="Farm record not found")
-
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and not is_same_user(farm.user_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: You cannot view Farm Brain intelligence for another user's farm."
-        )
+    farm = get_authorized_farm(
+        db, farm_id, user=current_user,
+        detail_not_found="Farm record not found",
+        detail_forbidden="Access forbidden: You cannot view Farm Brain intelligence for another user's farm."
+    )
 
     farmer = None
     if farm.farmer_id:
@@ -77,23 +77,21 @@ def get_farm_brain_today(
     from ..models import IoTDevice
     farm_devices = db.query(IoTDevice).filter(IoTDevice.farm_id == farm.id).all()
     device_table_ids = [d.id for d in farm_devices]
-    device_ids = [d.device_id for d in farm_devices]
 
     latest_iot = None
-    if device_table_ids or device_ids:
+    if device_table_ids:
         latest_iot = db.query(IoTSensorReading).filter(
-            (IoTSensorReading.device_table_id.in_(device_table_ids)) |
-            (IoTSensorReading.device_id.in_(device_ids))
+            IoTSensorReading.device_table_id.in_(device_table_ids)
         ).order_by(IoTSensorReading.id.desc()).first()
 
     # Retrieve scheduled plan tasks
     plan_tasks = []
-    plan = db.query(FarmPlan).filter(FarmPlan.farm_id == farm_id).first()
+    plan = db.query(FarmPlan).filter(FarmPlan.farm_id == farm_id).order_by(FarmPlan.id.desc()).first()
     if plan:
         plan_tasks = db.query(FarmPlanTask).filter(
             FarmPlanTask.farm_plan_id == plan.id,
             FarmPlanTask.status == "pending"
-        ).limit(3).all()
+        ).order_by(FarmPlanTask.task_date.asc(), FarmPlanTask.id.asc()).limit(3).all()
 
     # Fetch real weather context from farm coordinates (no fake hardcoded weather)
     weather_ctx = _fetch_farm_weather(farm)
@@ -119,17 +117,11 @@ def get_farm_brain_week(
     Returns 7-day agronomic and operational outlook.
     Enforces multi-tenant ownership: only farm owners and authorized operators can access.
     """
-    farm = db.query(Farm).filter(Farm.id == farm_id).first()
-    if not farm:
-        raise HTTPException(status_code=404, detail="Farm record not found")
-
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and not is_same_user(farm.user_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: You cannot view Farm Brain intelligence for another user's farm."
-        )
+    farm = get_authorized_farm(
+        db, farm_id, user=current_user,
+        detail_not_found="Farm record not found",
+        detail_forbidden="Access forbidden: You cannot view Farm Brain intelligence for another user's farm."
+    )
 
     farmer = None
     if farm.farmer_id:

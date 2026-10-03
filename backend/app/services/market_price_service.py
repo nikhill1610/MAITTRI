@@ -375,9 +375,15 @@ def get_latest_market_price(
     normalized_crop = normalize_crop_name(crop_name)
     canonical_crop = None
     for c in SUPPORTED_CROPS:
-        if c.lower() == normalized_crop.lower() or normalized_crop.lower() in c.lower():
+        if c.lower() == normalized_crop.lower():
             canonical_crop = c
             break
+        # Also check slash-separated components like Gram/Chickpea
+        if "/" in c:
+            parts = [p.strip().lower() for p in c.split("/")]
+            if normalized_crop.lower() in parts:
+                canonical_crop = c
+                break
     if not canonical_crop:
         canonical_crop = normalized_crop
 
@@ -402,6 +408,11 @@ def get_latest_market_price(
                     canonical_crop = k
                     break
 
+    data_tier = "state_benchmark"
+    data_source = f"Benchmark reference (static - {matched_state})"
+    freshness = "benchmark_reference"
+    is_mandi_specific = False
+
     # If state not directly in benchmark, fallback to all-India benchmark weighted average for this crop
     if not crop_data:
         national_modals = []
@@ -421,29 +432,57 @@ def get_latest_market_price(
                 "modal": avg_modal,
                 "min": avg_min,
                 "max": avg_max,
-                "market": f"{matched_state} State Benchmark Market",
-                "district": district or "State Level",
+                "market": "National Benchmark Average",
+                "district": district or "National Level",
                 "trend": "stable",
                 "pct": 0.5
             }
+            data_tier = "national_average"
+            data_source = "National Agricultural Benchmark Average"
+            freshness = "national_average"
         else:
             return None
 
-    is_mandi_specific = False
-    resolved_mandi = crop_data.get("market")
-    resolved_district = crop_data.get("district")
+    benchmark_mandi = crop_data.get("market")
+    benchmark_district = crop_data.get("district")
 
-    if mandi and mandi.strip():
-        resolved_mandi = mandi.strip()
-        is_mandi_specific = True
-    elif district and district.strip():
-        resolved_district = district.strip()
-        mandis = get_mandis_for_district(matched_state, district)
-        if mandis:
-            resolved_mandi = mandis[0]
+    requested_mandi = mandi.strip() if mandi and mandi.strip() else None
+    requested_district = district.strip() if district and district.strip() else None
+
+    # Keep resolved_mandi and resolved_district as actual benchmark source
+    resolved_mandi = benchmark_mandi
+    resolved_district = benchmark_district
+
+    if requested_mandi:
+        if resolved_mandi and resolved_mandi.strip().lower() == requested_mandi.lower():
             is_mandi_specific = True
+            data_tier = "state_benchmark"
+            data_source = f"Benchmark reference (static - {resolved_mandi})"
+            freshness = "benchmark_reference"
         else:
-            resolved_mandi = f"{district} Mandi"
+            is_mandi_specific = False
+            if data_tier != "national_average":
+                data_tier = "state_benchmark"
+                data_source = f"Benchmark reference (static - {matched_state})"
+                freshness = "benchmark_reference"
+    elif requested_district:
+        if resolved_district and resolved_district.strip().lower() == requested_district.lower():
+            is_mandi_specific = True
+            data_tier = "state_benchmark"
+            data_source = f"Benchmark reference (static - {resolved_district})"
+            freshness = "benchmark_reference"
+        else:
+            is_mandi_specific = False
+            if data_tier != "national_average":
+                data_tier = "state_benchmark"
+                data_source = f"Benchmark reference (static - {matched_state})"
+                freshness = "benchmark_reference"
+    else:
+        is_mandi_specific = False
+        if data_tier != "national_average":
+            data_tier = "state_benchmark"
+            data_source = f"Benchmark reference (static - {matched_state})"
+            freshness = "benchmark_reference"
 
     base_date = _get_base_date()
     date_str = _format_date(base_date)
@@ -464,7 +503,12 @@ def get_latest_market_price(
         "state": matched_state,
         "district": resolved_district,
         "market": resolved_mandi,
+        "resolved_mandi": resolved_mandi,
+        "resolved_district": resolved_district,
+        "requested_mandi": requested_mandi,
+        "requested_district": requested_district,
         "is_mandi_specific": is_mandi_specific,
+        "data_tier": data_tier,
         "price": {
             "min": crop_data["min"],
             "max": crop_data["max"],
@@ -486,8 +530,8 @@ def get_latest_market_price(
         "price_type": "Modal / Minimum / Maximum",
         "date": date_str,
         "timestamp": base_date.isoformat(),
-        "source": "Agmarknet / Ministry of Agriculture & Farmers Welfare (MoAFW)",
-        "freshness": "latest_available",
+        "source": data_source,
+        "freshness": freshness,
         "advisory": "Actual selling price may differ from the displayed market price depending on quality, grade, moisture, transport, commission and local arrivals."
     }
 
@@ -523,7 +567,9 @@ def get_other_crop_prices_in_state(state: str, exclude_crop: Optional[str] = Non
                 "trend": c_data.get("trend", "stable"),
                 "pct_change": c_data.get("pct", 0.0),
                 "date": date_str,
-                "source": "Official Mandi Data",
+                "data_tier": "state_benchmark",
+                "source": f"Benchmark reference (static - {matched_state})",
+                "freshness": "benchmark_reference",
                 "is_selected": bool(exclude_crop and crop_name.lower() == exclude_crop.strip().lower())
             })
     else:
@@ -542,7 +588,9 @@ def get_other_crop_prices_in_state(state: str, exclude_crop: Optional[str] = Non
                     "trend": p_data["price_change"]["trend"],
                     "pct_change": p_data["price_change"]["percentage"],
                     "date": date_str,
-                    "source": "Official Mandi Data",
+                    "data_tier": p_data.get("data_tier", "state_benchmark"),
+                    "source": p_data.get("source", f"Benchmark reference (static - {matched_state})"),
+                    "freshness": p_data.get("freshness", "benchmark_reference"),
                     "is_selected": bool(exclude_crop and crop_name.lower() == exclude_crop.strip().lower())
                 })
 
@@ -565,6 +613,7 @@ def get_crop_price_history(
             "crop": crop_name,
             "state": state,
             "available": False,
+            "synthetic": True,
             "message": "Historical price data is currently unavailable.",
             "series": []
         }
@@ -594,7 +643,8 @@ def get_crop_price_history(
             "modal_price": hist_modal,
             "min_price": hist_min,
             "max_price": hist_max,
-            "unit": "quintal"
+            "unit": "quintal",
+            "synthetic": True
         })
 
     records.reverse()
@@ -603,7 +653,15 @@ def get_crop_price_history(
         "crop": latest["crop"],
         "state": latest["state"],
         "market": latest["market"],
+        "resolved_mandi": latest.get("resolved_mandi", latest["market"]),
+        "resolved_district": latest.get("resolved_district", latest.get("district")),
+        "requested_mandi": latest.get("requested_mandi"),
+        "requested_district": latest.get("requested_district"),
         "available": True,
+        "synthetic": True,
+        "data_tier": "synthetic_history",
+        "source": "Benchmark reference trend simulation (synthetic)",
+        "freshness": "synthetic_benchmark",
         "days": days,
         "unit": "quintal",
         "currency": "INR",
@@ -655,22 +713,43 @@ def get_state_wise_crop_comparison(crop_name: str) -> List[Dict[str, Any]]:
     if not crop_name:
         return []
 
-    canonical = normalize_crop_name(crop_name)
+    normalized_crop = normalize_crop_name(crop_name)
+    canonical_crop = None
+    for sc in SUPPORTED_CROPS:
+        if sc.lower() == normalized_crop.lower():
+            canonical_crop = sc
+            break
+        if "/" in sc:
+            parts = [p.strip().lower() for p in sc.split("/")]
+            if normalized_crop.lower() in parts:
+                canonical_crop = sc
+                break
+    if not canonical_crop:
+        canonical_crop = normalized_crop
+
     results = []
     base_date = _get_base_date()
     date_str = _format_date(base_date)
 
     for state_name, crops in BENCHMARK_MARKET_DATA.items():
         c_info = None
+        matched_crop_name = None
         for c, data in crops.items():
-            if c.lower() == canonical.lower() or canonical.lower() in c.lower():
+            if c.lower() == canonical_crop.lower():
                 c_info = data
+                matched_crop_name = c
                 break
+            if "/" in c:
+                parts = [p.strip().lower() for p in c.split("/")]
+                if canonical_crop.lower() in parts:
+                    c_info = data
+                    matched_crop_name = c
+                    break
 
         if c_info:
             results.append({
                 "state": state_name,
-                "crop": crop_name,
+                "crop": matched_crop_name or canonical_crop,
                 "district": c_info.get("district"),
                 "market": c_info.get("market"),
                 "modal_price": c_info["modal"],
@@ -705,12 +784,22 @@ def calculate_farm_profit_projection(
             "message": "Market price unavailable — profit estimate cannot be updated accurately."
         }
 
-    unit_norm = area_unit.lower().strip()
-    acre_factor = farm_area
-    if "hectare" in unit_norm:
-        acre_factor = farm_area * 2.471
-    elif "bigha" in unit_norm:
-        acre_factor = farm_area * 0.4
+    SUPPORTED_AREA_UNITS = {
+        "acre", "acres", "एकड़",
+        "hectare", "hectares", "ha", "हेक्टेयर",
+        "bigha", "bighas", "बीघा",
+        "sq_m", "sqm", "square meter", "square meters", "वर्ग मीटर",
+        "sq_ft", "sqft", "square feet", "square foot", "वर्ग फीट"
+    }
+    unit_norm = (area_unit or "acre").lower().strip()
+    if unit_norm not in SUPPORTED_AREA_UNITS:
+        return {
+            "available": False,
+            "message": f"Unsupported or unknown area unit '{area_unit}'. Please use acre, hectare, or bigha."
+        }
+
+    from .parali_management_service import convert_to_acres
+    acre_factor = convert_to_acres(farm_area, unit_norm)
 
     from ..data import CROPS
     canonical = normalize_crop_name(crop_name)

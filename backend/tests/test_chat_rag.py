@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.rag_service import query_knowledge_base, get_chroma_collection
+from app.security import create_access_token
 
 
 @pytest.fixture(scope="module")
@@ -184,8 +185,38 @@ def test_rag_openrouter_mocked_success(client):
 
 def test_rag_debug_endpoint(client):
     """Test 10: /api/chat/debug endpoint returns exact chunk previews and distances."""
+    import uuid
+    from sqlalchemy import text
+    from app.database import engine
+    from app.security import create_access_token
+
+    uid_str = str(uuid.uuid4())
+    email = f"op_rag_{uid_str[:8]}@maittri.org"
+    if engine.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO auth.users (id, aud, role, email, created_at, updated_at) VALUES (:uid, 'authenticated', 'authenticated', :email, now(), now()) ON CONFLICT (id) DO NOTHING;"),
+                {"uid": uid_str, "email": email}
+            )
+            conn.execute(
+                text("INSERT INTO public.profiles (id, role, full_name, preferred_language) VALUES (:uid, 'AUTHORIZED_OPERATOR', 'Operator', 'hi') ON CONFLICT (id) DO UPDATE SET role = 'AUTHORIZED_OPERATOR';"),
+                {"uid": uid_str}
+            )
+    else:
+        from app.database import get_db
+        from app.models import Profile
+        db = next(get_db())
+        try:
+            prof = Profile(id=uid_str, role="AUTHORIZED_OPERATOR", full_name="Operator")
+            db.merge(prof)
+            db.commit()
+        finally:
+            db.close()
+
+    op_token = create_access_token({"sub": uid_str, "email": email, "role": "AUTHORIZED_OPERATOR"})
+    headers = {"Authorization": f"Bearer {op_token}"}
     with patch.dict("os.environ", {"ENVIRONMENT": "development"}):
-        response = client.post("/api/chat/debug", json={"query": "Wheat CRI irrigation timing", "top_k": 2})
+        response = client.post("/api/chat/debug", json={"query": "Wheat CRI irrigation timing", "top_k": 2}, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert "chunks" in data
@@ -663,7 +694,7 @@ def test_case_6_mock_tavily_fails_safe_fallback():
         assert res["live_lookup_attempted"] is True
         assert res["live_lookup_provider"] == "tavily"
         assert res["live_lookup_result"] == "provider_error"
-        assert "Provider exception" in (res.get("rejection_reason") or "")
+        assert res.get("rejection_reason") == "provider_error"
         reply = res["reply"]
         assert "Main abhi Jaipur mandi ka current verified" in reply
         assert "agmarknet.gov.in" in reply

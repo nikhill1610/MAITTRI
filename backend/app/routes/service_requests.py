@@ -8,13 +8,17 @@ DOCUMENT_ASSISTANCE, SCHEME_ASSISTANCE, INSURANCE_ASSISTANCE
 
 from typing import List, Optional
 from datetime import datetime, timezone
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User, Farmer, Farm, ServiceRequest
 from ..schemas import ServiceRequestCreate, ServiceRequestUpdate, ServiceRequestResponse
-from ..deps import get_current_user, require_farmer_or_operator
+from ..deps import (
+    get_current_user, require_farmer_or_operator,
+    is_same_user, is_elevated_user, farm_belongs_to_farmer, get_authorized_farm
+)
 from ..services.notification_service import create_and_dispatch_notification
 
 router = APIRouter()
@@ -41,39 +45,52 @@ def create_service_request(
     if not farmer:
         raise HTTPException(status_code=404, detail="Farmer not found")
 
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and str(farmer.user_id) != str(current_user.id):
+    is_elevated = is_elevated_user(current_user)
+    if not is_elevated and not is_same_user(farmer.user_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot create a service request for another farmer."
         )
 
-    req_id = generate_service_request_id(db)
+    if payload.farm_id:
+        get_authorized_farm(
+            db, payload.farm_id, user=current_user, farmer=farmer,
+            detail_not_found="Farm not found.",
+            detail_forbidden="Farm does not belong to the authenticated farmer.",
+            forbidden_status_code=400
+        )
 
     sr = ServiceRequest(
-        request_id=req_id,
+        request_id=f"TEMP-{uuid.uuid4().hex[:8]}",
         farmer_id=payload.farmer_id,
         farm_id=payload.farm_id,
-        operator_id=current_user.id if getattr(current_user, "role", "") == "AUTHORIZED_OPERATOR" else None,
+        operator_id=current_user.id if (getattr(current_user, "role", "") or "").upper() in ("AUTHORIZED_OPERATOR", "OPERATOR") else None,
         service_type=payload.service_type,
         status="REQUESTED",
         description=payload.description
     )
     db.add(sr)
+    db.flush()
+    sr.request_id = f"MT-REQ-{sr.id:06d}"
     db.commit()
     db.refresh(sr)
 
-    # Notify farmer
-    create_and_dispatch_notification(
-        db=db,
-        farmer_id=farmer.id,
-        user_id=farmer.user_id,
-        title="सेवा अनुरोध दर्ज (Service Request Submitted)",
-        message=f"आपका सेवा अनुरोध ({sr.service_type}) आईडी {req_id} दर्ज कर लिया गया है।",
-        category="service",
-        channel="ALL"
-    )
+    req_id = sr.request_id
+
+    # Notify farmer (isolated so notification failure does not fail request creation)
+    try:
+        create_and_dispatch_notification(
+            db=db,
+            farmer_id=farmer.id,
+            user_id=farmer.user_id,
+            title="सेवा अनुरोध दर्ज (Service Request Submitted)",
+            message=f"आपका सेवा अनुरोध ({sr.service_type}) आईडी {req_id} दर्ज कर लिया गया है।",
+            category="service",
+            channel="ALL"
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Failed to dispatch service request notification: %s", exc)
 
     return sr
 
@@ -88,9 +105,7 @@ def list_service_requests(
 ):
     """Lists service requests with role-based filtering."""
     query = db.query(ServiceRequest)
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-
-    if user_role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
+    if not is_elevated_user(current_user):
         farmer = db.query(Farmer).filter(Farmer.user_id == current_user.id).first()
         if farmer:
             query = query.filter(ServiceRequest.farmer_id == farmer.id)
@@ -118,11 +133,10 @@ def get_service_request(
     if not sr:
         raise HTTPException(status_code=404, detail="Service request not found")
 
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
+    is_elevated = is_elevated_user(current_user)
     if not is_elevated:
         farmer = db.query(Farmer).filter(Farmer.id == sr.farmer_id).first()
-        if not farmer or str(farmer.user_id) != str(current_user.id):
+        if not farmer or not is_same_user(farmer.user_id, current_user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access forbidden: You cannot view another farmer's service request."
@@ -142,15 +156,43 @@ def update_service_request(
     if not sr:
         raise HTTPException(status_code=404, detail="Service request not found")
 
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
+    is_elevated = is_elevated_user(current_user)
     farmer = db.query(Farmer).filter(Farmer.id == sr.farmer_id).first()
-    is_owner = farmer and str(farmer.user_id) == str(current_user.id)
+    is_owner = farmer and is_same_user(farmer.user_id, current_user.id)
 
     if not is_elevated and not is_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot modify another farmer's service request."
+        )
+
+    ALLOWED_SERVICE_STATUS_TRANSITIONS = {
+        "REQUESTED": {"ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"},
+        "ASSIGNED": {"IN_PROGRESS", "COMPLETED", "CANCELLED"},
+        "IN_PROGRESS": {"COMPLETED", "CANCELLED"},
+        "COMPLETED": set(),
+        "CANCELLED": set()
+    }
+    old_status = sr.status
+    if old_status in ("COMPLETED", "CANCELLED"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Service request is already '{old_status}' and cannot be modified."
+        )
+    if old_status not in ALLOWED_SERVICE_STATUS_TRANSITIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown or invalid service request status '{old_status}'."
+        )
+    if payload.status not in ALLOWED_SERVICE_STATUS_TRANSITIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid service request status '{payload.status}'."
+        )
+    if payload.status != old_status and payload.status not in ALLOWED_SERVICE_STATUS_TRANSITIONS[old_status]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status transition from '{old_status}' to '{payload.status}'."
         )
 
     # Farmers can only cancel their own request; resolving or updating notes requires an operator
@@ -160,8 +202,12 @@ def update_service_request(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Farmers may only cancel pending requests. Status resolution requires an Authorized Operator."
             )
+        if sr.status != "REQUESTED":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel service request in '{sr.status}' status. Only pending requests can be cancelled."
+            )
 
-    old_status = sr.status
     sr.status = payload.status
     if payload.resolution_notes:
         if not is_elevated and payload.resolution_notes != sr.resolution_notes:
@@ -176,14 +222,18 @@ def update_service_request(
     db.refresh(sr)
 
     if old_status != payload.status and farmer:
-        create_and_dispatch_notification(
-            db=db,
-            farmer_id=farmer.id,
-            user_id=farmer.user_id,
-            title="सेवा अनुरोध स्थिति (Service Request Status)",
-            message=f"अनुरोध {req_id} की स्थिति: {payload.status}। {payload.resolution_notes or ''}",
-            category="service",
+        try:
+            create_and_dispatch_notification(
+                db=db,
+                farmer_id=farmer.id,
+                user_id=farmer.user_id,
+                title="सेवा अनुरोध स्थिति (Service Request Status)",
+                message=f"अनुरोध {req_id} की स्थिति: {payload.status}। {payload.resolution_notes or ''}",
+                category="service",
                 channel="SMS" if payload.status == "COMPLETED" else "WEB"
             )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to dispatch service request status notification: %s", exc)
 
     return sr

@@ -15,7 +15,7 @@ from ..schemas import (
     PestAnalyzeRequest, PestRecommendRequest,
     FertilizerApplicationCreate, PesticideApplicationCreate
 )
-from ..deps import get_optional_current_user, get_current_user, is_same_user
+from ..deps import get_optional_current_user, get_current_user, is_same_user, is_elevated_user, get_authorized_farm
 from ..services.fertilizer_recommendation_service import (
     generate_comprehensive_recommendation,
     analyze_crop,
@@ -71,13 +71,7 @@ def analyze_fertilizer_endpoint(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required to analyze a specific farm."
             )
-        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-        farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-            farm_query = farm_query.filter(Farm.user_id == user.id)
-        farm = farm_query.first()
-        if not farm:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+        farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
 
     lat = payload.latitude or (farm.latitude if farm else None)
     lon = payload.longitude or (farm.longitude if farm else None)
@@ -138,13 +132,7 @@ def recommend_fertilizer_endpoint(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required to generate recommendations for a specific farm."
             )
-        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-        farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-            farm_query = farm_query.filter(Farm.user_id == user.id)
-        farm = farm_query.first()
-        if not farm:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+        farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
 
     lat = payload.latitude or (farm.latitude if farm else None)
     lon = payload.longitude or (farm.longitude if farm else None)
@@ -222,12 +210,7 @@ def get_fertilizer_history(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required to view farm fertilizer history."
             )
-        farm = db.query(Farm).filter(Farm.id == farm_id).first()
-        if not farm:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
-        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN") and not is_same_user(farm.user_id, user.id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this farm's records")
+        farm = get_authorized_farm(db, farm_id, user=user, detail_forbidden="Access denied to this farm's records")
         query_recs = query_recs.filter(FertilizerRecommendation.farm_id == farm_id)
         query_apps = query_apps.filter(FertilizerApplication.farm_id == farm_id)
     elif user:
@@ -292,13 +275,7 @@ def log_fertilizer_application(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required to log fertilizer applications."
         )
-    user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-    farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-    if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-        farm_query = farm_query.filter(Farm.user_id == user.id)
-    farm = farm_query.first()
-    if not farm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+    farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
 
     entry = FertilizerApplication(
         farm_id=farm.id,
@@ -415,13 +392,7 @@ def recommend_pest_endpoint(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication required to generate recommendations for a specific farm."
                 )
-            user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-            farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-            if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-                farm_query = farm_query.filter(Farm.user_id == user.id)
-            farm = farm_query.first()
-            if not farm:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+            farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
             if farm:
                 rec_row = PesticideRecommendation(
                     farm_id=farm.id,
@@ -454,13 +425,7 @@ def log_pesticide_application(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required to log pesticide applications."
         )
-    user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-    farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-    if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-        farm_query = farm_query.filter(Farm.user_id == user.id)
-    farm = farm_query.first()
-    if not farm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+    farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
 
     entry = PesticideApplication(
         farm_id=farm.id,

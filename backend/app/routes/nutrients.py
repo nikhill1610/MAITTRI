@@ -4,7 +4,7 @@ import json
 from ..database import get_db
 from ..models import Farm, NutrientAnalysisRecord
 from ..schemas import NutrientAnalysisRequest
-from ..deps import get_current_user
+from ..deps import get_current_user, is_elevated_user, get_authorized_farm
 from ..services.nutrient_analysis_service import analyze_nutrient_depletion
 
 router = APIRouter()
@@ -21,13 +21,7 @@ def analyze_nutrients_endpoint(
     """
     farm = None
     if payload.farm_id:
-        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-        farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-            farm_query = farm_query.filter(Farm.user_id == user.id)
-        farm = farm_query.first()
-        if not farm:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+        farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
 
     soil_type = payload.soil_type or (farm.soil_type if farm else "Loamy soil")
     soil_type_source = payload.soil_type_source or (farm.soil_type_source if farm else "farmer_selected")
@@ -103,13 +97,7 @@ def get_farm_nutrient_analysis(
     """
     Retrieves or calculates the latest nutrient analysis for a farm.
     """
-    user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-    farm_query = db.query(Farm).filter(Farm.id == farm_id)
-    if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-        farm_query = farm_query.filter(Farm.user_id == user.id)
-    farm = farm_query.first()
-    if not farm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+    farm = get_authorized_farm(db, farm_id, user=user, detail_not_found="Farm not found or access denied")
 
     # Check for stored record
     rec = db.query(NutrientAnalysisRecord).filter(NutrientAnalysisRecord.farm_id == farm.id).order_by(NutrientAnalysisRecord.id.desc()).first()

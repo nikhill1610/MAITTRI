@@ -59,7 +59,7 @@ def generate_today_decisions(
         missing_info.append("Sowing date not recorded — stage-specific fertilizer timings will use general estimates.")
     if not soil_report and not getattr(farm, "soil_n", None):
         missing_info.append("Certified soil test report unavailable — nutrient advice based on regional standard NPK.")
-    if not weather_data:
+    if not weather_data or weather_data.get("is_fallback") or not weather_data.get("weather_available", True):
         missing_info.append("Live meteorological feed temporarily unavailable — outdoor spray advice is cautious.")
 
     # 1. WEATHER HAZARD / IRRIGATION DECISION
@@ -68,17 +68,31 @@ def generate_today_decisions(
     temp_max = 30.0
     if weather_data and "daily" in weather_data:
         d = weather_data["daily"]
-        precip_list = d.get("precipitation_sum", [0])
-        precip_mm = precip_list[0] if precip_list else 0.0
-        prob_list = d.get("precipitation_probability_max", [0])
-        rain_prob = prob_list[0] if prob_list else 0
-        temp_max_list = d.get("temperature_2m_max", [30])
-        temp_max = temp_max_list[0] if temp_max_list else 30.0
+        if isinstance(d, list) and d:
+            first_day = d[0] if isinstance(d[0], dict) else {}
+            precip_mm = float(first_day.get("precipitation_sum") or 0.0)
+            rain_prob = int(first_day.get("precipitation_probability") or 0)
+            temp_max = float(first_day.get("temp_max") or 30.0)
+        elif isinstance(d, dict):
+            precip_list = d.get("precipitation_sum", [0])
+            precip_mm = float(precip_list[0] if precip_list else 0.0)
+            prob_list = d.get("precipitation_probability_max", [0])
+            rain_prob = int(prob_list[0] if prob_list else 0)
+            temp_max_list = d.get("temperature_2m_max", [30])
+            temp_max = float(temp_max_list[0] if temp_max_list else 30.0)
 
     # Sensor soil moisture (indicative)
     sensor_moisture = getattr(latest_iot, "soil_moisture", None)
+    if sensor_moisture is None:
+        missing_info.append("Live soil moisture sensor reading unavailable — field moisture status is unverified.")
 
-    if precip_mm >= 5.0 or rain_prob >= 60:
+    is_weather_usable = bool(
+        weather_data
+        and not weather_data.get("is_fallback")
+        and weather_data.get("weather_available", True)
+    )
+
+    if is_weather_usable and (precip_mm >= 5.0 or rain_prob >= 60):
         actions.append({
             "id": "irrigation_hold",
             "title_hi": "सिंचाई स्थगित करें — वर्षा का पूर्वानुमान",
@@ -95,14 +109,28 @@ def generate_today_decisions(
             "source": "IMD Agromet / Open-Meteo Advisory Guidelines"
         })
     elif sensor_moisture is not None and sensor_moisture < 25.0:
+        if is_weather_usable:
+            if precip_mm < 2.0 and rain_prob < 30:
+                sky_desc_hi = "पूर्वानुमान अनुसार मौसम शुष्क रहेगा; शाम को हल्की सिंचाई करें।"
+                sky_desc_en = "Forecast indicates dry conditions; provide light irrigation in the evening."
+                irr_conf = "HIGH"
+            else:
+                sky_desc_hi = f"मौसम में वर्षा की संभावना ({precip_mm}mm, {rain_prob}%) है; सिंचाई से पूर्व स्थानीय स्थिति की जांच करें।"
+                sky_desc_en = f"Forecast indicates potential rain ({precip_mm}mm, {rain_prob}%); verify local sky before irrigating."
+                irr_conf = "MEDIUM"
+        else:
+            sky_desc_hi = "मौसम पूर्वानुमान उपलब्ध नहीं है; सिंचाई से पूर्व स्थानीय मौसम व बादलों की स्थिति अवश्य जांचें।"
+            sky_desc_en = "Weather forecast feed unavailable; verify local sky and rain outlook before scheduling irrigation."
+            irr_conf = "MEDIUM"
+
         actions.append({
             "id": "irrigation_needed",
             "title_hi": "हल्की सिंचाई की आवश्यकता",
             "title_en": "Light Irrigation Recommended",
             "priority": "HIGH",
-            "confidence": "MEDIUM",
-            "action_text_hi": f"खेत में नमी का स्तर कम (~{round(sensor_moisture, 1)}%) दर्ज किया गया है। मौसम साफ है, शाम को हल्की सिंचाई करें।",
-            "action_text_en": f"Indicative soil moisture is low (~{round(sensor_moisture, 1)}%). Clear skies; provide light irrigation in the evening.",
+            "confidence": irr_conf,
+            "action_text_hi": f"खेत में नमी का स्तर कम (~{round(sensor_moisture, 1)}%) दर्ज किया गया है। {sky_desc_hi}",
+            "action_text_en": f"Indicative soil moisture is low (~{round(sensor_moisture, 1)}%). {sky_desc_en}",
             "why_needed_hi": "कम नमी की स्थिति में पौधे प्रकाश संश्लेषण और पोषक तत्वों का अवशोषण नहीं कर पाते।",
             "why_needed_en": "Water stress reduces nutrient uptake and leaf transpiration efficiency.",
             "risk_assessment_hi": "मध्यम जोखिम: फसल में मुरझान और उपज में गिरावट।",
@@ -110,43 +138,62 @@ def generate_today_decisions(
             "data_used": f"IoT Field Sensor Node (Indicative Moisture: {sensor_moisture}%)",
             "source": "Maitri IoT Telemetry Engine"
         })
-    else:
+    elif sensor_moisture is not None:
         actions.append({
             "id": "moisture_normal",
             "title_hi": "मृदा नमी सामान्य स्थिति में",
             "title_en": "Soil Moisture Optimal",
             "priority": "NORMAL",
             "confidence": "HIGH",
-            "action_text_hi": "वर्तमान में खेत में पर्याप्त नमी है। नियमित निगरानी जारी रखें।",
-            "action_text_en": "Adequate soil moisture observed. Continue routine monitoring.",
+            "action_text_hi": f"खेत में सेंसर द्वारा पर्याप्त नमी (~{round(sensor_moisture, 1)}%) दर्ज की गई है। नियमित निगरानी जारी रखें।",
+            "action_text_en": f"Adequate indicative soil moisture (~{round(sensor_moisture, 1)}%) observed. Continue routine monitoring.",
             "why_needed_hi": "संतुलित नमी पौधों के निरंतर विकास के लिए अनुकूल है।",
             "why_needed_en": "Optimal root zone moisture promotes balanced vegetative growth.",
             "risk_assessment_hi": "न्यूनतम जोखिम।",
             "risk_assessment_en": "Low moisture stress risk.",
-            "data_used": "Field Observation & Local Meteorological Models",
+            "data_used": f"IoT Field Sensor Node (Indicative Moisture: {round(sensor_moisture, 1)}%)",
+            "source": "Maitri IoT Telemetry Engine"
+        })
+    else:
+        actions.append({
+            "id": "moisture_monitoring_needed",
+            "title_hi": "मृदा नमी स्थिति अज्ञात — नियमित निगरानी रखें",
+            "title_en": "Soil Moisture Unknown — Field Monitoring Required",
+            "priority": "NORMAL",
+            "confidence": "LOW",
+            "action_text_hi": "खेत में मृदा नमी का प्रत्यक्ष माप उपलब्ध नहीं है। सिंचाई निर्णय से पूर्व मिट्टी की नमी की जांच करें।",
+            "action_text_en": "No live soil moisture measurement available. Physically inspect root zone moisture before scheduling field operations.",
+            "why_needed_hi": "सटीक नमी माप के बिना सिंचाई या उर्वरक का सही निर्णय लेना संभव नहीं है।",
+            "why_needed_en": "Direct moisture assessment prevents unnecessary irrigation or undetected water stress.",
+            "risk_assessment_hi": "अज्ञात जोखिम: अनपेक्षित नमी तनाव की संभावना।",
+            "risk_assessment_en": "Uncertain moisture status: risk of undetected crop water stress or excess irrigation.",
+            "data_used": "No Sensor Reading Available",
             "source": "Maitri Agronomy Core"
         })
 
     # 2. NUTRIENT & FERTILIZER ACTION
     if soil_report:
-        n_val = soil_report.nitrogen or 200
+        n_val = soil_report.nitrogen
         ph_val = soil_report.ph or 7.0
-        if n_val < 250:
-            actions.append({
-                "id": "nitrogen_management",
-                "title_hi": f"{crop_name} में नाइट्रोजन टॉप-ड्रेसिंग योजना",
-                "title_en": f"Nitrogen Top-Dressing for {crop_name}",
-                "priority": "MEDIUM",
-                "confidence": "HIGH",
-                "action_text_hi": f"प्रमाणित लैब टेस्ट के अनुसार नाइट्रोजन का स्तर कम ({n_val} kg/ha) है। आगामी सिंचाई के साथ अनुशंसित यूरिया को विभाजित मात्रा में दें।",
-                "action_text_en": f"Certified lab soil test shows low available nitrogen ({n_val} kg/ha). Apply split dose of urea before next irrigation.",
-                "why_needed_hi": "नाइट्रोजन की कमी से पुरानी पत्तियां पीली पड़ने लगती हैं और टिलरिंग रुक जाती है।",
-                "why_needed_en": "Nitrogen deficiency leads to chlorosis in older leaves and stunted tillering.",
-                "risk_assessment_hi": "मध्यम जोखिम: समय पर खुराक न देने से 15-20% पैदावार घट सकती है।",
-                "risk_assessment_en": "Moderate risk: Yield reduction up to 15-20% if basal/top-dress split missed.",
-                "data_used": f"Certified Lab Report ({soil_report.lab_name}, N: {n_val} kg/ha, pH: {ph_val})",
-                "source": "Soil Health Card / KVK Agronomic Norms"
-            })
+        if n_val is not None:
+            if n_val < 250:
+                actions.append({
+                    "id": "nitrogen_management",
+                    "title_hi": f"{crop_name} में नाइट्रोजन टॉप-ड्रेसिंग योजना",
+                    "title_en": f"Nitrogen Top-Dressing for {crop_name}",
+                    "priority": "MEDIUM",
+                    "confidence": "HIGH",
+                    "action_text_hi": f"प्रमाणित लैब टेस्ट के अनुसार नाइट्रोजन का स्तर कम ({n_val} kg/ha) है। आगामी सिंचाई के साथ अनुशंसित यूरिया को विभाजित मात्रा में दें।",
+                    "action_text_en": f"Certified lab soil test shows low available nitrogen ({n_val} kg/ha). Apply split dose of urea before next irrigation.",
+                    "why_needed_hi": "नाइट्रोजन की कमी से पुरानी पत्तियां पीली पड़ने लगती हैं और टिलरिंग रुक जाती है।",
+                    "why_needed_en": "Nitrogen deficiency leads to chlorosis in older leaves and stunted tillering.",
+                    "risk_assessment_hi": "मध्यम जोखिम: समय पर खुराक न देने से 15-20% पैदावार घट सकती है।",
+                    "risk_assessment_en": "Moderate risk: Yield reduction up to 15-20% if basal/top-dress split missed.",
+                    "data_used": f"Certified Lab Report ({soil_report.lab_name}, N: {n_val} kg/ha, pH: {ph_val})",
+                    "source": "Soil Health Card / KVK Agronomic Norms"
+                })
+        else:
+            missing_info.append("Certified soil report lacks nitrogen measurement — N-specific fertilizer advice unavailable.")
     else:
         actions.append({
             "id": "soil_test_booking_advice",
@@ -243,6 +290,7 @@ def generate_weekly_outlook(
 ) -> Dict[str, Any]:
     """
     Generates a 7-day agricultural outlook for farm planning.
+    Avoids fabricating forecasts when live weather is unavailable.
     """
     now = datetime.now(timezone.utc)
     crop_name = getattr(farmer, "current_crop", None) or getattr(farm, "current_crop", None) or "General Crop"
@@ -250,51 +298,106 @@ def generate_weekly_outlook(
     days_outlook: List[Dict[str, Any]] = []
     days_names = ["सोमवार (Mon)", "मंगलवार (Tue)", "बुधवार (Wed)", "गुरुवार (Thu)", "शुक्रवार (Fri)", "शनिवार (Sat)", "रविवार (Sun)"]
 
-    daily_temps = [24, 25, 26, 27, 25, 24, 25]
-    daily_precip = [0.0, 2.0, 0.0, 0.0, 5.0, 0.0, 0.0]
+    has_usable_weather = bool(
+        weather_data
+        and not weather_data.get("is_fallback")
+        and weather_data.get("weather_available", True)
+        and "daily" in weather_data
+    )
 
-    if weather_data and "daily" in weather_data:
+    daily_temps: List[Optional[float]] = []
+    daily_precip: List[Optional[float]] = []
+
+    if has_usable_weather:
         d = weather_data["daily"]
-        if "temperature_2m_max" in d:
-            daily_temps = d["temperature_2m_max"][:7]
-        if "precipitation_sum" in d:
-            daily_precip = d["precipitation_sum"][:7]
+        if isinstance(d, list) and d:
+            for day in d[:7]:
+                if isinstance(day, dict):
+                    t = day.get("temp_max") if day.get("temp_max") is not None else day.get("temperature_2m_max")
+                    p = day.get("precipitation_sum")
+                    daily_temps.append(float(t) if t is not None else None)
+                    daily_precip.append(float(p) if p is not None else None)
+                else:
+                    daily_temps.append(None)
+                    daily_precip.append(None)
+        elif isinstance(d, dict) and d:
+            temps = d.get("temperature_2m_max") or d.get("temp_max") or []
+            precips = d.get("precipitation_sum") or []
+            count = min(7, max(len(temps), len(precips)))
+            for i in range(count):
+                t = temps[i] if i < len(temps) else None
+                p = precips[i] if i < len(precips) else None
+                daily_temps.append(float(t) if t is not None else None)
+                daily_precip.append(float(p) if p is not None else None)
 
     for i in range(7):
         target_date = now + timedelta(days=i)
-        p_val = daily_precip[i] if i < len(daily_precip) else 0.0
-        t_val = daily_temps[i] if i < len(daily_temps) else 25.0
+        if has_usable_weather and i < len(daily_precip) and (daily_precip[i] is not None or daily_temps[i] is not None):
+            p_val = daily_precip[i] if daily_precip[i] is not None else 0.0
+            t_val = daily_temps[i] if daily_temps[i] is not None else 25.0
 
-        if p_val >= 4.0:
-            rec_hi = "बारिश का अनुमान — खेत में कीटनाशक/उर्वरक छिड़काव न करें।"
-            rec_en = "Rain expected — avoid chemical or fertilizer spray."
-            status = "RAIN"
-        elif t_val >= 32.0:
-            rec_hi = "अधिक तापमान — वाष्पीकरण अधिक होगा, नमी बनाए रखें।"
-            rec_en = "Warm day — high evaporation; conserve field moisture."
-            status = "WARM"
+            if p_val >= 4.0:
+                rec_hi = "बारिश का अनुमान — खेत में कीटनाशक/उर्वरक छिड़काव न करें।"
+                rec_en = "Rain expected — avoid chemical or fertilizer spray."
+                status = "RAIN"
+            elif t_val >= 32.0:
+                rec_hi = "अधिक तापमान — वाष्पीकरण अधिक होगा, नमी बनाए रखें।"
+                rec_en = "Warm day — high evaporation; conserve field moisture."
+                status = "WARM"
+            else:
+                rec_hi = "अनुकूल मौसम — सामान्य कृषि कार्य एवं फसल निरीक्षण करें।"
+                rec_en = "Favorable weather for field operations and monitoring."
+                status = "GOOD"
+
+            days_outlook.append({
+                "day_index": i + 1,
+                "date": target_date.strftime("%Y-%m-%d"),
+                "day_label": days_names[target_date.weekday()],
+                "temp_c": t_val,
+                "rain_mm": p_val,
+                "status": status,
+                "advice_hi": rec_hi,
+                "advice_en": rec_en
+            })
         else:
-            rec_hi = "अनुकूल मौसम — सामान्य कृषि कार्य एवं फसल निरीक्षण करें।"
-            rec_en = "Favorable weather for field operations and monitoring."
-            status = "GOOD"
+            days_outlook.append({
+                "day_index": i + 1,
+                "date": target_date.strftime("%Y-%m-%d"),
+                "day_label": days_names[target_date.weekday()],
+                "temp_c": None,
+                "rain_mm": None,
+                "status": "UNAVAILABLE",
+                "advice_hi": "मौसम पूर्वानुमान अनुपलब्ध — सामान्य कृषि कार्य जारी रखें, मौसम संवेदनशील कार्यों से पूर्व स्थानीय स्थिति जांचें।",
+                "advice_en": "Weather forecast unavailable — continue routine farm management; inspect local sky before weather-dependent operations."
+            })
 
-        days_outlook.append({
-            "day_index": i + 1,
-            "date": target_date.strftime("%Y-%m-%d"),
-            "day_label": days_names[target_date.weekday()],
-            "temp_c": t_val,
-            "rain_mm": p_val,
-            "status": status,
-            "advice_hi": rec_hi,
-            "advice_en": rec_en
-        })
+    # Derive weekly summary dynamically from computed days_outlook
+    if not has_usable_weather:
+        summary_hi = "साप्ताहिक मौसम पूर्वानुमान उपलब्ध नहीं है। सामान्य फसल रखरखाव एवं कीट निगरानी जारी रखें।"
+        summary_en = "Weekly meteorological forecast unavailable. Continue routine crop maintenance and field scouting."
+    else:
+        rain_days = sum(1 for d in days_outlook if d.get("status") == "RAIN")
+        warm_days = sum(1 for d in days_outlook if d.get("status") == "WARM")
+        if rain_days >= 4:
+            summary_hi = f"सप्ताह में {rain_days} दिन वर्षा का पूर्वानुमान है। खेत में जलजमाव से बचाव करें और कीटनाशक/उर्वरक छिड़काव स्थगित रखें।"
+            summary_en = f"Rain forecasted on {rain_days} days this week. Postpone foliar spraying and ensure proper field drainage."
+        elif rain_days > 0:
+            summary_hi = f"सप्ताह में {rain_days} दिन छिटपुट वर्षा की संभावना है। वर्षा रहित दिनों में ही कीटनाशक व उर्वरक छिड़काव करें।"
+            summary_en = f"Intermittent rain expected on {rain_days} day(s). Restrict chemical spraying and top-dressing to dry windows."
+        elif warm_days >= 4:
+            summary_hi = "पूरे सप्ताह तापमान अधिक रहने की संभावना है। वाष्पीकरण अधिक होगा, फसल में नियमित हल्की सिंचाई सुनिश्चित करें।"
+            summary_en = "High temperatures expected throughout the week. Maintain adequate irrigation to counter elevated evaporative demand."
+        else:
+            summary_hi = "सप्ताह भर मौसम सामान्यतः अनुकूल रहने का अनुमान है। सामान्य कृषि कार्य, निराई-गुड़ाई एवं फसल निरीक्षण के लिए उपयुक्त समय।"
+            summary_en = "Generally favorable weather expected this week. Optimal window for intercultural operations and crop scouting."
 
     return {
         "crop": crop_name,
         "week_start": now.strftime("%Y-%m-%d"),
         "outlook": days_outlook,
-        "weekly_summary_hi": "सप्ताह के मध्य में मौसम सामान्यतः साफ रहेगा। जलभराव वाले दिनों में रासायनिक छिड़काव से बचें।",
-        "weekly_summary_en": "Mid-week conditions are optimal for fieldwork. Avoid foliar chemical sprays during rain windows."
+        "weather_available": has_usable_weather,
+        "weekly_summary_hi": summary_hi,
+        "weekly_summary_en": summary_en
     }
 
 
@@ -333,16 +436,38 @@ def get_sms_text(
     lang: str = "hi"
 ) -> str:
     """
-    Generates a concise, DLT-compliant SMS string under 160 characters.
+    Generates a concise, DLT-compliant SMS string strictly under or equal to 160 characters.
+    Constructs the message and enforces the final length budget on the complete string.
     """
-    crop = decisions.get("crop", "फसल")
+    crop = decisions.get("crop", "फसल" if lang == "hi" else "Crop")
     actions = decisions.get("today_actions", [])
     if not actions:
         if lang == "hi":
-            return f"मैत्री परामर्श: {crop} में स्थिति सामान्य है। नियमित नमी बनाए रखें। MAITTRI"
-        return f"MAITTRI Alert: Normal conditions for {crop}. Maintain field moisture. MAITTRI"
+            msg = f"मैत्री परामर्श: {crop} में स्थिति सामान्य है। नियमित नमी बनाए रखें। MAITTRI"
+        else:
+            msg = f"MAITTRI Alert: Normal conditions for {crop}. Maintain field moisture. MAITTRI"
+        return msg[:160]
 
     top = actions[0]
     if lang == "hi":
-        return f"मैत्री अलर्ट ({crop}): {top.get('title_hi')}। {top.get('action_text_hi')[:90]}... MAITTRI"
-    return f"MAITTRI Alert ({crop}): {top.get('title_en')}. {top.get('action_text_en')[:90]}... MAITTRI"
+        title = (top.get("title_hi") or top.get("title_en") or "").strip()
+        action = (top.get("action_text_hi") or top.get("action_text_en") or "").strip()
+        prefix = f"मैत्री अलर्ट ({crop}): {title}। "
+        suffix = " MAITTRI"
+    else:
+        title = (top.get("title_en") or top.get("title_hi") or "").strip()
+        action = (top.get("action_text_en") or top.get("action_text_hi") or "").strip()
+        prefix = f"MAITTRI Alert ({crop}): {title}. "
+        suffix = " MAITTRI"
+
+    full_msg = f"{prefix}{action}{suffix}"
+    if len(full_msg) <= 160:
+        return full_msg
+
+    # Budget space for action text within 160 characters
+    budget = 160 - len(prefix) - len("...") - len(suffix)
+    if budget >= 15:
+        truncated_action = action[:budget].rstrip()
+        return f"{prefix}{truncated_action}...{suffix}"
+
+    return full_msg[:157] + "..." if len(full_msg) > 160 else full_msg

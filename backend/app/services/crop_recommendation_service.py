@@ -1,5 +1,7 @@
 from ..data import CROPS
 
+import re
+
 CROP_ALIASES = {
     "wheat": "Wheat", "गेहूं": "Wheat", "gehun": "Wheat", "gehu": "Wheat",
     "mustard": "Mustard", "सरसों": "Mustard", "sarson": "Mustard", "rai": "Mustard",
@@ -7,9 +9,37 @@ CROP_ALIASES = {
     "maize": "Maize", "मक्का": "Maize", "makka": "Maize", "corn": "Maize",
     "potato": "Potato", "आलू": "Potato", "aalu": "Potato", "alu": "Potato",
     "tomato": "Tomato", "टमाटर": "Tomato", "tamatar": "Tomato",
-    "gram": "Gram", "चना": "Gram", "chana": "Gram", "chickpea": "Gram", "gram/chickpea": "Gram",
+    "black gram": "Black Gram", "blackgram": "Black Gram", "urad": "Black Gram", "उड़द": "Black Gram",
+    "green gram": "Green Gram", "greengram": "Green Gram", "moong": "Green Gram", "mung": "Green Gram", "मूंग": "Green Gram",
+    "red gram": "Red Gram", "redgram": "Red Gram", "arhar": "Red Gram", "tur": "Red Gram", "अरहर": "Red Gram", "तूर": "Red Gram",
+    "pigeon pea": "Red Gram", "pigeonpea": "Red Gram",
+    "horse gram": "Horse Gram", "horsegram": "Horse Gram", "kulthi": "Horse Gram", "कुलथी": "Horse Gram",
+    "bengal gram": "Gram/Chickpea", "bengalgram": "Gram/Chickpea",
+    "gram": "Gram/Chickpea", "chickpea": "Gram/Chickpea", "chick pea": "Gram/Chickpea", "chana": "Gram/Chickpea",
+    "चना": "Gram/Chickpea", "gram/chickpea": "Gram/Chickpea",
+    "pea": "Pea", "peas": "Pea", "matar": "Pea", "मटर": "Pea",
     "cotton": "Cotton", "कपास": "Cotton", "kapas": "Cotton",
-    "sugarcane": "Sugarcane", "गन्ना": "Sugarcane", "ganna": "Sugarcane"
+    "sugarcane": "Sugarcane", "गन्ना": "Sugarcane", "ganna": "Sugarcane",
+    "soybean": "Soybean", "सोयाबीन": "Soybean",
+    "onion": "Onion", "प्याज": "Onion", "pyaj": "Onion",
+    "groundnut": "Groundnut", "मूंगफली": "Groundnut", "mungfali": "Groundnut"
+}
+
+COMPOUND_CROP_ALIASES = {
+    "black gram": "Black Gram",
+    "blackgram": "Black Gram",
+    "green gram": "Green Gram",
+    "greengram": "Green Gram",
+    "red gram": "Red Gram",
+    "redgram": "Red Gram",
+    "horse gram": "Horse Gram",
+    "horsegram": "Horse Gram",
+    "bengal gram": "Gram/Chickpea",
+    "bengalgram": "Gram/Chickpea",
+    "chick pea": "Gram/Chickpea",
+    "chickpea": "Gram/Chickpea",
+    "pigeon pea": "Red Gram",
+    "pigeonpea": "Red Gram",
 }
 
 SEASON_ALIASES = {
@@ -38,18 +68,37 @@ def normalize_crop_name(name: str) -> str:
     if not name:
         return ""
     clean = name.strip().lower()
+    norm = re.sub(r"\s+", " ", re.sub(r"[\-_]+", " ", clean)).strip()
+
+    # Handle known compound crop names on normalized string before single token splitting
+    for comp_key, comp_val in COMPOUND_CROP_ALIASES.items():
+        if re.search(r'\b' + re.escape(comp_key) + r'\b', norm):
+            return comp_val
+
     # If string contains parenthesis like 'गेहूं (Wheat)', extract sub-parts
     if "(" in clean:
         parts = clean.replace(")", "").split("(")
         for p in parts:
             p_strip = p.strip()
+            p_norm = re.sub(r"\s+", " ", re.sub(r"[\-_]+", " ", p_strip)).strip()
+            for comp_key, comp_val in COMPOUND_CROP_ALIASES.items():
+                if re.search(r'\b' + re.escape(comp_key) + r'\b', p_norm):
+                    return comp_val
+            if p_norm in CROP_ALIASES:
+                return CROP_ALIASES[p_norm]
             if p_strip in CROP_ALIASES:
                 return CROP_ALIASES[p_strip]
+
+    if norm in CROP_ALIASES:
+        return CROP_ALIASES[norm]
     if clean in CROP_ALIASES:
         return CROP_ALIASES[clean]
-    for k, v in CROP_ALIASES.items():
-        if k in clean:
-            return v
+
+    # Check individual token/word boundaries rather than arbitrary substring matching
+    tokens = [t for t in re.split(r"[\s,/_\\-]+", clean) if t]
+    for token in tokens:
+        if token in CROP_ALIASES:
+            return CROP_ALIASES[token]
     return name.strip().capitalize()
 
 def normalize_season(season: str) -> str:
@@ -160,10 +209,6 @@ def make_plan(farm, crop_name):
         raise ValueError("Valid crop name is required")
     norm_name = normalize_crop_name(crop_name)
     crop = next((c for c in CROPS if c["name"].lower() == norm_name.lower()), None)
-    if not crop:
-        # Fallback to direct substring match if needed
-        clean = crop_name.strip().lower()
-        crop = next((c for c in CROPS if c["name"].lower() in clean or clean in c["name"].lower()), None)
     if not crop:
         raise ValueError(f"Crop '{crop_name}' not found")
     nutrients = analyze_nutrients(farm)

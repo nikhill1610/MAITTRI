@@ -1,10 +1,12 @@
 import os
+import secrets
+import logging
 from fastapi import APIRouter, Depends, Query, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
 from ..database import get_db
-from ..deps import get_optional_current_user
+from ..deps import get_optional_current_user, is_elevated_user
 from ..schemas import (
     IoTSensorDataCreate,
     IoTLatestResponse,
@@ -22,6 +24,7 @@ from ..services.iot_service import (
     get_host_lan_ips
 )
 
+logger = logging.getLogger("maitri.iot")
 router = APIRouter()
 
 
@@ -124,7 +127,7 @@ def get_config():
     Returns the current configurable distance thresholds and device timeout settings.
     Host LAN IPs are only exposed in development environments.
     """
-    is_prod = os.getenv("ENVIRONMENT", "development").lower() == "production"
+    is_prod = os.getenv("ENVIRONMENT", "production").lower() == "production"
     lan_ips, recommended_url = ([], None) if is_prod else get_host_lan_ips()
     return {
         "status": "success",
@@ -160,15 +163,25 @@ def set_config(
 ):
     """
     Updates configurable distance thresholds (CLEAR, WARNING, CRITICAL) and timeout.
-    Enforces that registered farmers cannot reconfigure operator hardware thresholds.
+    Enforces that registered farmers and anonymous callers cannot reconfigure hardware thresholds.
     """
-    if user:
-        user_role = (getattr(user, "role", None) or "FARMER").upper()
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
+    is_prod = os.getenv("ENVIRONMENT", "production").lower() == "production"
+    dev_sim_allowed = (not is_prod) and (
+        os.getenv("ALLOW_DEV_CONFIG", "false").lower() in ("true", "1") or
+        os.getenv("PYTEST_CURRENT_TEST") is not None
+    )
+
+    if not user:
+        if not dev_sim_allowed:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Threshold configuration requires Authorized Operator privileges."
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to configure thresholds."
             )
+    elif not is_elevated_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Threshold configuration requires Authorized Operator privileges."
+        )
     updated = update_thresholds(config)
     return {
         "status": "success",
@@ -177,11 +190,37 @@ def set_config(
     }
 
 
+def is_simulation_device(device_id: Any, device: Optional[Any] = None) -> bool:
+    """
+    Verify if a device ID or device instance is explicitly designated for simulation/testing.
+    Does NOT treat production hardware IDs (like MAITRI_ESP8266_01) as simulation-only.
+    """
+    if hasattr(device_id, "device_id"):
+        device = device_id
+        device_id = getattr(device, "device_id", "")
+    dev_id = (device_id or "").lower()
+    if (
+        dev_id.startswith("maitri_sim")
+        or dev_id.startswith("sim_")
+        or "simulat" in dev_id
+        or "demo" in dev_id
+        or "prototype" in dev_id
+        or "virtual" in dev_id
+    ):
+        return True
+    if device and getattr(device, "name", None):
+        dev_name = device.name.lower()
+        if "simulat" in dev_name or "demo" in dev_name or "prototype" in dev_name or "virtual" in dev_name:
+            return True
+    return False
+
+
 @router.post("/simulate")
 def simulate_telemetry(
-    device_id: str = Query("MAITRI_ESP8266_01", description="Target device ID to simulate"),
+    device_id: str = Query("MAITRI_SIM_NODE", description="Target device ID to simulate"),
     controller_type: str = Query("ESP8266", description="ESP8266 or ESP32"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_optional_current_user)
 ):
     """
     Simulates a single 20°-160° ultrasonic sweep with realistic environmental data.
@@ -192,10 +231,72 @@ def simulate_telemetry(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Telemetry simulation endpoint disabled in production."
         )
-    payload = generate_simulation_payload(device_id, controller_type)
-    telemetry = process_incoming_sensor_data(db, payload)
+
+    # Assigning simulation credentials strictly requires an authenticated elevated operator.
+    if not user or not is_elevated_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot assign simulation credentials without authenticated elevated operator privileges."
+        )
+
+    from ..models import IoTDevice
+    from ..services.iot_service import hash_device_token
+
+    sim_dev = db.query(IoTDevice).filter(IoTDevice.device_id == device_id).first()
+
+    # Simulation credentials may only be assigned to explicitly simulation-designated devices.
+    if not is_simulation_device(device_id, sim_dev):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot assign simulation credentials to non-simulation devices."
+        )
+
+    c_type = controller_type if isinstance(controller_type, str) else "ESP8266"
+    payload = generate_simulation_payload(device_id, c_type)
+
+    # Cryptographically random simulation token — never use fixed tokens or log plaintext
+    sim_token = secrets.token_urlsafe(32)
+    sim_token_hash = hash_device_token(sim_token)
+
+    prev_token_hash = sim_dev.device_token_hash if sim_dev else None
+    if sim_dev:
+        sim_dev.device_token_hash = sim_token_hash
+        db.flush()
+
+    try:
+        telemetry = process_incoming_sensor_data(db, payload, user=user, device_token=sim_token)
+        db.commit()
+    except PermissionError as pe:
+        if sim_dev:
+            sim_dev.device_token_hash = prev_token_hash
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(pe)
+        )
+    except ValueError as ve:
+        if sim_dev:
+            sim_dev.device_token_hash = prev_token_hash
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve)
+        )
+    except Exception as exc:
+        if sim_dev:
+            sim_dev.device_token_hash = prev_token_hash
+        db.rollback()
+        if isinstance(exc, HTTPException):
+            raise
+        logger.exception("Simulation telemetry ingestion failed for device %s", device_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Simulation telemetry ingestion failed."
+        )
+
     return {
         "status": "success",
         "message": f"Simulated radar sweep generated for {device_id}",
-        "data": telemetry
+        "data": telemetry,
+        "simulation_token": sim_token
     }

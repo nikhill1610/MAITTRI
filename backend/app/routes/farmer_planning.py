@@ -14,11 +14,11 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 from ..database import get_db
-from ..models import Farm, FarmPlan, FarmPlanTask, FarmPlanCompletion
-from ..deps import get_current_user, is_same_user
+from ..models import Farm, FarmPlan, FarmPlanTask, FarmPlanCompletion, Farmer
+from ..deps import get_current_user, is_same_user, is_elevated_user, get_authorized_farm
 from ..schemas import (
     FarmerPlanCreateRequest,
     FarmerPlanUpdateRequest,
@@ -70,6 +70,22 @@ def get_single_crop_calendar(crop_name: str):
 # 2. FARMER PLANNING CORE ENDPOINTS
 # =====================================================================
 
+def _has_plan_access(plan: Optional[FarmPlan], farm: Optional[Farm], user_id: Any, db: Session) -> bool:
+    """Verifies user has access to farm plan via direct ownership or farm association."""
+    if not user_id:
+        return False
+    if plan and is_same_user(plan.user_id, user_id):
+        return True
+    if farm:
+        if is_same_user(farm.user_id, user_id):
+            return True
+        if farm.farmer_id:
+            farmer = db.query(Farmer).filter(Farmer.user_id == user_id).first()
+            if farmer and farm.farmer_id == farmer.id:
+                return True
+    return False
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_farmer_plan(
     payload: FarmerPlanCreateRequest,
@@ -80,17 +96,10 @@ def create_farmer_plan(
     Creates or recalculates a personalized farm plan based on sowing date,
     crop age, or current crop stage. Enforces farm ownership.
     """
-    farm = db.query(Farm).filter(Farm.id == payload.farm_id).first()
-    if not farm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
-
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN") and not is_same_user(farm.user_id, user.id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: Cannot create plan for another farmer's farm."
-            )
+    farm = get_authorized_farm(
+        db, payload.farm_id, user=user,
+        detail_forbidden="Access denied: Cannot create plan for another farmer's farm."
+    )
 
     # Resolve sowing date
     resolved_sowing_date: Optional[date] = None
@@ -112,10 +121,12 @@ def create_farmer_plan(
             detail="Please provide a valid sowing date, crop age in days, or current crop stage."
         )
 
-    user_id = user.id if user else farm.user_id
+    # Persist plan against the farm owner rather than the operator
+    farmer = db.query(Farmer).filter(Farmer.id == farm.farmer_id).first() if farm.farmer_id else None
+    plan_owner_id = farm.user_id or (farmer.user_id if farmer else None) or (user.id if user else None)
     plan_record, plan_data = create_or_update_persisted_plan(
         db=db,
-        user_id=user_id,
+        user_id=plan_owner_id,
         farm_id=farm.id,
         crop_name=payload.crop,
         sowing_date=resolved_sowing_date,
@@ -137,14 +148,16 @@ def list_farmer_plans(
 ):
     """Lists saved personalized farm plans with tenant isolation."""
     query = db.query(FarmPlan)
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            user_farm_ids = [f.id for f in db.query(Farm).filter(Farm.user_id == user.id).all()]
-            query = query.filter(
-                (FarmPlan.user_id == user.id) |
-                (FarmPlan.farm_id.in_(user_farm_ids))
-            )
+    if user and not is_elevated_user(user):
+        farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+        farm_filters = [Farm.user_id == user.id]
+        if farmer:
+            farm_filters.append(Farm.farmer_id == farmer.id)
+        user_farm_ids = [f.id for f in db.query(Farm).filter(or_(*farm_filters)).all()]
+        query = query.filter(
+            (FarmPlan.user_id == user.id) |
+            (FarmPlan.farm_id.in_(user_farm_ids))
+        )
     if farm_id is not None:
         query = query.filter(FarmPlan.farm_id == farm_id)
 
@@ -179,14 +192,11 @@ def get_farmer_plan(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm plan not found")
 
     farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            if not is_same_user(plan.user_id, user.id) and (not farm or not is_same_user(farm.user_id, user.id)):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied: Farm plan belongs to another farmer."
-                )
+    if user and not is_elevated_user(user) and not _has_plan_access(plan, farm, user.id, db):
+        raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Farm plan belongs to another farmer."
+            )
 
     sowing_date = parse_date_safely(plan.sowing_date)
     if not sowing_date:
@@ -282,17 +292,14 @@ def update_task_status(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task #{task_id} not found")
 
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
-            if plan and not is_same_user(plan.user_id, user.id):
-                farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or not is_same_user(farm.user_id, user.id):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Access denied: Task belongs to another farmer's plan."
-                    )
+    if user and not is_elevated_user(user):
+        plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
+        farm = db.query(Farm).filter(Farm.id == plan.farm_id).first() if plan else None
+        if not _has_plan_access(plan, farm, user.id, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Task belongs to another farmer's plan."
+            )
 
     try:
         res = mark_farm_task_complete(db, task_id=task_id, status=payload.status, notes=payload.notes)
@@ -313,17 +320,14 @@ def complete_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task #{task_id} not found")
 
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
-            if plan and not is_same_user(plan.user_id, user.id):
-                farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or not is_same_user(farm.user_id, user.id):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Access denied: Task belongs to another farmer's plan."
-                    )
+    if user and not is_elevated_user(user):
+        plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
+        farm = db.query(Farm).filter(Farm.id == plan.farm_id).first() if plan else None
+        if not _has_plan_access(plan, farm, user.id, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Task belongs to another farmer's plan."
+            )
 
     notes = payload.notes if payload else None
     try:
@@ -345,17 +349,14 @@ def add_note_to_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task #{task_id} not found")
 
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
-            if plan and not is_same_user(plan.user_id, user.id):
-                farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or not is_same_user(farm.user_id, user.id):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Access denied: Task belongs to another farmer's plan."
-                    )
+    if user and not is_elevated_user(user):
+        plan = db.query(FarmPlan).filter(FarmPlan.id == task.farm_plan_id).first()
+        farm = db.query(Farm).filter(Farm.id == plan.farm_id).first() if plan else None
+        if not _has_plan_access(plan, farm, user.id, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Task belongs to another farmer's plan."
+            )
 
     try:
         res = add_task_farmer_note(db, task_id=task_id, notes=payload.notes)
@@ -375,16 +376,13 @@ def get_farm_diary(
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm plan not found")
 
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            if not is_same_user(plan.user_id, user.id):
-                farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
-                if not farm or not is_same_user(farm.user_id, user.id):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Access denied: Farm diary belongs to another farmer."
-                    )
+    if user and not is_elevated_user(user):
+        farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
+        if not _has_plan_access(plan, farm, user.id, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Farm diary belongs to another farmer."
+            )
 
     diary_records = get_farm_diary_history(db, farm_plan_id=plan.id)
     return {

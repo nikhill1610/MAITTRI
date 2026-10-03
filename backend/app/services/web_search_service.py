@@ -160,7 +160,7 @@ def extract_domain(url: str) -> str:
     """Extracts lowercase clean domain from a URL."""
     try:
         parsed = urlparse(url)
-        domain = parsed.netloc.lower()
+        domain = (parsed.hostname or "").lower()
         if domain.startswith("www."):
             domain = domain[4:]
         return domain
@@ -213,20 +213,38 @@ def sanitize_and_enrich_query(
     """
     clean = user_query.strip()
 
-    # 1. Strip phone numbers (10 digits with optional +91 or dashes)
-    clean = re.sub(r"(?:\+91[\-\s]?)?[6-9]\d{9}", "", clean)
-
-    # 2. Strip Aadhaar patterns (spaced, hyphenated, or contiguous 12-digit)
+    # 1. Strip Aadhaar patterns first (spaced, hyphenated, or contiguous 12-digit)
     clean = re.sub(r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b", "", clean)
 
+    # 2. Strip phone numbers (10 digits with optional +91, with strict word boundaries)
+    clean = re.sub(r"(?:\+91[\-\s]?)?\b[6-9]\d{9}\b", "", clean)
+
     # 3. Strip JWT tokens or hex IDs
-    clean = re.sub(r"\beyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+", "", clean)
-    clean = re.sub(r"\b[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}", "", clean)
+    clean = re.sub(
+        r"\beyJ[A-Za-z0-9_=-]+\.[A-Za-z0-9_=-]+\.[A-Za-z0-9_=-]+",
+        "",
+        clean
+    )
+    clean = re.sub(
+        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        "",
+        clean
+    )
 
     # 4. Strip introductory farmer PII phrases (ensuring agricultural schemes like PM-KISAN are preserved)
-    clean = re.sub(r"(?<!pm[\-\s])\b(?:my name is|mera naam|farmer)\s+[A-Za-z\u0900-\u097F]+[\s,.]*", " ", clean, flags=re.IGNORECASE)
+    clean = re.sub(
+        r"\b(?:my name is|mera naam(?:\s+hai)?|farmer name\s*[:=]?)\s+[A-Za-z\u0900-\u097F]+[\s,.]*",
+        " ",
+        clean,
+        flags=re.IGNORECASE
+    )
     clean = re.sub(r"\bkisan\s+naam\s*[:=]?\s*[A-Za-z\u0900-\u097F]+", " ", clean, flags=re.IGNORECASE)
-    clean = re.sub(r"(?:farm id|user id|account)\s*[:=]?\s*\w+", " ", clean, flags=re.IGNORECASE)
+    clean = re.sub(
+        r"\b(?:farm id|user id|account (?:id|no|number))\s*[:=]?\s*\w+",
+        " ",
+        clean,
+        flags=re.IGNORECASE
+    )
 
     # 5. Clean excess whitespace
     clean = " ".join(clean.split()).strip()
@@ -250,7 +268,7 @@ def sanitize_and_enrich_query(
         current_year = str(datetime.now().year)
         if current_year not in clean:
             terms.append(current_year)
-        if not any(k in clean.lower() for k in ["india", "up", "uttar pradesh", "haryana", "punjab", "mp", "maharashtra", "bihar"]):
+        if not re.search(r"\b(?:india|up|uttar pradesh|haryana|punjab|mp|maharashtra|bihar)\b", clean, re.IGNORECASE):
             terms.append("India")
         if "government" not in clean.lower() and "sarkar" not in clean.lower():
             terms.append("government agriculture")
@@ -278,7 +296,7 @@ class SafeSearchCache:
             if time.time() - cached_time > self.ttl:
                 del self._store[key]
                 return None
-            return results
+            return list(results) if isinstance(results, list) else results
 
     def set(self, key: str, results: List[WebEvidence]):
         with self._lock:
@@ -564,7 +582,8 @@ class WebSearchService:
 
         # Safety-critical Pest / Disease query gate (down-rank / reject low-authority General Web)
         is_pest_or_disease = bool(re.search(
-            r"\b(disease|pest|insect|fungus|blight|rust|rot|bacteri|caterpillar|borer|कीट|रोग|बीमारी|कीड़ा|fungicide|pesticide|कीटनाशक)\b",
+            r"\b(?:diseases?|pests?|insects?|fung(?:us|i)|blights?|rust|rots?|bacteri\w*|caterpillars?|borers?|fungicides?|pesticides?|insecticides?)\b"
+            r"|कीट|रोग|बीमारी|कीड़|कीटनाशक",
             query.lower()
         ))
         if is_pest_or_disease:

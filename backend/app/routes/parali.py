@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import json
+import math
 import logging
 
 from ..database import get_db
 from ..models import Farm, ParaliAnalysisRecord
 from ..schemas import ParaliAnalyzeRequest, ParaliActionPlanRequest
-from ..deps import get_optional_current_user
+from ..deps import get_optional_current_user, is_elevated_user, get_authorized_farm
 from ..services.parali_management_service import (
     analyze_crop_residue,
     get_all_residue_methods,
@@ -51,17 +52,25 @@ def analyze_parali(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required to analyze a specific farm."
             )
-        farm_query = db.query(Farm).filter(Farm.id == payload.farm_id)
-        user_role = (getattr(user, "role", "FARMER") or "FARMER").upper()
-        if user_role not in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN"):
-            farm_query = farm_query.filter(Farm.user_id == user.id)
-        farm = farm_query.first()
-        if not farm:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or access denied")
+        farm = get_authorized_farm(db, payload.farm_id, user=user, detail_not_found="Farm not found or access denied")
 
-    # Precedence: Explicit payload > Associated Farm Profile > Defaults
+    # Precedence: Explicit payload > Associated Farm Profile
     crop = payload.crop or (farm.current_crop if farm and farm.current_crop else "rice")
-    area = payload.area if payload.area and payload.area > 0 else (farm.area if farm and farm.area else 1.0)
+    if payload.area is not None:
+        if not math.isfinite(payload.area) or payload.area <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Farm area must be a finite number greater than 0, got {payload.area}."
+            )
+        area = payload.area
+    elif farm and farm.area and farm.area > 0:
+        area = farm.area
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Farm area must be explicitly provided and greater than 0."
+        )
+
     area_unit = payload.area_unit or (farm.area_unit if farm and farm.area_unit else "acre")
     lat = payload.latitude if payload.latitude is not None else (farm.latitude if farm else None)
     lon = payload.longitude if payload.longitude is not None else (farm.longitude if farm else None)
@@ -69,22 +78,28 @@ def analyze_parali(
     prev_crop = payload.previous_crop or (farm.previous_crop if farm else None)
     curr_crop = payload.current_crop or (farm.current_crop if farm else None)
 
-    analysis_result = analyze_crop_residue(
-        crop=crop,
-        area=area,
-        area_unit=area_unit,
-        residue_quantity=payload.residue_quantity,
-        residue_quantity_source=payload.residue_quantity_source,
-        farmer_goal=payload.farmer_goal,
-        machinery_available=payload.machinery_available,
-        machinery=payload.machinery,
-        latitude=lat,
-        longitude=lon,
-        soil_type=soil_type,
-        previous_crop=prev_crop,
-        current_crop=curr_crop,
-        farm_id=farm.id if farm else None,
-    )
+    try:
+        analysis_result = analyze_crop_residue(
+            crop=crop,
+            area=area,
+            area_unit=area_unit,
+            residue_quantity=payload.residue_quantity,
+            residue_quantity_source=payload.residue_quantity_source,
+            farmer_goal=payload.farmer_goal,
+            machinery_available=payload.machinery_available,
+            machinery=payload.machinery,
+            latitude=lat,
+            longitude=lon,
+            soil_type=soil_type,
+            previous_crop=prev_crop,
+            current_crop=curr_crop,
+            farm_id=farm.id if farm else None,
+        )
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(val_err)
+        )
 
     # Attach farm metadata if available
     if farm:

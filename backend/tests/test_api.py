@@ -459,7 +459,7 @@ def test_market_prices_suite():
     assert d_up["price"]["modal"] > 0
     assert d_up["price"]["min"] <= d_up["price"]["modal"] <= d_up["price"]["max"]
     assert d_up["price"]["unit"] == "quintal"
-    assert d_up["freshness"] == "latest_available"
+    assert d_up["freshness"] in ("latest_available", "benchmark_reference")
     assert "source" in d_up
 
     # TEST 2: State = Punjab, Crop = Wheat

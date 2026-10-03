@@ -8,9 +8,9 @@ import bcrypt
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ALGORITHM = "HS256"
 
-# Fail-fast production validation for SECRET_KEY
-_env = os.getenv("ENVIRONMENT", "development").lower()
-if _env == "production":
+# Fail-fast production validation for SECRET_KEY (fail closed by default)
+_env = os.getenv("ENVIRONMENT", "production").lower()
+if _env != "development":
     _insecure_defaults = {
         "dev-secret-change-me",
         "change-this-in-production-to-a-secure-random-string",
@@ -56,19 +56,15 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def create_token(user_id, extra_claims: dict = None) -> str:
     if isinstance(user_id, dict):
-        payload = dict(user_id)
+        payload = dict(extra_claims or {})
+        payload.update(user_id)
         if "exp" not in payload:
             payload["exp"] = datetime.now(timezone.utc) + timedelta(days=7)
-        if extra_claims:
-            payload.update(extra_claims)
         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    payload = {
-        "sub": str(user_id),
-        "exp": datetime.now(timezone.utc) + timedelta(days=7)
-    }
-    if extra_claims:
-        payload.update(extra_claims)
+    payload = dict(extra_claims or {})
+    payload["sub"] = str(user_id)
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(days=7)
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 create_access_token = create_token

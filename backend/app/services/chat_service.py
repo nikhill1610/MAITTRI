@@ -108,10 +108,14 @@ def clean_farmer_markdown(text: str) -> str:
 
 
 def _safe_print(text: str) -> None:
-    """Safe stdout printing on Windows consoles that may not support UTF-8 natively."""
+    """Safe stdout printing on Windows consoles, gated by ENABLE_DEBUG_LOGGING."""
+    if os.getenv("ENABLE_DEBUG_LOGGING", "false").lower() not in ("true", "1"):
+        return
     try:
         encoding = sys.stdout.encoding or "utf-8"
-        print(text.encode(encoding, errors="replace").decode(encoding))
+        # Truncate text to avoid dumping massive payloads
+        safe_text = text if len(text) <= 500 else text[:500] + "... [truncated]"
+        print(safe_text.encode(encoding, errors="replace").decode(encoding))
     except Exception:
         pass
 
@@ -128,15 +132,16 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # -----------------------------------------------------------------------------
 # Anti-Hallucination & Safety Interceptors (Phase 4 Sections 6, 12, 13)
 # -----------------------------------------------------------------------------
-def check_anti_hallucination_intercept(query: str, language: str) -> Optional[Dict[str, Any]]:
+def check_anti_hallucination_intercept(query: str, language: str, intent: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Catches queries where live external data is required but no live feed is streamed to chat,
     preventing the LLM from hallucinating prices, forecasts, or ungrounded chemicals.
     """
     q_lower = query.lower().strip()
+    norm_intent = str(intent).upper() if intent else None
 
-    # 1. Live Mandi Price Query (only when web search service is disabled)
-    if not getattr(web_search_service, "enabled", False):
+    # 1. Live Mandi Price Query (only for MARKET intent or when intent unspecified, and web search service disabled)
+    if (norm_intent is None or norm_intent in ("INTENT.MARKET", "MARKET")) and not getattr(web_search_service, "enabled", False):
         mandi_patterns = [
             r"mandi (bhav|rate|price|rates)",
             r"(मंडी|भाव|रेट).*?(क्या है|कितना है|बताएं|बताओ|आज)",
@@ -176,8 +181,8 @@ def check_anti_hallucination_intercept(query: str, language: str) -> Optional[Di
                 "provider": "anti_hallucination_guard"
             }
 
-    # 2. Live Weather Forecast Query (only when web search / weather service is disabled)
-    if not getattr(web_search_service, "enabled", False):
+    # 2. Live Weather Forecast Query (only for WEATHER intent or when intent unspecified, and web search / weather service disabled)
+    if (norm_intent is None or norm_intent in ("INTENT.WEATHER", "WEATHER")) and not getattr(web_search_service, "enabled", False):
         weather_patterns = [
             r"(कल|today|tomorrow|aaj|kal).*?(मौसम|weather|rain|barish|तापमान|forecast)",
             r"(मौसम|weather).*?(कैसा रहेगा|kaisa rahega|what will be|forecast)",
@@ -451,14 +456,14 @@ def call_gemini(
     Zero heavy dependencies, works seamlessly with GEMINI_API_KEY.
     """
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    if not api_key or not api_key.startswith("AIzaSy"):
         return False, "NO_GEMINI_API_KEY", ""
 
-    gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
     if "/" in gemini_model:
         gemini_model = gemini_model.split("/")[-1]
-    if not gemini_model:
-        gemini_model = "gemini-3.8-flash"
+    if not gemini_model or "3.8" in gemini_model:
+        gemini_model = "gemini-2.0-flash"
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
 
@@ -489,13 +494,14 @@ def call_gemini(
         "x-goog-api-key": api_key,
     }
 
+    gemini_timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "10.0"))
     try:
         try:
             import httpx
-            with httpx.Client(timeout=3.0) as client:
+            with httpx.Client(timeout=httpx.Timeout(gemini_timeout, connect=3.0)) as client:
                 resp = client.post(url, headers=headers, json=payload)
         except ImportError:
-            resp = requests.post(url, headers=headers, json=payload, timeout=3.0)
+            resp = requests.post(url, headers=headers, json=payload, timeout=(3.0, gemini_timeout))
 
         if resp.status_code == 200:
             data = resp.json()
@@ -603,6 +609,10 @@ def call_openrouter(
                         return True, cleaned_content, used_model
 
                 last_error = "EMPTY_CHOICES"
+            elif response.status_code == 401:
+                logger.error(f"OpenRouter HTTP 401 (Authentication failure): {response.text[:200]}")
+                last_error = "HTTP_401"
+                break
             elif response.status_code in (404, 429, 500, 503):
                 logger.warning(f"OpenRouter model '{m}' returned HTTP {response.status_code}. Trying next candidate.")
                 last_error = f"HTTP_{response.status_code}"
@@ -932,11 +942,10 @@ def generate_grounded_offline_reply(
     )
     detected_wheat_age = entities.get("crop_age_days") if (entities and entities.get("crop_age_days")) else None
     if not detected_wheat_age:
-        m_age = re.search(r"\b(\d+)\s*(?:din|दिन|days?|day)\b", q_lower)
+        # Require explicit age phrases: e.g. "20 days", "22 din", "21 दिन", "25 das"
+        m_age = re.search(r"\b(\d{1,3})\s*(?:din|दिन|days?|day|das)\b", q_lower)
         if m_age:
             detected_wheat_age = int(m_age.group(1))
-        elif re.search(r"\b(2[0-5]|20|21|22|23|24|25)\b", q_lower):
-            detected_wheat_age = 22
 
     is_action_query = bool(re.search(
         r"\b(ab\s+kya\s+karu|ab\s+kya\s+karein|kya\s+karna\s+hai|kya\s+kare|kya\s+karein|kya\s+kareं|"
@@ -949,8 +958,7 @@ def generate_grounded_offline_reply(
     is_wheat_cri = bool(
         is_wheat_scope and (
             (detected_wheat_age and 18 <= detected_wheat_age <= 28) or
-            re.search(r"\b2[0-5]\b", q_lower) or
-            ((is_irrigation or is_action_query) and any(w in q_lower for w in ["pehli", "first", "पहली", "cri"]))
+            ((is_irrigation or is_action_query) and any(w in q_lower for w in ["cri stage", "crown root", "ताज मूल", "पहली सिंचाई", "pehli sinchai", "first irrigation"]))
         )
     )
     if is_wheat_cri:
@@ -1428,8 +1436,10 @@ def detect_scheme_freshness_request(clean_msg: str) -> Optional[Dict[str, str]]:
         scheme = "PMKSY"
     elif any(k in q_low for k in ["kcc", "kisan credit card"]):
         scheme = "KCC"
-    elif any(k in q_low for k in ["bima", "yojana", "scheme"]):
+    elif "bima" in q_low:
         scheme = "PMFBY"
+    elif any(k in q_low for k in ["yojana", "scheme", "subsidy", "सब्सिडी", "योजना"]):
+        scheme = "GENERIC_SCHEME"
 
     if not scheme:
         return None
@@ -1450,6 +1460,50 @@ def detect_scheme_freshness_request(clean_msg: str) -> Optional[Dict[str, str]]:
         "scheme": scheme,
         "target_year": target_year
     }
+
+
+SCHEME_METADATA: Dict[str, Dict[str, Any]] = {
+    "PMFBY": {
+        "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
+        "section": "Official Guidelines",
+        "source": "pmfby.gov.in",
+        "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+        "category": "Schemes",
+        "url": "https://pmfby.gov.in"
+    },
+    "PM-KISAN": {
+        "title": "PM-KISAN Samman Nidhi Portal",
+        "section": "Official Guidelines & DBT Information",
+        "source": "pmkisan.gov.in",
+        "organization": "Department of Agriculture & Farmers Welfare, GoI",
+        "category": "Schemes",
+        "url": "https://pmkisan.gov.in"
+    },
+    "PMKSY": {
+        "title": "Pradhan Mantri Krishi Sinchayee Yojana Portal",
+        "section": "Micro-Irrigation Guidelines",
+        "source": "pmksy.gov.in",
+        "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+        "category": "Schemes",
+        "url": "https://pmksy.gov.in"
+    },
+    "KCC": {
+        "title": "Kisan Credit Card (KCC) Scheme Guidelines",
+        "section": "Credit & Loan Guidelines",
+        "source": "agricoop.nic.in",
+        "organization": "Department of Agriculture & Farmers Welfare, GoI",
+        "category": "Schemes",
+        "url": "https://agricoop.nic.in"
+    },
+    "GENERIC_SCHEME": {
+        "title": "Government Agricultural Schemes & Guidelines",
+        "section": "Central & State Schemes",
+        "source": "agricoop.nic.in",
+        "organization": "Department of Agriculture & Farmers Welfare, GoI",
+        "category": "Schemes",
+        "url": "https://agricoop.nic.in"
+    }
+}
 
 
 APPROVED_PMFBY_DOMAINS = {
@@ -1694,31 +1748,136 @@ def extract_scheme_structured_evidence(
 def compose_scheme_fallback_response(scheme: str, target_year: str, language: str) -> str:
     """
     Composes safe fallback response when no verified rule change / notification is found.
-    Fulfills exact requirement:
-    'Mujhe official Indian government sources se 2026 ke specific naye PMFBY rule changes verify nahi mile. Main unrelated ya outdated documents ko latest PMFBY rules ke roop me present nahi karunga.'
-    Followed by stable scheme information separately, clearly labelled as general/background information.
+    Respects en / hinglish / hi languages.
     """
-    prefix = (
-        f"Mujhe official Indian government sources se {target_year} ke specific naye {scheme} "
-        f"rule changes verify nahi mile. Main unrelated ya outdated documents ko "
-        f"latest {scheme} rules ke roop me present nahi karunga."
-    )
+    scheme_key = scheme.upper()
+    lang_lower = (language or "hinglish").lower().strip()
 
-    if scheme.upper() == "PMFBY":
-        background_info = (
-            "📌 सामान्य PMFBY दिशा-निर्देश (General/Background Information):\n"
-            "- किसान प्रीमियम हिस्सा: रबी फसलों के लिए 1.5% (बीमित राशि का), खरीफ फसलों के लिए 2.0%, और वाणिज्यिक/बागवानी फसलों के लिए 5.0%।\n"
-            "- 72 घंटे की अनिवार्यता: स्थानीय आपदा (ओलावृष्टि, जलभराव, चक्रवाती बारिश) से फसल क्षति होने पर 72 घंटे के भीतर PMFBY पोर्टल या टोल-फ्री हेल्पलाइन (14447) पर सूचना दर्ज करना अनिवार्य है।\n"
-            "- दावा प्रक्रिया: अधिसूचित क्षेत्र, समय पर प्रीमियम भुगतान और फसल कटाई प्रयोग (CCE) के आधिकारिक आकलन के आधार पर दावा निपटान होता है।\n\n"
-            "स्रोत: pmfby.gov.in (आधिकारिक पोर्टल) / Ministry of Agriculture & Farmers Welfare, GoI"
+    if lang_lower == "en":
+        prefix = (
+            f"I did not find verified {target_year} rule changes for {scheme} from official Indian "
+            f"government sources. I will not present unrelated or outdated documents as latest {scheme} rules."
         )
+        if scheme_key == "PMFBY":
+            background_info = (
+                "📌 Standard PMFBY Guidelines (General/Background Information):\n"
+                "- Farmer Premium Share: 1.5% of sum insured for Rabi crops, 2.0% for Kharif crops, and 5.0% for commercial/horticultural crops.\n"
+                "- 72-Hour Mandate: Intimation within 72 hours of localized calamity (hailstorm, waterlogging, cyclone) via PMFBY portal or helpline (14447) is mandatory.\n"
+                "- Claim Settlement: Based on notified area, timely premium payment, and official Crop Cutting Experiments (CCE) yield assessments.\n\n"
+                "Source: pmfby.gov.in (Official Portal) / Ministry of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "PM-KISAN":
+            background_info = (
+                "📌 Standard PM-KISAN Guidelines (General/Background Information):\n"
+                "- Financial Assistance: Eligible farmer families receive ₹6,000 per year in 3 equal installments (₹2,000 each) via Direct Benefit Transfer (DBT).\n"
+                "- Mandatory Requirements: Aadhaar e-KYC, land-holding verification (Land Seeding), and Aadhaar-seeded bank accounts.\n\n"
+                "Source: pmkisan.gov.in (Official Portal) / Department of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "PMKSY":
+            background_info = (
+                "📌 Standard PMKSY (Per Drop More Crop) Guidelines:\n"
+                "- Objective: Water conservation via financial subsidies on micro-irrigation (drip and sprinkler systems).\n"
+                "- Application: Apply online via the respective state Agriculture/Horticulture department portal.\n\n"
+                "Source: pmksy.gov.in / Ministry of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "KCC":
+            background_info = (
+                "📌 Standard Kisan Credit Card (KCC) Guidelines:\n"
+                "- Credit Facility: Concessional crop loans with an effective annual interest rate of approx. 4% upon prompt repayment.\n"
+                "- Application: Available at any commercial, cooperative, or regional rural bank branch or CSC center.\n\n"
+                "Source: agricoop.nic.in / Reserve Bank of India"
+            )
+        else:
+            background_info = (
+                "📌 Standard Government Agricultural Scheme Guidelines:\n"
+                "- Major central and state schemes have verified operational guidelines on official government portals.\n"
+                "- Any rule modification or new benefit is valid only through official government gazette or department notification.\n\n"
+                "Source: Official Government Portals (agricoop.nic.in / india.gov.in)"
+            )
+    elif lang_lower == "hi":
+        prefix = (
+            f"मुझे आधिकारिक भारत सरकार के स्रोतों से {scheme} के {target_year} के विशिष्ट नए नियम संशोधन सत्यापित नहीं मिले। "
+            f"मैं असंबंधित अथवा पुराने दस्तावेजों को {scheme} के नवीनतम नियमों के रूप में प्रस्तुत नहीं करूंगा।"
+        )
+        if scheme_key == "PMFBY":
+            background_info = (
+                "📌 सामान्य PMFBY दिशा-निर्देश (General/Background Information):\n"
+                "- किसान प्रीमियम हिस्सा: रबी फसलों के लिए 1.5% (बीमित राशि का), खरीफ फसलों के लिए 2.0%, और वाणिज्यिक/बागवानी फसलों के लिए 5.0%।\n"
+                "- 72 घंटे की अनिवार्यता: स्थानीय आपदा (ओलावृष्टि, जलभराव, चक्रवाती बारिश) से फसल क्षति होने पर 72 घंटे के भीतर PMFBY पोर्टल या टोल-फ्री हेल्पलाइन (14447) पर सूचना दर्ज करना अनिवार्य है।\n"
+                "- दावा प्रक्रिया: अधिसूचित क्षेत्र, समय पर प्रीमियम भुगतान और फसल कटाई प्रयोग (CCE) के आधिकारिक आकलन के आधार पर दावा निपटान होता है।\n\n"
+                "स्रोत: pmfby.gov.in (आधिकारिक पोर्टल) / Ministry of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "PM-KISAN":
+            background_info = (
+                "📌 सामान्य PM-KISAN दिशा-निर्देश (General/Background Information):\n"
+                "- वित्तीय सहायता: पात्र किसान परिवारों को ₹6,000 प्रति वर्ष 3 समान किस्तों (प्रत्येक ₹2,000) में प्रत्यक्ष बैंक अंतरण (DBT) से मिलते हैं।\n"
+                "- अनिवार्यता: पोर्टल पर आधार e-KYC, भू-अभिलेख सत्यापन (Land Seeding) और बैंक खाते का आधार से जुड़ा होना अनिवार्य है।\n\n"
+                "स्रोत: pmkisan.gov.in (आधिकारिक पोर्टल) / Department of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "PMKSY":
+            background_info = (
+                "📌 सामान्य PMKSY (प्रति बूंद अधिक फसल) दिशा-निर्देश:\n"
+                "- उद्देश्य: ड्रिप एवं स्प्रिंकलर सूक्ष्म सिंचाई उपकरणों पर वित्तीय अनुदान/सब्सिडी देकर पानी की बचत करना।\n"
+                "- आवेदन: राज्य के कृषि अथवा उद्यान विभाग के आधिकारिक पोर्टल से ऑनलाइन आवेदन किया जा सकता है।\n\n"
+                "स्रोत: pmksy.gov.in / Ministry of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "KCC":
+            background_info = (
+                "📌 सामान्य किसान क्रेडिट कार्ड (KCC) दिशा-निर्देश:\n"
+                "- ऋण सुविधा: समय पर पुनर्भुगतान करने पर लगभग 4% प्रभावी वार्षिक ब्याज दर पर रियायती कृषि ऋण उपलब्ध होता है।\n"
+                "- आवेदन: किसी भी वाणिज्यिक, ग्रामीण या सहकारी बैंक शाखा तथा नजदीकी CSC केंद्र से आवेदन किया जा सकता है।\n\n"
+                "स्रोत: agricoop.nic.in / Reserve Bank of India"
+            )
+        else:
+            background_info = (
+                "📌 सामान्य सरकारी कृषि योजना दिशा-निर्देश (General Information):\n"
+                "- केंद्र और राज्य सरकार की प्रमुख योजनाओं के अधिकृत नियम सरकारी पोर्टलों पर उपलब्ध हैं।\n"
+                "- किसी भी नियम संशोधन या नए लाभ की पुष्टि केवल आधिकारिक सरकारी अधिसूचना अथवा कृषि विभाग से ही मान्य होती है।\n\n"
+                "स्रोत: आधिकारिक सरकारी पोर्टल (agricoop.nic.in / india.gov.in)"
+            )
     else:
-        background_info = (
-            f"📌 सामान्य {scheme} दिशा-निर्देश (General/Background Information):\n"
-            f"- योजना के विस्तृत दिशा-निर्देश आधिकारिक सरकारी पोर्टल पर उपलब्ध हैं।\n"
-            f"- किसी भी नियम संशोधन की पुष्टि केवल आधिकारिक सरकारी अधिसूचना से ही मान्य होती है।\n\n"
-            f"स्रोत: आधिकारिक सरकारी पोर्टल (Government of India)"
+        # Default: hinglish
+        prefix = (
+            f"Mujhe official Indian government sources se {target_year} ke specific naye {scheme} "
+            f"rule changes verify nahi mile. Main unrelated ya outdated documents ko "
+            f"latest {scheme} rules ke roop me present nahi karunga."
         )
+        if scheme_key == "PMFBY":
+            background_info = (
+                "📌 सामान्य PMFBY दिशा-निर्देश (General/Background Information):\n"
+                "- किसान प्रीमियम हिस्सा: रबी फसलों के लिए 1.5% (बीमित राशि का), खरीफ फसलों के लिए 2.0%, और वाणिज्यिक/बागवानी फसलों के लिए 5.0%।\n"
+                "- 72 घंटे की अनिवार्यता: स्थानीय आपदा (ओलावृष्टि, जलभराव, चक्रवाती बारिश) से फसल क्षति होने पर 72 घंटे के भीतर PMFBY पोर्टल या टोल-फ्री हेल्पलाइन (14447) पर सूचना दर्ज करना अनिवार्य है।\n"
+                "- दावा प्रक्रिया: अधिसूचित क्षेत्र, समय पर प्रीमियम भुगतान और फसल कटाई प्रयोग (CCE) के आधिकारिक आकलन के आधार पर दावा निपटान होता है।\n\n"
+                "स्रोत: pmfby.gov.in (आधिकारिक पोर्टल) / Ministry of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "PM-KISAN":
+            background_info = (
+                "📌 सामान्य PM-KISAN दिशा-निर्देश (General/Background Information):\n"
+                "- वित्तीय सहायता: पात्र किसान परिवारों को ₹6,000 प्रति वर्ष 3 समान किस्तों (प्रत्येक ₹2,000) में प्रत्यक्ष बैंक अंतरण (DBT) से मिलते हैं।\n"
+                "- अनिवार्यता: पोर्टल पर आधार e-KYC, भू-अभिलेख सत्यापन (Land Seeding) और बैंक खाते का आधार से जुड़ा होना अनिवार्य है।\n\n"
+                "स्रोत: pmkisan.gov.in (आधिकारिक पोर्टल) / Department of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "PMKSY":
+            background_info = (
+                "📌 सामान्य PMKSY (प्रति बूंद अधिक फसल) दिशा-निर्देश:\n"
+                "- उद्देश्य: ड्रिप एवं स्प्रिंकलर सूक्ष्म सिंचाई उपकरणों पर वित्तीय अनुदान/सब्सिडी देकर पानी की बचत करना।\n"
+                "- आवेदन: राज्य के कृषि अथवा उद्यान विभाग के आधिकारिक पोर्टल से ऑनलाइन आवेदन किया जा सकता है।\n\n"
+                "स्रोत: pmksy.gov.in / Ministry of Agriculture & Farmers Welfare, GoI"
+            )
+        elif scheme_key == "KCC":
+            background_info = (
+                "📌 सामान्य किसान क्रेडिट कार्ड (KCC) दिशा-निर्देश:\n"
+                "- ऋण सुविधा: समय पर पुनर्भुगतान करने पर लगभग 4% प्रभावी वार्षिक ब्याज दर पर रियायती कृषि ऋण उपलब्ध होता है।\n"
+                "- आवेदन: किसी भी वाणिज्यिक, ग्रामीण या सहकारी बैंक शाखा तथा नजदीकी CSC केंद्र से आवेदन किया जा सकता है।\n\n"
+                "स्रोत: agricoop.nic.in / Reserve Bank of India"
+            )
+        else:
+            background_info = (
+                "📌 सामान्य सरकारी कृषि योजना दिशा-निर्देश (General Information):\n"
+                "- केंद्र और राज्य सरकार की प्रमुख योजनाओं के अधिकृत नियम सरकारी पोर्टलों पर उपलब्ध हैं।\n"
+                "- किसी भी नियम संशोधन या नए लाभ की पुष्टि केवल आधिकारिक सरकारी अधिसूचना अथवा कृषि विभाग से ही मान्य होती है।\n\n"
+                "स्रोत: आधिकारिक सरकारी पोर्टल (agricoop.nic.in / india.gov.in)"
+            )
 
     return f"{prefix}\n\n{background_info}"
 
@@ -1738,15 +1897,34 @@ def compose_scheme_freshness_response(
     - source line at end with actual authorities & domains (never blindly hardcoded)
     - no raw search-engine snippets
     """
-    header = f"🏛️ {scheme} {target_year} आधिकारिक नियम एवं अधिसूचना (Verified Updates):"
+    lang_lower = (language or "hinglish").lower().strip()
+    if lang_lower == "en":
+        header = f"🏛️ {scheme} {target_year} Official Rules and Notifications (Verified Updates):"
+        unverified_auth = "issuing authority unverified"
+        date_label = "Notification Date"
+        auth_prefix = "Issued by"
+        source_prefix = "Source"
+    elif lang_lower == "hi":
+        header = f"🏛️ {scheme} {target_year} आधिकारिक नियम एवं अधिसूचना (Verified Updates):"
+        unverified_auth = "सत्यापित नहीं"
+        date_label = "अधिसूचना तिथि"
+        auth_prefix = "जारीकर्ता"
+        source_prefix = "स्रोत"
+    else:
+        header = f"🏛️ {scheme} {target_year} आधिकारिक नियम एवं अधिसूचना (Verified Updates):"
+        unverified_auth = "satyapit nahi"
+        date_label = "Notification Date"
+        auth_prefix = "Authority"
+        source_prefix = "Source"
+
     bullets = []
     for item in notifications[:5]:
         title = item["title"]
         rule = item["rule_change"]
         dt = item["date"]
         auth = item["authority"]
-        auth_label = f", जारीकर्ता: {auth}" if auth != "issuing authority not verified" else ", जारीकर्ता: सत्यापित नहीं"
-        bullet = f"- **{title}**: {rule} (अधिसूचना तिथि: {dt}{auth_label})"
+        auth_label = f", {auth_prefix}: {auth}" if auth != "issuing authority not verified" else f", {auth_prefix}: {unverified_auth}"
+        bullet = f"- **{title}**: {rule} ({date_label}: {dt}{auth_label})"
         bullets.append(bullet)
 
     bullets_text = "\n".join(bullets)
@@ -1754,7 +1932,7 @@ def compose_scheme_freshness_response(
     domains = sorted(list(set(n["domain"] for n in notifications if n.get("domain"))))
     auth_display = ", ".join(auths) if auths else "Official Indian Government Sources"
     domain_display = f" ({', '.join(domains)})" if domains else ""
-    source_line = f"स्रोत: {auth_display}{domain_display}"
+    source_line = f"{source_prefix}: {auth_display}{domain_display}"
 
     return f"{header}\n\n{bullets_text}\n\n{source_line}"
 
@@ -1884,6 +2062,21 @@ def generate_weather_hybrid_reply(
     ev_text = ""
 
     if live_verified and weather_evidence:
+        # Validate that returned evidence actually references the requested location
+        if location:
+            loc_term = location.lower().replace("mandi", "").strip()
+            if len(loc_term) >= 3:
+                filtered_ev = [
+                    ev for ev in weather_evidence
+                    if loc_term in f"{getattr(ev, 'title', '')} {getattr(ev, 'content', '')}".lower()
+                ]
+                if filtered_ev:
+                    weather_evidence = filtered_ev
+                else:
+                    live_verified = False
+                    weather_evidence = []
+
+    if live_verified and weather_evidence:
         top_ev = weather_evidence[0]
         weather_domain = top_ev.domain or "IMD"
         ev_text = " ".join([f"{ev.title} {ev.content}" for ev in weather_evidence]).lower()
@@ -1906,20 +2099,30 @@ def generate_weather_hybrid_reply(
             ))
 
             if has_weather_terms:
-                # Check for rain / storm / precipitation warnings or forecasts
-                has_rain_warning = bool(re.search(
-                    r"\b(rain|rainfall|barish|baarish|showers?|thunderstorm|precipitation|heavy rain|alert|warning|wet|drizzle)\b",
+                # Check for explicit absence / negation of rain (e.g. "rainfall: 0 mm", "no rain", "0.0 mm")
+                rain_negated = bool(re.search(
+                    r"\b(no rain|no precipitation|not raining|no rainfall|rain\s*[:\-]?\s*(nil|0|none)|rainfall\s*[:\-]?\s*(nil|0(\.0)?\s*(mm|cm)?|none)|barish nahi|baarish nahi|वर्षा नहीं|बारिश नहीं|0\s*mm|0\.0\s*mm)\b",
                     ev_text
                 ))
+
+                # Check for active rain / storm / precipitation warnings or forecasts
+                has_rain_forecast = bool(re.search(
+                    r"\b(rain alert|rainfall alert|rain warning|heavy rain|light rain|moderate rain|thunderstorm|precipitation alert|showers? likely|rain expected|rain forecast|scattered rain|isolated rain|drizzle expected|baarish hone ki sambhavna|वर्षा की संभावना|बारिश की संभावना)\b",
+                    ev_text
+                )) or (
+                    bool(re.search(r"\b(rain|rainfall|barish|baarish|showers?|thunderstorm|precipitation)\b", ev_text))
+                    and bool(re.search(r"\b(alert|warning|forecast|expected|likely|prediction|probability of|chance of)\b", ev_text))
+                )
+
                 # Check for clear / dry conditions
                 has_clear = bool(re.search(
-                    r"\b(clear|mainly clear|sunny|dry|fair weather|clean)\b",
+                    r"\b(clear sky|clear skies|mainly clear|sunny|mostly sunny|dry|dry weather|fair weather|clean weather)\b",
                     ev_text
-                )) or ("no rain" in ev_text or "no precipitation" in ev_text)
+                ))
 
-                if has_rain_warning and not (has_clear and ("no rain" in ev_text or "no precipitation" in ev_text)):
+                if has_rain_forecast and not rain_negated:
                     weather_state = "RAIN_EXPECTED"
-                elif has_clear or ("no rain" in ev_text or "no precipitation" in ev_text):
+                elif rain_negated or (has_clear and not has_rain_forecast):
                     weather_state = "CLEAR_DRY"
                 else:
                     weather_state = "UNVERIFIED"
@@ -2517,9 +2720,29 @@ def extract_mandi_data_from_evidence(
     Strictly verifies freshness and prevents numerical hallucination.
     Returns (mandi_data, rejection_reason).
     """
-    from datetime import date, timedelta
+    from datetime import datetime, date, timedelta
     if not evidence_list:
         return None, "no_evidence_returned"
+
+    def _parse_mandi_date(date_str: str) -> Optional[date]:
+        if not date_str:
+            return None
+        cleaned = str(date_str).strip()
+        for fmt in (
+            "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y",
+            "%d %b %Y", "%d %B %Y",
+            "%d %b, %Y", "%d %B, %Y",
+            "%Y/%m/%d", "%d-%m-%y", "%d/%m/%y"
+        ):
+            try:
+                return datetime.strptime(cleaned, fmt).date()
+            except (ValueError, TypeError):
+                continue
+        try:
+            return datetime.fromisoformat(cleaned).date()
+        except (ValueError, TypeError):
+            pass
+        return None
 
     today = date.today()
     yesterday = today - timedelta(days=1)
@@ -2539,6 +2762,33 @@ def extract_mandi_data_from_evidence(
         domain = getattr(ev, 'domain', '') or ""
         url = getattr(ev, 'url', '') or ""
         published_date = getattr(ev, 'published_date', None)
+
+        # 0. Validate requested crop and location relevance
+        if crop:
+            c_low = crop.lower().strip()
+            crop_aliases_map = {
+                "wheat": ["wheat", "gehun", "gehu", "गेहूं", "गेहूँ", "गेहुं"],
+                "paddy": ["paddy", "rice", "dhan", "dhaan", "धान", "चावल"],
+                "rice": ["paddy", "rice", "dhan", "dhaan", "धान", "चावल"],
+                "cotton": ["cotton", "kapas", "कपास"],
+                "maize": ["maize", "corn", "makka", "मक्का", "मकई"],
+                "mustard": ["mustard", "sarson", "rai", "सरसों", "राई"],
+                "potato": ["potato", "aloo", "aalu", "aaloo", "आलू"],
+                "tomato": ["tomato", "tamatar", "टमाटर"],
+                "onion": ["onion", "pyaz", "pyaaz", "प्याज", "प्याज़", "कांदा"],
+                "gram": ["gram", "chana", "चना", "चने", "chickpea"],
+                "chana": ["gram", "chana", "चना", "चने", "chickpea"],
+                "soybean": ["soybean", "soya", "सोयाबीन"],
+                "sugarcane": ["sugarcane", "ganna", "गन्ना"],
+            }
+            aliases = crop_aliases_map.get(c_low, [c_low])
+            if not any(a in content.lower() for a in aliases):
+                continue
+
+        if loc:
+            loc_clean = loc.lower().replace("mandi", "").strip()
+            if len(loc_clean) >= 3 and loc_clean not in content.lower():
+                continue
 
         # 1. Extract Modal Price
         modal_match = re.search(
@@ -2603,11 +2853,10 @@ def extract_mandi_data_from_evidence(
         is_fresh = False
         if reported_date:
             rd_clean = reported_date.strip()
-            if (
-                rd_clean in (today_str, today_dmy, today_slash, yest_str, yest_dmy, yest_slash)
-                or (str(today.day) in rd_clean and today.strftime("%b") in rd_clean and current_year in rd_clean)
-                or (str(yesterday.day) in rd_clean and yesterday.strftime("%b") in rd_clean and current_year in rd_clean)
-            ):
+            parsed_d = _parse_mandi_date(rd_clean)
+            if parsed_d and parsed_d in (today, yesterday):
+                is_fresh = True
+            elif rd_clean in (today_str, today_dmy, today_slash, yest_str, yest_dmy, yest_slash):
                 is_fresh = True
         elif ("today" in content.lower() or "aaj" in content.lower() or "आज" in content) and current_year in content:
             if not any(old_y in content for old_y in ["2020", "2021", "2022", "2023", "2024", "2025"]):
@@ -2902,7 +3151,7 @@ def process_chat_message(
             }
 
     # Branch 1.4: Anti-hallucination interceptors (live mandi rates & live weather without active feed)
-    intercept = check_anti_hallucination_intercept(clean_msg, lang)
+    intercept = check_anti_hallucination_intercept(clean_msg, lang, intent=route_decision.intent.value)
     if intercept:
         intercept["intent"] = route_decision.intent.value
         intercept["route"] = route_decision.action.value
@@ -2925,6 +3174,8 @@ def process_chat_message(
     # Branch 1.5: Weather Service Advisory / Hybrid Weather-Agronomy
     if route_decision.intent == Intent.WEATHER and route_decision.action == RouteAction.WEATHER_SERVICE:
         loc = route_decision.detected_entities.get("location") or (context.get("location") if context else None)
+        if loc and (loc.strip().lower() in {"में", "से", "को", "पर", "का", "के", "की", "खेत", "field", "farm", "khet", "mera", "mere", "apne"} or len(loc.strip()) < 2):
+            loc = None
         crop = route_decision.detected_entities.get("crop") or (context.get("crop") if context else None)
 
         # 1. Retrieve Live Weather from Tavily / WebSearchService
@@ -2953,6 +3204,20 @@ def process_chat_message(
             live_lookup_failed = True
 
         is_live_verified = bool(weather_evidence and len(weather_evidence) > 0)
+        if is_live_verified and loc:
+            loc_term = loc.lower().replace("mandi", "").strip()
+            if len(loc_term) >= 3:
+                matching_ev = [
+                    ev for ev in weather_evidence
+                    if loc_term in f"{getattr(ev, 'title', '')} {getattr(ev, 'content', '')}".lower()
+                ]
+                if matching_ev:
+                    weather_evidence = matching_ev
+                else:
+                    weather_evidence = []
+                    is_live_verified = False
+                    live_lookup_failed = True
+
         if not is_live_verified and loc:
             live_lookup_failed = True
 
@@ -3007,7 +3272,7 @@ def process_chat_message(
             "retrieved_chunks": len(weather_evidence) + len(kb_chunks),
             "confidence": 0.95 if is_live_verified else 0.85,
             "language": lang,
-            "provider": "tavily_weather" if is_live_verified else "weather_service",
+            "provider": "tavily_weather" if is_live_verified else ("weather_service" if (loc and loc.lower() not in ("खेत", "field", "farm")) else "anti_hallucination_guard"),
             "intent": route_decision.intent.value,
             "route": route_decision.action.value,
             "detected_entities": route_decision.detected_entities
@@ -3062,11 +3327,11 @@ def process_chat_message(
                         rejection_reason = rejection_reason or "no_price_in_evidence"
                         live_lookup_result = "no_verified_rate"
             except Exception as exc:
-                logger.warning("Live mandi search via Tavily failed: %s", exc)
+                logger.warning("Live mandi search via Tavily failed: %s", type(exc).__name__)
                 mandi_evidence = []
                 mandi_data = None
                 live_lookup_result = "provider_error"
-                rejection_reason = f"Provider exception: {type(exc).__name__} - {str(exc)}"
+                rejection_reason = "provider_error"
         else:
             live_lookup_attempted = False
             live_lookup_result = "provider_disabled_or_no_key"
@@ -3177,6 +3442,8 @@ def process_chat_message(
             target_year = scheme_req["target_year"]
             evidence = []
 
+            scheme_meta = SCHEME_METADATA.get(scheme_name, SCHEME_METADATA["GENERIC_SCHEME"])
+
             if getattr(web_search_service, "enabled", False):
                 try:
                     evidence = web_search_service.search(
@@ -3196,12 +3463,12 @@ def process_chat_message(
                     return {
                         "reply": clean_farmer_markdown(fallback_reply),
                         "sources": [{
-                            "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
-                            "section": "Official Guidelines",
-                            "source": "pmfby.gov.in",
-                            "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                            "title": scheme_meta["title"],
+                            "section": scheme_meta["section"],
+                            "source": scheme_meta["source"],
+                            "organization": scheme_meta["organization"],
                             "category": "Schemes",
-                            "url": "https://pmfby.gov.in",
+                            "url": scheme_meta["url"],
                             "score": 0.90
                         }],
                         "retrieved_chunks": 0,
@@ -3221,12 +3488,12 @@ def process_chat_message(
                 return {
                     "reply": clean_farmer_markdown(fallback_reply),
                     "sources": [{
-                        "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
-                        "section": "Official Guidelines",
-                        "source": "pmfby.gov.in",
-                        "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                        "title": scheme_meta["title"],
+                        "section": scheme_meta["section"],
+                        "source": scheme_meta["source"],
+                        "organization": scheme_meta["organization"],
                         "category": "Schemes",
-                        "url": "https://pmfby.gov.in",
+                        "url": scheme_meta["url"],
                         "score": 0.90
                     }],
                     "retrieved_chunks": 0,
@@ -3298,12 +3565,12 @@ def process_chat_message(
             return {
                 "reply": clean_farmer_markdown(fallback_reply),
                 "sources": [{
-                    "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY) Portal",
-                    "section": "Official Guidelines",
-                    "source": "pmfby.gov.in",
-                    "organization": "Ministry of Agriculture & Farmers Welfare, GoI",
+                    "title": scheme_meta["title"],
+                    "section": scheme_meta["section"],
+                    "source": scheme_meta["source"],
+                    "organization": scheme_meta["organization"],
                     "category": "Schemes",
-                    "url": "https://pmfby.gov.in",
+                    "url": scheme_meta["url"],
                     "score": 0.90
                 }],
                 "retrieved_chunks": 0,
@@ -3437,9 +3704,19 @@ def process_chat_message(
         is_pronoun_signal = has_it_pronoun or has_standalone_dem
     else:
         # Hindi / Hinglish: check demonstratives/pronouns (including Devanagari)
+        # Use Unicode word boundaries for Devanagari to avoid matching substrings like 'इस्तेमाल', 'चाहिये', 'लिये'
+        devanagari_pronouns = (
+            r"(?<![\u0900-\u097F])(इस|इसका|इसकी|इसके|इससे|इसे|इसमें|इन|इनका|इनकी|इनके|इन्हें|ये|यह|वो|वह|उनका|उनकी|उनके|उन्हें|उस|उसके|उसकी|उसका|उससे|उसमें|उसे)(?![\u0900-\u097F])"
+        )
+        # In Latin script (Hinglish/English): avoid bare 'is' or 'in' which match English verb 'is' and preposition 'in'
+        # Match Hinglish pronouns with word boundaries, or 'is'/'in' only when followed by Hindi postpositions
+        hinglish_pronouns = (
+            r"\b(iska|iski|iske|isse|isme|ismein|ise|inka|inki|inke|inhe|ye|yeh|wo|woh|voh|unka|unki|unke|unhe|use|usse|usme|usmein|us|it|its|this|that)\b|"
+            r"\b(is|in)\s+(ko|se|me|mein|par|pe|ka|ki|ke)\b"
+        )
         is_pronoun_signal = bool(
-            re.search(r"\b(is|iska|iski|iske|isse|ise|in|inka|inki|ye|yeh|wo|woh|voh|unka|unki|unke|use|usse|us|it|its|this|that)\b", q_low)
-            or re.search(r"(इस|इसका|इसकी|इसके|इससे|इसे|इनका|इनकी|ये|यह|वो|वह|उनका|उनकी|उसके|उसे)", q_low)
+            re.search(hinglish_pronouns, q_low)
+            or re.search(devanagari_pronouns, q_low)
         )
 
     is_pronoun_or_ellipsis = bool(

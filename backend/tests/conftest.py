@@ -2,9 +2,13 @@
 Shared Pytest Configuration and Fixtures for MAITTRI Backend Test Suite.
 """
 
+import os
 import sys
 import pytest
 from unittest.mock import MagicMock
+
+# Enable local auth fallback opt-in for integration tests running against local test db
+os.environ.setdefault("ALLOW_LOCAL_AUTH_INSERT", "true")
 
 
 def create_mock_chroma_collection(chunk_count: int = 150):

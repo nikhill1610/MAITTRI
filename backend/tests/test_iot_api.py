@@ -199,14 +199,68 @@ def test_config_endpoints():
 
 
 def test_simulate_endpoint():
-    """Verify POST /api/iot/simulate returns complete synthetic radar sweep."""
+    """Verify POST /api/iot/simulate returns complete synthetic radar sweep and provisions simulation credentials."""
+    import uuid
+    from sqlalchemy import text
+    from app.database import engine
+    from app.security import create_access_token
+
+    uid_str = str(uuid.uuid4())
+    email = f"op_sim_{uid_str[:8]}@maittri.org"
+    if engine.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO auth.users (id, aud, role, email, created_at, updated_at) VALUES (:uid, 'authenticated', 'authenticated', :email, now(), now()) ON CONFLICT (id) DO NOTHING;"),
+                {"uid": uid_str, "email": email}
+            )
+            conn.execute(
+                text("INSERT INTO public.profiles (id, role, full_name, preferred_language) VALUES (:uid, 'AUTHORIZED_OPERATOR', 'Operator', 'hi') ON CONFLICT (id) DO UPDATE SET role = 'AUTHORIZED_OPERATOR';"),
+                {"uid": uid_str}
+            )
+    else:
+        from app.database import get_db
+        from app.models import Profile
+        db = next(get_db())
+        try:
+            prof = Profile(id=uid_str, role="AUTHORIZED_OPERATOR", full_name="Operator")
+            db.merge(prof)
+            db.commit()
+        finally:
+            db.close()
+
+    op_token = create_access_token({"sub": uid_str, "email": email, "role": "AUTHORIZED_OPERATOR"})
+    headers = {"Authorization": f"Bearer {op_token}"}
+
     with patch.dict("os.environ", {"ENVIRONMENT": "development"}):
-        response = client.post("/api/iot/simulate?device_id=MAITRI_SIM_NODE&controller_type=ESP32")
+        response = client.post(
+            "/api/iot/simulate?device_id=MAITRI_SIM_NODE&controller_type=ESP32",
+            headers=headers
+        )
         assert response.status_code == 200
         res_data = response.json()
         assert res_data["status"] == "success"
+        assert "simulation_token" in res_data
+        sim_token = res_data["simulation_token"]
+        assert len(sim_token) >= 32
+
         telemetry = res_data["data"]
         assert telemetry["device_id"] == "MAITRI_SIM_NODE"
         assert telemetry["controller_type"] == "ESP32"
         assert len(telemetry["scan"]) == 15  # 20° to 160° in steps of 10°
         assert telemetry["is_online"] is True
+
+        # Verify obtaining and using the secure simulation token with the device
+        sim_post_res = client.post(
+            "/api/iot/sensor-data",
+            json={
+                "device_id": "MAITRI_SIM_NODE",
+                "controller_type": "ESP32",
+                "temperature": 27.5,
+                "humidity": 60.0,
+                "soil_moisture": 45.0,
+                "scan": [{"angle": 90, "distance": 120.0, "object_detected": False, "status": "CLEAR"}]
+            },
+            headers={"X-Device-Token": sim_token}
+        )
+        assert sim_post_res.status_code == 200
+        assert sim_post_res.json()["status"] == "success"

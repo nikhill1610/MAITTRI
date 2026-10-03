@@ -618,14 +618,170 @@ def convert_to_acres(area: float, unit: str) -> float:
     elif u in ["bigha", "bighas", "बीघा"]:
         # Standard benchmark: 1 acre ~ 1.613 bigha (Punjab/Haryana/UP standard pucca bigha ~ 0.62 acre)
         return area * 0.62
+    elif u in ["kanal", "kanals", "कनाल"]:
+        # 1 Acre = 8 Kanals => 1 Kanal = 0.125 Acre
+        return area * 0.125
     elif u in ["sq_m", "sqm", "square meter", "square meters", "वर्ग मीटर"]:
         return area * 0.000247105
     elif u in ["sq_ft", "sqft", "square feet", "square foot", "वर्ग फीट"]:
         return area * 0.0000229568
-    return area
+    else:
+        raise ValueError(f"Unsupported area unit '{unit}'. Supported units: acre, hectare, bigha, kanal, sq_m, sq_ft.")
 
 def convert_acres_to_hectares(acres: float) -> float:
     return acres * 0.404686
+
+
+# =====================================================================
+# MACHINERY MATCHING HELPERS
+# =====================================================================
+
+def normalize_machine_tokens(name: str) -> set:
+    """
+    Extracts canonical machinery tags from a machinery string,
+    filtering out generic fillers, generic vehicle/utility words, and generic crop/material words.
+    Preserves valid equipment matches (e.g. baler, mulcher, reaper, thresher, chipper, sprayer).
+    """
+    import re
+    cleaned = re.sub(r"[()/,\\-]", " ", (name or "").lower())
+    words = [w for w in cleaned.split() if w]
+
+    STOP_WORDS = {
+        "or", "and", "machine", "machinery", "optional", "area", "pit", "heap", "system",
+        "with", "the", "a", "an", "in", "of", "for", "type", "equipment"
+    }
+    GENERIC_VEHICLE_UTILITY_WORDS = {
+        "tractor", "trolley", "tractor-trolley", "water", "mounted", "drawn", "operated"
+    }
+    GENERIC_MATERIAL_WORDS = {
+        "straw", "residue", "stalk", "stalks", "crop", "crops", "fodder", "trash",
+        "parali", "biomass", "leaves", "wood", "woody", "bhusa", "turi", "waste"
+    }
+
+    meaningful = [
+        w for w in words
+        if w not in STOP_WORDS
+        and w not in GENERIC_VEHICLE_UTILITY_WORDS
+        and w not in GENERIC_MATERIAL_WORDS
+        and len(w) > 2
+    ]
+
+    tags = set()
+    text = f" {' '.join(words)} "
+
+    if "rotavator" in text or "rotovator" in text:
+        tags.add("rotavator")
+    if "mulcher" in text or "chopper" in text:
+        tags.add("mulcher_chopper")
+    if "happy seeder" in text:
+        tags.add("happy_seeder")
+    if "super seeder" in text:
+        tags.add("super_seeder")
+    if "baler" in text:
+        tags.add("baler")
+    if "reaper" in text:
+        tags.add("straw_reaper")
+    if "thresher" in text:
+        tags.add("thresher")
+    if "plough" in text or "plow" in text or "mb plough" in text:
+        tags.add("mb_plough")
+    if "slasher" in text or "shredder" in text:
+        tags.add("shredder_slasher")
+    if "stalk puller" in text or "puller" in text:
+        tags.add("stalk_puller")
+    if "chipper" in text:
+        tags.add("chipper")
+    if "sprayer" in text:
+        tags.add("sprayer")
+    if "rake" in text or "swather" in text:
+        tags.add("rake")
+    if "super sms" in text or " sms " in text:
+        tags.add("super_sms")
+    if "furrow opener" in text:
+        tags.add("furrow_opener")
+
+    for w in meaningful:
+        tags.add(w)
+
+    return tags
+
+
+def check_machinery_overlap(required_machines: List[str], available_machines: List[str]) -> bool:
+    """
+    Determines whether any of the farmer's available machines match the method's required machinery,
+    avoiding false positive matches from generic stopwords or substrings.
+    """
+    if not required_machines or not available_machines:
+        return False
+    for req in required_machines:
+        req_tags = normalize_machine_tokens(req)
+        if not req_tags:
+            continue
+        for avail in available_machines:
+            avail_tags = normalize_machine_tokens(avail)
+            if req_tags & avail_tags:
+                return True
+    return False
+
+
+# =====================================================================
+# CROP ALIASES AND NORMALIZATION
+# =====================================================================
+
+CROP_ALIASES: Dict[str, List[str]] = {
+    "rice": ["rice", "paddy", "dhan", "धान", "चावल", "basmati"],
+    "wheat": ["wheat", "गेहूं", "gehu", "gehun", "kanak"],
+    "maize": ["maize", "corn", "मक्का", "makka", "makki"],
+    "sugarcane": ["sugarcane", "cane", "गन्ना", "ganna"],
+    "cotton": ["cotton", "कपास", "kapas"],
+    "mustard": ["mustard", "sarson", "सरसों", "rai", "राई", "rapeseed"],
+    "soybean": ["soybean", "soya", "soy", "सोयाबीन", "सोया"],
+    "pulses": [
+        "pulses", "pulse", "दलहन", "dal", "daal",
+        "moong", "mung", "green gram", "मूंग",
+        "chana", "gram", "chickpea", "bengal gram", "चना",
+        "urad", "black gram", "उड़द",
+        "arhar", "tur", "toor", "red gram", "pigeon pea", "अरहर", "तूर",
+        "masoor", "lentil", "red lentil", "मसूर",
+    ],
+}
+
+
+def detect_matching_crop_keys(crop_input: str) -> List[str]:
+    """
+    Detects all distinct canonical crop keys present in the input.
+    Handles synonyms and multi-lingual aliases without substring collision.
+    """
+    import re
+    if not crop_input:
+        return []
+    raw = crop_input.strip().lower()
+    matched = set()
+
+    for canon_key, aliases in CROP_ALIASES.items():
+        for alias in aliases:
+            pattern = r"(?:^|[\s,./\-_])" + re.escape(alias.lower()) + r"(?:$|[\s,./\-_])"
+            if raw == alias.lower() or re.search(pattern, raw):
+                matched.add(canon_key)
+                break
+
+    return sorted(list(matched))
+
+
+def normalize_crop_key(crop_input: str) -> str:
+    """
+    Normalizes a crop name or alias to one of the canonical CROP_RESIDUE_DATABASE keys.
+    Returns:
+    - Canonical key if exactly one distinct crop is detected.
+    - 'ambiguous' if more than one distinct crop is detected.
+    - 'other' if no supported crop is detected.
+    """
+    matched = detect_matching_crop_keys(crop_input)
+    if len(matched) == 1:
+        return matched[0]
+    elif len(matched) > 1:
+        return "ambiguous"
+    return "other"
 
 # =====================================================================
 # RECOMMENDATION SCORING ENGINE
@@ -702,19 +858,10 @@ def compute_method_score(
 
     # 2. Machinery Availability Matching (+10 to +20 points)
     mach_access = (machinery_available or "").lower().strip()
-    available_mach_lower = [m.lower() for m in selected_machinery]
 
     if mach_access == "yes" and selected_machinery:
-        method_mach_lower = [m.lower() for m in method.get("machinery_needed", [])]
-        # Check overlap
-        matched = False
-        for req in method_mach_lower:
-            for avail in available_mach_lower:
-                if any(term in avail for term in req.split()) or any(term in req for term in avail.split()):
-                    matched = True
-                    break
-            if matched:
-                break
+        method_mach = method.get("machinery_needed", [])
+        matched = check_machinery_overlap(method_mach, selected_machinery)
         if matched:
             score += 18
         else:
@@ -765,7 +912,7 @@ def analyze_crop_residue(
     area: float,
     area_unit: str = "acre",
     residue_quantity: Optional[float] = None,
-    residue_quantity_source: Optional[str] = "estimated",
+    residue_quantity_source: Optional[str] = None,
     farmer_goal: Optional[str] = "recommend_best",
     machinery_available: Optional[str] = "not_sure",
     machinery: Optional[List[str]] = None,
@@ -780,40 +927,94 @@ def analyze_crop_residue(
     Orchestrates the complete, bounded agronomic residue analysis.
     Returns structured data for the farmer-friendly MAITTRI frontend.
     """
-    # 1. Normalize Crop Key
-    c_raw = (crop or "rice").lower().strip()
-    crop_key = "other"
-    for key in CROP_RESIDUE_DATABASE.keys():
-        if key in c_raw:
-            crop_key = key
-            break
-    if "paddy" in c_raw:
-        crop_key = "rice"
-    elif "cane" in c_raw:
-        crop_key = "sugarcane"
-    elif "gram" in c_raw or "moong" in c_raw or "chana" in c_raw or "dal" in c_raw:
-        crop_key = "pulses"
+    # 1. Normalize Crop Key & Disambiguation Check
+    matched_crops = detect_matching_crop_keys(crop)
+    if len(matched_crops) > 1:
+        crop_names = [CROP_RESIDUE_DATABASE.get(k, {}).get("crop_name", k) for k in matched_crops]
+        crop_names_str = " and ".join(crop_names)
+        return {
+            "status": "ambiguous_input",
+            "message": f"Multiple distinct crops detected ({crop_names_str}). Please specify a single crop for tailored agronomic recommendations.",
+            "message_hi": f"एक से अधिक फसलें पाई गईं ({crop_names_str})। कृपया सटीक पराली प्रबंधन सलाह के लिए एक ही फसल चुनें।",
+            "detected_crops": matched_crops,
+            "crop_key": "ambiguous",
+            "compatible_methods": [],
+            "recommendations": [],
+            "burning_warning": {
+                "title": "🚫 DO NOT BURN CROP RESIDUE",
+                "title_hi": "🚫 फसल अवशेष / पराली कभी न जलाएं",
+                "farmer_message": f"Multiple crop residues detected ({crop_names_str}). Never burn residue in open fields as it destroys soil biology and causes severe pollution.",
+                "farmer_message_hi": "खेत में पराली या फसल अवशेष कभी न जलाएं।"
+            },
+            "limitations": [
+                f"Input mentions multiple distinct crops ({crop_names_str}). Crop-specific recommendations withheld to prevent invalid agronomic guidance (e.g. inappropriate fodder or mulching)."
+            ],
+            "is_farmer_override": False,
+        }
 
+    crop_key = matched_crops[0] if len(matched_crops) == 1 else "other"
     profile = CROP_RESIDUE_DATABASE.get(crop_key, CROP_RESIDUE_DATABASE["other"])
 
-    # 2. Normalize Area
-    safe_area = max(0.1, float(area) if area else 1.0)
+    # 2. Normalize and Strictly Validate Area
+    if area is None:
+        raise ValueError("Farm area must be explicitly provided.")
+    try:
+        raw_area = float(area)
+    except (ValueError, TypeError):
+        raise ValueError(f"Farm area must be a numeric value, got '{area}'.")
+    if not math.isfinite(raw_area) or raw_area <= 0:
+        raise ValueError(f"Farm area must be a finite number greater than 0, got {raw_area}.")
+
+    safe_area = raw_area
     norm_acres = convert_to_acres(safe_area, area_unit or "acre")
     norm_hectares = convert_acres_to_hectares(norm_acres)
 
-    # 3. Residue Quantity Estimation or Farmer Override
+    # 3. Residue Quantity Estimation or Explicit Farmer Measurement Override
     is_farmer_override = False
-    if residue_quantity and float(residue_quantity) > 0:
-        known_qty = float(residue_quantity)
-        is_farmer_override = True
-        est_tonnes_mid = round(known_qty, 2)
-        est_tonnes_low = round(known_qty * 0.85, 2)
-        est_tonnes_high = round(known_qty * 1.15, 2)
-        estimate_confidence = "High (Farmer Provided Measurement)"
+    source_val = (residue_quantity_source or "").lower().strip()
+    is_estimated_source = source_val in ("estimated", "estimate", "client_estimated", "satellite_estimated")
+    is_farmer_source = (
+        source_val in ("farmer", "measured", "farmer_measured", "farmer_measurement", "farmer_provided", "farmer_known")
+        or (not source_val and residue_quantity is not None)
+    ) and not is_estimated_source
+
+    if residue_quantity is not None:
+        try:
+            known_qty = float(residue_quantity)
+        except (ValueError, TypeError):
+            raise ValueError(f"Residue quantity must be a numeric value, got '{residue_quantity}'.")
+        if not math.isfinite(known_qty):
+            raise ValueError(f"Residue quantity must be a finite number, got {residue_quantity}.")
+        if known_qty < 0:
+            raise ValueError(f"Residue quantity cannot be negative, got {known_qty}.")
+
+        if known_qty == 0.0:
+            est_tonnes_low = 0.0
+            est_tonnes_mid = 0.0
+            est_tonnes_high = 0.0
+            if is_farmer_source:
+                is_farmer_override = True
+                effective_source = "farmer_measurement"
+                estimate_confidence = "High (Farmer Provided Measurement)"
+            else:
+                effective_source = source_val or "estimated"
+                estimate_confidence = "Specified Zero Quantity"
+        else:
+            est_tonnes_low = round(known_qty, 2)
+            est_tonnes_mid = round(known_qty, 2)
+            est_tonnes_high = round(known_qty, 2)
+            if is_farmer_source:
+                is_farmer_override = True
+                effective_source = "farmer_measurement"
+                estimate_confidence = "High (Farmer Provided Measurement)"
+            else:
+                effective_source = source_val or "estimated"
+                estimate_confidence = "Medium (Estimated Quantity)"
     else:
         est_tonnes_low = round(norm_acres * profile["low_t_per_acre"], 2)
         est_tonnes_mid = round(norm_acres * profile["mid_t_per_acre"], 2)
         est_tonnes_high = round(norm_acres * profile["high_t_per_acre"], 2)
+        effective_source = "benchmark"
         estimate_confidence = "Medium (Agronomic Benchmark Estimate)"
 
     # 4. Total Burning Destruction Impact (Nutrient & Environmental Losses)
@@ -985,6 +1186,7 @@ def analyze_crop_residue(
         "estimated_residue_high": est_tonnes_high,
         "estimated_residue_unit": "tonnes",
         "is_farmer_override": is_farmer_override,
+        "residue_quantity_source": effective_source,
         "estimate_confidence": estimate_confidence,
         "burning_warning": burning_warning,
         "recommended_method": recommended_method,
@@ -1015,7 +1217,18 @@ def analyze_crop_residue(
             },
         ],
         "limitations": [
-            "Residue quantity is an agronomic estimate calculated from average residue-to-grain ratios. Actual field quantity varies with plant height, combine cutter-bar height, and grain yield.",
+            (
+                f"Residue quantity ({est_tonnes_mid} tonnes) was measured and provided directly by the farmer. "
+                f"Agronomic impacts and nutrient recovery calculations are based on this verified measurement."
+            ) if is_farmer_override else (
+                (
+                    f"Residue quantity ({est_tonnes_mid} tonnes) was provided as an estimated quantity. "
+                    f"Agronomic impacts and nutrient recovery calculations reflect this unverified estimate."
+                ) if residue_quantity is not None else (
+                    "Residue quantity is an agronomic estimate calculated from average residue-to-grain ratios. "
+                    "Actual field quantity varies with plant height, combine cutter-bar height, and grain yield."
+                )
+            ),
             "Machinery operational costs reflect prevailing custom hiring benchmarks and may fluctuate with local diesel rates and contractor availability.",
             "Crop residue recycling enriches soil organic matter over consecutive cycles; it complements but does not immediately replace balanced basal fertilizers. A certified laboratory soil test is recommended for precise field NPK requirements.",
         ],

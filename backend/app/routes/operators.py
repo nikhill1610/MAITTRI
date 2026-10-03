@@ -26,14 +26,6 @@ from ..deps import require_operator, get_current_user
 router = APIRouter()
 
 
-def generate_maittri_farmer_id(db: Session) -> str:
-    """Generates next canonical MAITTRI Farm ID like MT-FARM-000001."""
-    count = db.query(Farmer).count() + 1
-    candidate = f"MT-FARM-{count:06d}"
-    while db.query(Farmer).filter(Farmer.maittri_farmer_id == candidate).first():
-        count += 1
-        candidate = f"MT-FARM-{count:06d}"
-    return candidate
 
 
 @router.get("/stats")
@@ -84,11 +76,9 @@ def register_assisted_farmer(
     Assisted registration of a farmer conducted by an Authorized Seva Operator.
     Assigns unique MT-FARM-XXXXXX and creates initial Farm record.
     """
-    farmer_id_str = generate_maittri_farmer_id(db)
-    qr_payload = f"MAITTRI:{farmer_id_str}:{uuid.uuid4().hex[:8]}"
-
+    temp_id = f"TEMP-{uuid.uuid4().hex[:8]}"
     farmer = Farmer(
-        maittri_farmer_id=farmer_id_str,
+        maittri_farmer_id=temp_id,
         operator_id=operator.id,
         name=payload.name.strip(),
         mobile_number=payload.mobile_number.strip(),
@@ -111,20 +101,23 @@ def register_assisted_farmer(
         preferred_language=payload.preferred_language,
         sms_consent=payload.sms_consent,
         ivr_consent=payload.ivr_consent,
-        qr_code_data=qr_payload
+        qr_code_data=f"MAITTRI:{temp_id}:{uuid.uuid4().hex[:8]}"
     )
     db.add(farmer)
-    db.commit()
-    db.refresh(farmer)
+    db.flush()
+
+    farmer.maittri_farmer_id = f"MT-FARM-{farmer.id:06d}"
+    farmer.qr_code_data = f"MAITTRI:{farmer.maittri_farmer_id}:{uuid.uuid4().hex[:8]}"
 
     # Automatically create linked Farm record for backward compatibility
+    # Set to farmer's user_id if linked, otherwise None (operator is not the farm owner)
     farm = Farm(
-        user_id=operator.id,  # Owned/managed under operator account
+        user_id=farmer.user_id,
         farmer_id=farmer.id,
         name=f"{farmer.name}'s Field ({farmer.village or farmer.district})",
         area=farmer.farm_area,
         area_unit=farmer.area_unit,
-        soil_type=farmer.soil_type,
+        soil_type=farmer.soil_type or "Alluvial Soil",
         irrigation=farmer.irrigation or "available",
         current_crop=farmer.current_crop or "Wheat",
         previous_crop=farmer.previous_crop,
@@ -132,6 +125,7 @@ def register_assisted_farmer(
         sowing_date=farmer.sowing_date
     )
     db.add(farm)
+    db.flush()
 
     # Log audit event
     audit = OperatorActivityLog(
@@ -143,6 +137,7 @@ def register_assisted_farmer(
     )
     db.add(audit)
     db.commit()
+    db.refresh(farmer)
 
     return farmer
 
@@ -150,7 +145,7 @@ def register_assisted_farmer(
 @router.get("/farmers", response_model=List[FarmerResponse])
 def search_farmers(
     q: Optional[str] = Query(None, description="Search term for name, phone, village, or MT-FARM ID"),
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
     operator: User = Depends(require_operator),
     db: Session = Depends(get_db)
 ):
@@ -206,12 +201,25 @@ def update_farmer(
     # Sync linked farm if present
     farm = db.query(Farm).filter(Farm.farmer_id == farmer.id).first()
     if farm:
-        if payload.farm_area is not None:
-            farm.area = payload.farm_area
-        if payload.soil_type is not None:
-            farm.soil_type = payload.soil_type
-        if payload.current_crop is not None:
-            farm.current_crop = payload.current_crop
+        if "farm_area" in update_data:
+            farm.area = update_data["farm_area"]
+        if "area_unit" in update_data:
+            farm.area_unit = update_data["area_unit"]
+        if "soil_type" in update_data:
+            farm.soil_type = update_data["soil_type"]
+        if "irrigation" in update_data:
+            farm.irrigation = update_data["irrigation"]
+        if "current_crop" in update_data:
+            farm.current_crop = update_data["current_crop"]
+        if "previous_crop" in update_data:
+            farm.previous_crop = update_data["previous_crop"]
+        if "sowing_date" in update_data:
+            farm.sowing_date = update_data["sowing_date"]
+        if any(k in update_data for k in ("name", "village", "district", "state")):
+            farm.location_name = f"{farmer.village or ''}, {farmer.district or ''}, {farmer.state or ''}".strip(", ")
+            loc_label = farmer.village or farmer.district or ""
+            if not farm.name or "'s Field" in farm.name or farm.name.endswith("Field"):
+                farm.name = f"{farmer.name}'s Field ({loc_label})".strip()
 
     # Log audit event
     audit = OperatorActivityLog(
@@ -228,7 +236,7 @@ def update_farmer(
 
 @router.get("/activity-logs")
 def get_operator_activity_logs(
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
     operator: User = Depends(require_operator),
     db: Session = Depends(get_db)
 ):

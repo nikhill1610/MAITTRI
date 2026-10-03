@@ -1,6 +1,9 @@
 import time
+import copy
 import math
 import logging
+import threading
+from collections import OrderedDict
 from datetime import datetime, date, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, Dict, Any, Tuple
@@ -10,9 +13,12 @@ from ..schemas import WeatherRequest
 logger = logging.getLogger("maitri.weather")
 router = APIRouter()
 
-# 15-minute in-memory LRU cache: (lat, lon, days) -> (timestamp, data)
-_WEATHER_CACHE: Dict[Tuple[float, float, int], Tuple[float, dict]] = {}
+# 15-minute in-memory bounded LRU cache: (lat, lon, days) -> (timestamp, data)
+MAX_WEATHER_CACHE_ENTRIES = 500
+_WEATHER_CACHE: OrderedDict[Tuple[float, float, int], Tuple[float, dict]] = OrderedDict()
+_WEATHER_CACHE_LOCK = threading.Lock()
 CACHE_TTL_SECONDS = 900  # 15 minutes
+MAX_STALE_CACHE_SECONDS = 6 * 3600  # 6 hours maximum acceptable stale cache on upstream failure
 
 WMO_CODE_MAP = {
     0: {"label": "Clear Sky", "icon": "sun", "is_rain": False},
@@ -43,8 +49,34 @@ def get_weather_desc(code: Optional[int]) -> dict:
         return {"label": "Unknown", "icon": "cloud-sun", "is_rain": False}
     return WMO_CODE_MAP.get(int(code), {"label": "Partly Cloudy", "icon": "cloud-sun", "is_rain": False})
 
-def generate_agricultural_advisories(current: dict, daily: dict, hourly: dict) -> dict:
+def generate_agricultural_advisories(current: dict, daily: dict, hourly: dict, is_fallback: bool = False) -> dict:
     """Generate actionable, crop-focused advisories based on meteorological metrics."""
+    if is_fallback:
+        return {
+            "spraying": {
+                "status": "unknown",
+                "badge": "Unavailable",
+                "title": "Real-time Spraying Advisory Unavailable",
+                "reason": "Live weather telemetry is currently unavailable.",
+                "recommendation": "Inspect local sky, wind speed, and foliar moisture conditions before spraying."
+            },
+            "irrigation": {
+                "status": "unknown",
+                "badge": "Unavailable",
+                "title": "Real-time Irrigation Guidance Unavailable",
+                "reason": "Live weather telemetry is currently unavailable.",
+                "recommendation": "Inspect field soil moisture directly before scheduling irrigation."
+            },
+            "disease": {
+                "status": "unknown",
+                "badge": "Unavailable",
+                "title": "Real-time Disease Risk Unavailable",
+                "reason": "Live weather telemetry is currently unavailable.",
+                "recommendation": "Perform visual crop canopy scouting for pest and fungal symptoms."
+            },
+            "alerts": []
+        }
+
     curr_temp = current.get("temperature_2m") if current.get("temperature_2m") is not None else 25
     curr_humidity = current.get("relative_humidity_2m") if current.get("relative_humidity_2m") is not None else 50
     curr_wind = current.get("wind_speed_10m") if current.get("wind_speed_10m") is not None else 5
@@ -163,7 +195,7 @@ def generate_fallback_weather_data(lat: float, lon: float, location_name: Option
     Generates realistic, climatologically consistent agronomic weather data
     when upstream Open-Meteo is temporarily unreachable or offline.
     """
-    now = datetime.now()
+    now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     month = now.month
     forecast_days = max(1, min(forecast_days, 14))
 
@@ -213,7 +245,7 @@ def generate_fallback_weather_data(lat: float, lon: float, location_name: Option
     # Daily Forecast
     daily = []
     t_max_list, t_min_list, p_sum_list, p_prob_list, w_max_list = [], [], [], [], []
-    today = date.today()
+    today = now.date()
     for i in range(forecast_days):
         d_date = (today + timedelta(days=i)).isoformat()
         t_high = round(base_max + lat_mod + (i % 3 - 1) * 0.8, 1)
@@ -286,7 +318,7 @@ def generate_fallback_weather_data(lat: float, lon: float, location_name: Option
         "precipitation_probability": h_probs,
         "wind_speed_10m": h_winds
     }
-    advisories = generate_agricultural_advisories(current, daily_raw, hourly_raw)
+    advisories = generate_agricultural_advisories(current, daily_raw, hourly_raw, is_fallback=True)
 
     return {
         "location": {
@@ -311,13 +343,17 @@ def fetch_weather_data(lat: float, lon: float, location_name: Optional[str] = No
     cache_key = (round(float(lat), 3), round(float(lon), 3), int(forecast_days))
 
     # 1. Check in-memory cache
-    cached_entry = _WEATHER_CACHE.get(cache_key)
-    if cached_entry:
-        cached_time, cached_data = cached_entry
-        if time.time() - cached_time < CACHE_TTL_SECONDS:
-            res = dict(cached_data)
-            res["cached"] = True
-            return res
+    cached_entry = None
+    with _WEATHER_CACHE_LOCK:
+        cached_entry = _WEATHER_CACHE.get(cache_key)
+        if cached_entry:
+            _WEATHER_CACHE.move_to_end(cache_key)
+            cached_time, cached_data = cached_entry
+            if time.time() - cached_time < CACHE_TTL_SECONDS:
+                res = copy.deepcopy(cached_data)
+                res["location"] = {**res.get("location", {}), "name": location_name or f"{lat:.2f}, {lon:.2f}"}
+                res["cached"] = True
+                return res
 
     # 2. Query Open-Meteo upstream API
     url = "https://api.open-meteo.com/v1/forecast"
@@ -420,18 +456,28 @@ def fetch_weather_data(lat: float, lon: float, location_name: Optional[str] = No
             "is_fallback": False
         }
 
-        # Store in cache
-        _WEATHER_CACHE[cache_key] = (time.time(), result)
+        # Store in bounded LRU cache under lock
+        with _WEATHER_CACHE_LOCK:
+            _WEATHER_CACHE[cache_key] = (time.time(), result)
+            _WEATHER_CACHE.move_to_end(cache_key)
+            while len(_WEATHER_CACHE) > MAX_WEATHER_CACHE_ENTRIES:
+                _WEATHER_CACHE.popitem(last=False)
         return result
 
     except Exception as exc:
         logger.warning(f"Open-Meteo upstream call failed ({exc}). Falling back to cached/simulated data.")
-        # If any cached entry exists (even expired), return it
+        # If any cached entry exists within MAX_STALE_CACHE_SECONDS, return it with stale indicators
         if cached_entry:
-            res = dict(cached_entry[1])
-            res["cached"] = True
-            res["is_fallback"] = False
-            return res
+            cached_time, cached_data = cached_entry
+            data_age = int(time.time() - cached_time)
+            if data_age <= MAX_STALE_CACHE_SECONDS:
+                res = copy.deepcopy(cached_data)
+                res["location"] = {**res.get("location", {}), "name": location_name or f"{lat:.2f}, {lon:.2f}"}
+                res["cached"] = True
+                res["is_stale"] = True
+                res["data_age_seconds"] = data_age
+                res["is_fallback"] = False
+                return res
         # Otherwise, generate realistic fallback
         return generate_fallback_weather_data(lat, lon, location_name, forecast_days)
 

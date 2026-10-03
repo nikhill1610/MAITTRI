@@ -107,10 +107,10 @@ class NutrientAnalysisRequest(BaseModel):
 
 class ParaliAnalyzeRequest(BaseModel):
     crop: str = "rice"
-    area: float = Field(..., gt=0)
+    area: float = Field(..., gt=0, allow_inf_nan=False)
     area_unit: str = "acre"
-    residue_quantity: Optional[float] = None
-    residue_quantity_source: Optional[str] = "estimated"
+    residue_quantity: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    residue_quantity_source: Optional[str] = None
     farmer_goal: Optional[str] = "recommend_best"
     machinery_available: Optional[str] = "not_sure"
     machinery: Optional[List[str]] = []
@@ -124,7 +124,7 @@ class ParaliAnalyzeRequest(BaseModel):
 class ParaliActionPlanRequest(BaseModel):
     method_id: str
     crop: Optional[str] = "rice"
-    area: Optional[float] = 1.0
+    area: Optional[float] = Field(default=1.0, gt=0, allow_inf_nan=False)
     area_unit: Optional[str] = "acre"
 
 class FertilizerAnalyzeRequest(BaseModel):
@@ -392,6 +392,32 @@ class FarmerNoteRequest(BaseModel):
 # Multi-Channel MAITTRI Platform Schemas
 # ========================================================
 
+class FarmerBase(BaseModel):
+    """Shared farmer fields without input-validation constraints.
+    Used as the base for FarmerResponse so serialization never fails
+    on legacy or edge-case data."""
+    name: Optional[str] = None
+    mobile_number: Optional[str] = None
+    alternate_mobile: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    block: Optional[str] = None
+    village: Optional[str] = None
+    farm_area: Optional[float] = None
+    area_unit: Optional[str] = None
+    land_ownership: Optional[str] = None
+    irrigation: Optional[str] = None
+    soil_type: Optional[str] = None
+    soil_test_available: Optional[bool] = None
+    current_crop: Optional[str] = None
+    previous_crop: Optional[str] = None
+    planned_crop: Optional[str] = None
+    sowing_date: Optional[str] = None
+    crop_variety: Optional[str] = None
+    preferred_language: Optional[str] = None
+    sms_consent: Optional[bool] = None
+    ivr_consent: Optional[bool] = None
+
 class FarmerCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
     mobile_number: str = Field(..., min_length=10, max_length=20)
@@ -416,14 +442,14 @@ class FarmerCreate(BaseModel):
     ivr_consent: bool = True
 
 class FarmerUpdate(BaseModel):
-    name: Optional[str] = None
-    mobile_number: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    mobile_number: Optional[str] = Field(default=None, min_length=10, max_length=20)
     alternate_mobile: Optional[str] = None
     state: Optional[str] = None
     district: Optional[str] = None
     block: Optional[str] = None
     village: Optional[str] = None
-    farm_area: Optional[float] = None
+    farm_area: Optional[float] = Field(default=None, gt=0)
     area_unit: Optional[str] = None
     land_ownership: Optional[str] = None
     irrigation: Optional[str] = None
@@ -438,7 +464,7 @@ class FarmerUpdate(BaseModel):
     sms_consent: Optional[bool] = None
     ivr_consent: Optional[bool] = None
 
-class FarmerResponse(FarmerCreate):
+class FarmerResponse(FarmerBase):
     id: int
     maittri_farmer_id: str
     mobile_number: Optional[str] = None

@@ -37,7 +37,8 @@ class DemoSMSAdapter(SMSProvider):
     """
 
     def send(self, to: str, message: str, template_id: Optional[str] = None) -> Dict[str, Any]:
-        logger.info(f"[DEMO SMS] Simulated message to {to}: {message[:60]}...")
+        masked = ('*' * max(0, len(to) - 4)) + to[-4:] if len(to) > 4 else '****'
+        logger.info(f"[DEMO SMS] Simulated message to {masked} ({len(message)} chars)")
         return {
             "success": True,
             "status": "SIMULATED_DEMO",
@@ -107,7 +108,7 @@ class Msg91SMSAdapter(SMSProvider):
             "template_id": template_id or os.getenv("SMS_TEMPLATE_ID", ""),
             "sender": self.sender_id,
             "short_url": "0",
-            "recipients": [{"mobiles": clean_num, "VAR1": message[:30], "VAR2": message[30:60]}]
+            "recipients": [{"mobiles": clean_num, "VAR1": message}]
         }
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=10)
@@ -161,6 +162,26 @@ def dispatch_sms(
     """
     Dispatches SMS through configured gateway, logs attempt to database, and returns result.
     """
+    digits = "".join(c for c in str(mobile_number or "") if c.isdigit())
+    if len(digits) < 10:
+        return {
+            "success": False,
+            "status": "FAILED",
+            "provider": "none",
+            "is_demo_mode": False,
+            "error": "Invalid or missing mobile number"
+        }
+
+    last10 = digits[-10:]
+    if last10.startswith("00000") or len(set(last10)) == 1:
+        return {
+            "success": False,
+            "status": "FAILED",
+            "provider": "none",
+            "is_demo_mode": False,
+            "error": "Invalid or placeholder mobile number"
+        }
+
     provider = get_sms_provider()
     result = provider.send(to=mobile_number, message=message, template_id=template_id)
 

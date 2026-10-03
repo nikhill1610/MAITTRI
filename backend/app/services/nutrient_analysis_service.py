@@ -179,6 +179,12 @@ SOIL_VULNERABILITIES: Dict[str, Dict[str, Any]] = {
         "fixation_prone": ["Zn", "Fe", "Mn", "P"],
         "retentive": ["Ca", "Mg", "K"],
         "summary": "Excess sodium/calcium carbonates drastically suppress availability of zinc, iron, manganese, and phosphorus."
+    },
+    "Silty Clay Loam": {
+        "leaching_prone": [],
+        "fixation_prone": ["P"],
+        "retentive": ["K", "Ca", "Mg"],
+        "summary": "Fine-textured soil with high moisture and nutrient retention capacity, moderate phosphorus fixation."
     }
 }
 
@@ -196,19 +202,20 @@ BILINGUAL_CROP_NORM = {
 }
 
 BILINGUAL_SOIL_NORM = {
-    "alluvial soil": "Alluvial soil", "जलोढ़ मिट्टी": "Alluvial soil", "alluvial": "Alluvial soil",
+    "alluvial soil": "Alluvial Soil", "जलोढ़ मिट्टी": "Alluvial Soil", "alluvial": "Alluvial Soil",
     "black soil": "Black soil", "काली मिट्टी": "Black soil", "regur": "Black soil",
     "red soil": "Red soil", "लाल मिट्टी": "Red soil",
     "laterite soil": "Laterite soil", "लैटेराइट मिट्टी": "Laterite soil",
-    "desert/arid soil": "Desert / Arid soil", "desert soil": "Desert / Arid soil", "मरुस्थलीय / रेतीली मिट्टी": "Desert / Arid soil",
-    "mountain/forest soil": "Mountain / Forest soil", "पर्वतीय / वन मिट्टी": "Mountain / Forest soil",
-    "saline/alkaline soil": "Saline / Alkaline soil", "लवणीय / क्षारीय मिट्टी": "Saline / Alkaline soil",
+    "desert/arid soil": "Desert/Arid Soil", "desert soil": "Desert/Arid Soil", "मरुस्थलीय / रेतीली मिट्टी": "Desert/Arid Soil",
+    "mountain/forest soil": "Mountain/Forest Soil", "पर्वतीय / वन मिट्टी": "Mountain/Forest Soil",
+    "saline/alkaline soil": "Saline/Alkaline Soil", "लवणीय / क्षारीय मिट्टी": "Saline/Alkaline Soil",
     "loamy soil": "Loamy soil", "दोमट मिट्टी": "Loamy soil",
     "sandy soil": "Sandy soil", "बलुई मिट्टी": "Sandy soil",
-    "clayey soil": "Clayey soil", "चिकनी मिट्टी": "Clayey soil",
+    "clayey soil": "Clay soil", "clay soil": "Clay soil", "चिकनी मिट्टी": "Clay soil",
     "sandy loam": "Sandy loam", "बलुई दोमट": "Sandy loam",
     "clay loam": "Clay loam", "चिकनी दोमट": "Clay loam",
-    "silty soil": "Silty soil", "गाद युक्त मिट्टी": "Silty soil"
+    "silty clay loam": "Silty Clay Loam", "सिल्टी क्ले लोम": "Silty Clay Loam",
+    "silty soil": "Loamy soil", "गाद युक्त मिट्टी": "Loamy soil"
 }
 
 def resolve_crop_key(name: Optional[str]) -> str:
@@ -238,7 +245,7 @@ def resolve_soil_key(name: Optional[str]) -> str:
             return v
     # Check case-insensitive against SOIL_VULNERABILITIES keys
     for k in SOIL_VULNERABILITIES:
-        if k.lower() == clean:
+        if k.lower() == clean or k.lower().replace(" ", "").replace("/", "") == clean.replace(" ", "").replace("/", ""):
             return k
     return "Loamy soil"
 
@@ -283,6 +290,11 @@ def analyze_nutrient_depletion(
         cat = item["category"]
 
         # --- 1. Laboratory Test Check (Highest Priority) ---
+        # NOTE (Finding 30 / Unit Uncertainty):
+        # Laboratory soil test thresholds below (N: 40/80, P: 20/45, K: 25/55) represent calibrated application
+        # index values. Depending on laboratory instrumentation and Indian Soil Health Card reporting standards,
+        # available macronutrients may be expressed in kg/ha, ppm (mg/kg), or oxide equivalents (P2O5, K2O).
+        # Per project safety guardrails, numeric thresholds remain unmodified to prevent ungrounded agronomic drift.
         if sym == "N" and soil_n is not None:
             if soil_n < 40:
                 status = "Likely depleted"
@@ -413,7 +425,11 @@ def analyze_nutrient_depletion(
                     reasons_list.append(f"Acidic pH ({soil_ph:.1f}) increases {name} solubility, making deficiency rare.")
             elif soil_ph > 7.8:  # Alkaline / Calcareous
                 if sym in ["Zn", "Fe", "Mn", "B"]:
-                    status = "Likely depleted" if sym == "Zn" else "Possibly depleted"
+                    # Preserve stronger 'Likely depleted' conclusion if already determined by prior factors
+                    if sym == "Zn":
+                        status = "Likely depleted"
+                    elif status != "Likely depleted":
+                        status = "Possibly depleted"
                     reasons_list.append(f"Alkaline soil pH ({soil_ph:.1f}) precipitates {name}, causing low plant-available uptake.")
                 elif sym == "P":
                     if status == "Likely adequate":

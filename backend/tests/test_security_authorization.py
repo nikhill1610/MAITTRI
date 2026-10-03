@@ -75,6 +75,7 @@ def user_farmer_a(db_session: Session):
         user_id=target_user_id,
         maittri_farmer_id=f"MTR-A-{uuid.uuid4().hex[:4].upper()}",
         full_name="Farmer Alpha",
+        mobile_number="0000000001",
         state="Haryana",
         district="Karnal",
         preferred_language="hi"
@@ -109,6 +110,7 @@ def user_farmer_b(db_session: Session):
         user_id=target_user_id,
         maittri_farmer_id=f"MTR-B-{uuid.uuid4().hex[:4].upper()}",
         full_name="Farmer Beta",
+        mobile_number="0000000002",
         state="Punjab",
         district="Ludhiana",
         preferred_language="pa"

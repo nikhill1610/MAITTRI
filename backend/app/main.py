@@ -14,9 +14,11 @@ except ImportError:
 import logging
 logger = logging.getLogger("maitri.main")
 
-from fastapi import FastAPI, HTTPException, status, Depends, Header
+from fastapi import FastAPI, HTTPException, status, Depends, Header, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError, OperationalError, DatabaseError
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
 from .routes import (
@@ -79,9 +81,10 @@ if engine.name == "sqlite" and _environment == "development":
                         conn.execute(text(f"ALTER TABLE farm_plans ADD COLUMN {col_name} {col_type}"))
 
             # Migration for IoT sensor readings table
-            iot_cols = [c["name"] for c in inspect(engine).get_columns("iot_sensor_readings")]
-            if "water_distance_cm" not in iot_cols:
-                conn.execute(text("ALTER TABLE iot_sensor_readings ADD COLUMN water_distance_cm FLOAT"))
+            if inspect(engine).has_table("iot_sensor_readings"):
+                iot_cols = [c["name"] for c in inspect(engine).get_columns("iot_sensor_readings")]
+                if "water_distance_cm" not in iot_cols:
+                    conn.execute(text("ALTER TABLE iot_sensor_readings ADD COLUMN water_distance_cm FLOAT"))
 
             conn.commit()
     except Exception as e:
@@ -101,6 +104,30 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Smart Agriculture AI API", version="1.0.0", lifespan=lifespan)
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    logger.warning("Database integrity constraint violated: %s", exc.__class__.__name__)
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": "A database uniqueness or integrity constraint was violated."}
+    )
+
+@app.exception_handler(OperationalError)
+async def operational_error_handler(request: Request, exc: OperationalError):
+    logger.error("Database operational error: %s", exc.__class__.__name__)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Database service temporarily unavailable. Please retry shortly."}
+    )
+
+@app.exception_handler(DatabaseError)
+async def database_error_handler(request: Request, exc: DatabaseError):
+    logger.error("Database error: %s", exc.__class__.__name__)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Database service temporarily unavailable. Please retry shortly."}
+    )
 
 _cors_env = os.getenv("CORS_ORIGINS")
 _default_origins = [

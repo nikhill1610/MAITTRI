@@ -54,7 +54,7 @@ AGRI_EXPANSIONS = [
     (r"आलू|aaloo|aalu|potato", "potato tuber aalu"),
     (r"टमाटर|tamatar|tomato", "tomato tamatar fruit borer"),
     (r"सरसों|राई|sarson|rai|mustard|rapeseed", "mustard rapeseed sarson rabi"),
-    (r"चना|चने|chana|chane|chickpea|gram", "chickpea gram pod borer chana"),
+    (r"चना|चने|chana|chane|chickpea|bengal\s*gram", "chickpea gram pod borer chana"),
 
     # Irrigation & Water
     (r"पहली सिंचाई|pehli sinchai|first irrigation", "first irrigation CRI crown root initiation stage 21 days"),
@@ -122,21 +122,21 @@ AGRI_EXPANSIONS = [
     (r"फसल चक्र|फसल चक्रीकरण|फसल विविधीकरण|crop rotation|crop diversification|rotational cropping|rotation", "crop rotation fasal chakra crop diversification soil fertility legume nitrogen fixation green manure benefits")
 ]
 
-# Crop detection regex patterns
+# Crop detection regex patterns (Pigeonpea prioritized before Chickpea to prevent 'red gram' clash)
 CROP_DETECTION_PATTERNS = {
+    "Pigeonpea": r"अरहर|तुअर|तूअर|तुवर|arhar|toor|tur|tuar|tuvar|pigeonpea|red\s*gram",
     "Wheat": r"गेहूं|गेहू|गेहूँ|gehu|gehun|wheat",
-    "Rice": r"धान|चावल|\bdhan\b|dhaan|chawal|rice|paddy",
+    "Rice": r"धान|चावल|dhan|dhaan|chawal|rice|paddy",
     "Maize": r"मक्का|मकई|makka|makai|corn|maize",
     "Potato": r"आलू|aaloo|aalu|potato",
     "Tomato": r"टमाटर|tamatar|tomato",
     "Mustard": r"सरसों|राई|sarson|rai|mustard|rapeseed",
-    "Chickpea": r"चना|चने|chana|chane|chickpea|gram|मसूर|lentil",
+    "Chickpea": r"चना|चने|chana|chane|chickpea|bengal\s*gram",
     "Sugarcane": r"गन्ना|ईख|ganna|sugarcane",
-    "Onion": r"प्याज|pyaj|pyaaz|onion",
+    "Onion": r"प्याज|प्याज़|pyaj|pyaz|pyaaz|onion",
     "Soybean": r"सोयाबीन|soybean|soya",
-    "Groundnut": r"मूंगफली|mungfali|peanut|groundnut",
-    "Pigeonpea": r"अरहर|तुअर|arhar|tuar|pigeonpea",
-    "Chilli": r"मिर्च|mirch|mirchi|chilli|chili",
+    "Groundnut": r"मूंगफली|मूँगफली|mungfali|peanut|groundnut",
+    "Chilli": r"मिर्च|मिर्ची|mirch|mirchi|chilli|chili|capsicum|shimla\s*mirch|शिमला\s*मिर्च",
     "Banana": r"केला|kela|banana",
     "Cotton": r"कपास|रूई|kapas|cotton"
 }
@@ -227,8 +227,9 @@ def is_non_agricultural(text: str) -> bool:
         "gram", "poplar", "eucalyptus", "polyhouse", "nematode", "pics", "hermetic",
         "storage", "seeder", "biostimulant", "humic", "gypsum", "जिप्सम", "पॉलीहाउस"
     ]
-    if any(w in q_lower for w in agri_words):
-        return False
+    for w in agri_words:
+        if unicode_word_match(re.escape(w), text):
+            return False
 
     out_of_domain_patterns = [
         r"capital of\b",
@@ -347,6 +348,11 @@ def query_knowledge_base_pgvector(
     if not (database_url.startswith("postgresql://") or database_url.startswith("postgres://")):
         return None
 
+    from ..database import engine
+    env = os.getenv("ENVIRONMENT", "production").lower()
+    if engine and engine.name != "postgresql" and env in ("development", "test"):
+        return None
+
     embedding = compute_query_embedding(expanded_q)
     if embedding is None or len(embedding) == 0:
         return None
@@ -385,48 +391,42 @@ def query_knowledge_base_pgvector(
     except Exception as pool_err:
         logger.debug(f"SQLAlchemy pooled pgvector query attempt: {pool_err}. Falling back to direct psycopg2.")
 
-    # 2. Resilient fallback with psycopg2
-    import time
+    # 2. Resilient fallback with psycopg2 (bounded timeout, respecting existing DSN without forcing sslmode)
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
-    max_retries = 2
-    for attempt in range(max_retries):
-        conn = None
-        try:
-            conn = psycopg2.connect(dsn=database_url, connect_timeout=10, sslmode="require")
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT 
-                        id, document_id, chunk_id_str, content, section_title, section_type,
-                        page_number, title, source, source_type, source_url, category, crop,
-                        version, similarity
-                    FROM private.match_knowledge_chunks(
-                        %s::extensions.vector,
-                        %s::pg_catalog.float8,
-                        %s::pg_catalog.int4,
-                        %s::pg_catalog.varchar,
-                        %s::pg_catalog.varchar
-                    );
-                    """,
-                    (vec_str, match_threshold, top_k, crop_filter, category_filter)
-                )
-                rows = [dict(r) for r in cur.fetchall()]
-            conn.close()
-            return rows
-        except Exception as e:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-            if attempt < max_retries - 1:
-                logger.warning(f"PostgreSQL pgvector query attempt {attempt+1} failed: {e}. Retrying in 1s...")
-                time.sleep(1)
-            else:
-                logger.error(f"Direct server-side PostgreSQL query to private.match_knowledge_chunks failed: {e}")
-                return None
+    conn = None
+    try:
+        # Bounded connection timeout (3s) respecting project DSN configuration without hardcoded sslmode
+        conn = psycopg2.connect(dsn=database_url, connect_timeout=3)
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id, document_id, chunk_id_str, content, section_title, section_type,
+                    page_number, title, source, source_type, source_url, category, crop,
+                    version, similarity
+                FROM private.match_knowledge_chunks(
+                    %s::extensions.vector,
+                    %s::pg_catalog.float8,
+                    %s::pg_catalog.int4,
+                    %s::pg_catalog.varchar,
+                    %s::pg_catalog.varchar
+                );
+                """,
+                (vec_str, match_threshold, top_k, crop_filter, category_filter)
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception as e:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        logger.warning(f"Direct fallback query to private.match_knowledge_chunks failed: {e}")
+        return None
 
 
 def query_knowledge_base(

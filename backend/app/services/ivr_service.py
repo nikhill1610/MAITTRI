@@ -49,7 +49,7 @@ MAIN_MENU_OPTIONS = [
 def handle_ivr_interaction(
     db: Session,
     session_id: Optional[str] = None,
-    phone_number: str = "9876543210",
+    phone_number: str = "",
     digits_pressed: Optional[str] = None,
     current_menu: str = "main",
     language: str = "hi",
@@ -63,8 +63,23 @@ def handle_ivr_interaction(
     clean_digits = (digits_pressed or "").strip()
     answers = diagnostic_answers or {}
 
-    # Lookup registered farmer by phone number
-    farmer = db.query(Farmer).filter(Farmer.mobile_number.like(f"%{phone_number[-10:]}%")).first()
+    # Normalize phone numbers and lookup registered farmer by exact match
+    farmer = None
+    clean_phone = "".join(ch for ch in str(phone_number or "") if ch.isdigit())
+    if len(clean_phone) >= 10:
+        normalized_10 = clean_phone[-10:]
+        if not (normalized_10.startswith("00000") or len(set(normalized_10)) == 1):
+            farmer = db.query(Farmer).filter(
+                Farmer.mobile_number.isnot(None),
+                Farmer.mobile_number != "",
+                (
+                    (Farmer.mobile_number == normalized_10) |
+                    (Farmer.mobile_number == f"+91{normalized_10}") |
+                    (Farmer.mobile_number == f"91{normalized_10}") |
+                    (Farmer.mobile_number == f"0{normalized_10}")
+                )
+            ).first()
+
     farm = None
     if farmer:
         farm = db.query(Farm).filter(Farm.farmer_id == farmer.id).first()
@@ -124,17 +139,52 @@ def handle_ivr_interaction(
             options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
 
         elif clean_digits == "2":
-            # Option 2: Weather
-            location_str = getattr(farmer, "district", None) or getattr(farm, "location_name", None) or "आपके क्षेत्र"
-            audio_hi = (
-                f"{location_str} में अगले 24 घंटों के दौरान मौसम सामान्यतः साफ रहेगा। "
-                "तापमान 22 से 28 डिग्री सेल्सियस रहने का अनुमान है। "
-                "वर्तमान में किसी गंभीर आंधी या भारी वर्षा की चेतावनी नहीं है।"
-            )
-            audio_en = (
-                f"Weather for {location_str} over the next 24 hours is forecasted to be generally clear. "
-                "Temperatures expected between 22 to 28 degrees Celsius. No severe storm alerts active."
-            )
+            # Option 2: Weather (Query live authoritative weather, never fabricate)
+            location_str = getattr(farmer, "district", None) or getattr(farm, "location_name", None)
+            weather_data = None
+            if farm and farm.latitude is not None and farm.longitude is not None:
+                try:
+                    from ..routes.weather import fetch_weather_data
+                    weather_data = fetch_weather_data(farm.latitude, farm.longitude, location_name=location_str, forecast_days=1)
+                except Exception as w_exc:
+                    logger.warning("Failed to fetch live weather for IVR: %s", w_exc)
+                    weather_data = None
+
+            if weather_data and "current" in weather_data:
+                curr = weather_data["current"]
+                temp = curr.get("temperature")
+                cond = curr.get("condition") or "सामान्य"
+                daily = (weather_data.get("daily_forecast") or [{}])[0]
+                t_min = daily.get("temp_min")
+                t_max = daily.get("temp_max")
+
+                advisories = weather_data.get("advisories", [])
+                has_alert = any("storm" in str(a).lower() or "warning" in str(a).lower() or "alert" in str(a).lower() or "heavy rain" in str(a).lower() for a in advisories)
+
+                if t_min is not None and t_max is not None:
+                    temp_range_en = f"Temperatures expected between {t_min} to {t_max} degrees Celsius."
+                    temp_range_hi = f"तापमान {t_min} से {t_max} डिग्री सेल्सियस रहने का अनुमान है।"
+                elif temp is not None:
+                    temp_range_en = f"Current temperature is {temp} degrees Celsius."
+                    temp_range_hi = f"वर्तमान तापमान {temp} डिग्री सेल्सियस है।"
+                else:
+                    temp_range_en = ""
+                    temp_range_hi = ""
+
+                loc_display_en = location_str or "your farm area"
+                loc_display_hi = location_str or "आपके क्षेत्र"
+
+                alert_en = " Severe weather alert is active: please take precautions." if has_alert else ""
+                alert_hi = " गंभीर मौसम चेतावनी सक्रिय है: कृपया सावधानी बरतें।" if has_alert else ""
+
+                audio_hi = f"{loc_display_hi} का मौसम: {cond}। {temp_range_hi}{alert_hi}".strip()
+                audio_en = f"Weather for {loc_display_en}: {cond}. {temp_range_en}{alert_en}".strip()
+            else:
+                loc_display_en = location_str or "your area"
+                loc_display_hi = location_str or "आपके क्षेत्र"
+                audio_hi = f"क्षमा करें, {loc_display_hi} के लिए वर्तमान मौसम की जानकारी उपलब्ध नहीं है।"
+                audio_en = f"Sorry, current weather information is currently unavailable for {loc_display_en}."
+
             next_menu = "action_done"
             options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
 
@@ -173,17 +223,45 @@ def handle_ivr_interaction(
             ]
 
         elif clean_digits == "5":
-            # Option 5: Market Price
-            audio_hi = (
-                f"{crop_name} का निकटतम मंडी भाव: "
-                "गेहूं 2350 रुपये प्रति क्विंटल, सरसों 5400 रुपये प्रति क्विंटल। "
-                "स्रोत: एगमार्कनेट (Agmarknet) नवीनतम उपलब्ध आंकड़े।"
-            )
-            audio_en = (
-                f"Latest Mandi Market Prices: "
-                "Wheat Rs 2350 per quintal, Mustard Rs 5400 per quintal. "
-                "Source: Agmarknet verified portal records."
-            )
+            # Option 5: Market Price (Query authentic market price service, never fabricate)
+            raw_crop = getattr(farmer, "current_crop", None) or getattr(farm, "current_crop", None)
+            state_val = getattr(farmer, "state", None) or getattr(farm, "state", None) or "Uttar Pradesh"
+            district_val = getattr(farmer, "district", None) or getattr(farm, "location_name", None)
+
+            price_data = None
+            if raw_crop:
+                try:
+                    from .market_price_service import get_latest_market_price
+                    price_data = get_latest_market_price(raw_crop, state_val, district=district_val)
+                except Exception as m_exc:
+                    logger.warning("Failed to fetch live market price for IVR: %s", m_exc)
+                    price_data = None
+
+            if price_data and price_data.get("price", {}).get("modal"):
+                c_name = price_data.get("crop", raw_crop)
+                modal = price_data["price"]["modal"]
+                unit = price_data["price"].get("unit", "quintal")
+                source = price_data.get("source") or "Official Mandi Records"
+                date_str = price_data.get("date")
+                mandi_name = price_data.get("market") or "Nearest Mandi"
+
+                date_part_hi = f" ({date_str})" if date_str else ""
+                date_part_en = f" as of {date_str}" if date_str else ""
+
+                audio_hi = (
+                    f"{c_name} का {mandi_name} में मॉडल भाव {modal} रुपये प्रति {unit} है। "
+                    f"स्रोत: {source}{date_part_hi}।"
+                )
+                audio_en = (
+                    f"Market price for {c_name} at {mandi_name}: Rs {modal} per {unit}. "
+                    f"Source: {source}{date_part_en}."
+                )
+            else:
+                crop_label_hi = raw_crop if raw_crop else "आपकी फसल"
+                crop_label_en = raw_crop if raw_crop else "your crop"
+                audio_hi = f"क्षमा करें, {crop_label_hi} के लिए वर्तमान मंडी भाव उपलब्ध नहीं है।"
+                audio_en = f"Sorry, current market prices are currently unavailable for {crop_label_en}."
+
             next_menu = "action_done"
             options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
 
@@ -250,6 +328,8 @@ def handle_ivr_interaction(
                 "Safe Action: If powdery residue rubs off on fingers, consult a local KVK officer before chemical spray. "
                 "Apply 5ml/L Neem Oil as safe initial deterrent."
             )
+            next_menu = "action_done"
+            options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
         elif clean_digits == "2":
             audio_hi = (
                 "संभावित कारण: माहू (Aphid) या सुंडी (Caterpillar) का प्रकोप। "
@@ -259,7 +339,9 @@ def handle_ivr_interaction(
                 "Possible Issue: Aphid infestation or Caterpillar attack. "
                 "Safe Action: Clip heavily infested shoots and deploy yellow sticky traps or pheromone traps."
             )
-        else:
+            next_menu = "action_done"
+            options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
+        elif clean_digits == "3":
             audio_hi = (
                 "संभावित कारण: जड़ गलन (Root rot) या जलजमाव। "
                 "सुरक्षित उपाय: खेत से तुरंत अतिरिक्त पानी निकालें और मिट्टी को सूखने दें। रासायनिक उपचार से पूर्व कृषि अधिकारी से मिलें।"
@@ -268,9 +350,21 @@ def handle_ivr_interaction(
                 "Possible Issue: Root rot or waterlogging stress. "
                 "Safe Action: Drain excess standing water immediately. Consult extension officer before root drenching."
             )
-
-        next_menu = "action_done"
-        options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
+            next_menu = "action_done"
+            options = [{"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}]
+        elif clean_digits == "9":
+            return handle_ivr_interaction(db, session_id, phone_number, "", "main", language)
+        else:
+            # Invalid or missing digit (e.g. 0, 9, None, arbitrary digit) - prompt caller again
+            audio_hi = "अमान्य विकल्प। कृपया पत्तियों के लिए 1, कीट के लिए 2, या जड़ सड़न के लिए 3 दबाएं।"
+            audio_en = "Invalid selection. Please press 1 for leaves, 2 for pests, or 3 for root rot."
+            next_menu = "pest_step_1"
+            options = [
+                {"digit": "1", "label_hi": "पत्तियों पर पीलापन या धब्बे", "label_en": "Leaf yellowing / spots"},
+                {"digit": "2", "label_hi": "कीट या सुंडी दिखे", "label_en": "Visible caterpillars / aphids"},
+                {"digit": "3", "label_hi": "तना या जड़ सड़न", "label_en": "Stem / root rotting"},
+                {"digit": "9", "label_hi": "मुख्य मेन्यू पर वापस जाएं", "label_en": "Return to Main Menu"}
+            ]
 
     elif current_menu == "action_done":
         if clean_digits == "9":
@@ -282,6 +376,14 @@ def handle_ivr_interaction(
             options = []
 
     # Record or update session log
+    interaction_entry = {
+        "menu": current_menu,
+        "digits": clean_digits,
+        "hi": audio_hi,
+        "en": audio_en,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
     existing_session = db.query(IVRSession).filter(IVRSession.session_id == session_id).first()
     if not existing_session:
         new_session = IVRSession(
@@ -291,15 +393,24 @@ def handle_ivr_interaction(
             language=language,
             current_menu=next_menu,
             digits_pressed=clean_digits,
-            transcript_json=json.dumps({"hi": audio_hi, "en": audio_en}),
+            transcript_json=json.dumps([interaction_entry]),
             is_demo_mode=True
         )
         db.add(new_session)
         db.commit()
     else:
         existing_session.current_menu = next_menu
+        existing_session.language = language
         existing_session.digits_pressed = clean_digits
         existing_session.updated_at = datetime.now(timezone.utc)
+        try:
+            stored = json.loads(existing_session.transcript_json or "[]")
+            if not isinstance(stored, list):
+                stored = [stored] if stored else []
+        except Exception:
+            stored = []
+        stored.append(interaction_entry)
+        existing_session.transcript_json = json.dumps(stored)
         db.commit()
 
     return {

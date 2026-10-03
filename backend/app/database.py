@@ -85,6 +85,7 @@ if is_postgres:
         if ENVIRONMENT == "development":
             logger.warning(f"PostgreSQL connection failed in development mode ({e}). Falling back to local SQLite.")
             DATABASE_URL = "sqlite:///./agri.db"
+            os.environ["DATABASE_URL"] = DATABASE_URL
             is_sqlite = True
             is_postgres = False
             engine = create_engine(
@@ -125,14 +126,9 @@ def get_db():
 
     try:
         yield db
-    except (OperationalError, DatabaseError) as e:
+    except Exception as e:
         db.rollback()
         logger.error(f"Database operation failed during transaction: {e.__class__.__name__}")
-        if ENVIRONMENT != "development":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database error occurred during operation. Transaction rolled back."
-            )
         raise
     finally:
         db.close()

@@ -25,6 +25,7 @@ INDIAN_SOIL_TYPES = [
     "Clayey Soil",
     "Sandy Loam",
     "Clay Loam",
+    "Silty Clay Loam",
     "Silty Soil",
     "Other"
 ]
@@ -57,13 +58,22 @@ def _estimate_from_regional_icar(lat: float, lon: float) -> Dict[str, Any]:
     Divides India into major agro-climatic and physiographic soil zones.
     """
     # 1. Himalayan Mountain & Forest Zone
-    if lat >= 30.0 and (74.0 <= lon <= 81.0):
+    # Specifically mountain zones of HP, J&K, Ladakh, and Uttarakhand hills (excluding Punjab, Haryana, UP plains)
+    if (lat >= 32.0 and (74.0 <= lon <= 78.0)) or (lat >= 30.5 and (78.0 <= lon <= 81.0)):
         # Uttarakhand, Himachal, J&K
         return {
             "probable_soil_type": "Mountain/Forest Soil",
             "confidence": "High",
             "region": "Western Himalayan Agro-Ecological Region",
             "explanation": "High altitude temperate/subalpine terrain dominated by humic mountain and brown forest soils (Inceptisols/Entisols)."
+        }
+    if (25.0 <= lat <= 27.5) and (89.5 <= lon <= 96.0):
+        # Brahmaputra valley (checked before NE hills)
+        return {
+            "probable_soil_type": "Alluvial Soil",
+            "confidence": "High",
+            "region": "Brahmaputra Alluvial Basin",
+            "explanation": "Recent and old riverine alluvium with high silt and loam texture."
         }
     if lat >= 26.5 and (88.0 <= lon <= 97.5):
         # North-Eastern Himalayan states
@@ -92,7 +102,7 @@ def _estimate_from_regional_icar(lat: float, lon: float) -> Dict[str, Any]:
         }
 
     # 3. Indo-Gangetic Plains (Alluvial Belt)
-    # Punjab, Haryana, Delhi, Uttar Pradesh, Bihar, West Bengal, Assam valley
+    # Punjab, Haryana, Delhi, Uttar Pradesh, Bihar, Northern West Bengal, Assam valley
     if (24.5 <= lat <= 31.5) and (74.5 <= lon <= 89.0):
         return {
             "probable_soil_type": "Alluvial Soil",
@@ -100,16 +110,32 @@ def _estimate_from_regional_icar(lat: float, lon: float) -> Dict[str, Any]:
             "region": "Indo-Gangetic Alluvial Plain",
             "explanation": "Deep quaternary fluvial sediment deposits from Ganga-Indus river basins; naturally fertile, light grey to brownish alluvial loams."
         }
-    if (25.0 <= lat <= 27.5) and (89.5 <= lon <= 96.0):
-        # Brahmaputra valley
+
+    # 4. Lower Gangetic Plain & Bengal Deltaic Tract
+    # Kolkata, Howrah, Hooghly, 24 Parganas, Nadia, Murshidabad
+    if (21.5 <= lat <= 24.5) and (87.5 <= lon <= 90.0):
         return {
             "probable_soil_type": "Alluvial Soil",
             "confidence": "High",
-            "region": "Brahmaputra Alluvial Basin",
-            "explanation": "Recent and old riverine alluvium with high silt and loam texture."
+            "region": "Lower Gangetic Plain & Bengal Delta",
+            "explanation": "Recent deltaic alluvium of the Ganga-Brahmaputra system; highly fertile silt loams and clay loams."
         }
 
-    # 4. Deccan Trap / Central-Western India (Black Soils / Vertisols)
+    # 5. Western Coastal Plain & Western Ghats Lateritic Belt
+    # Konkan, Goa, Coastal Karnataka (Mangalore, Udupi, Karwar), Kerala (Malabar, Kannur, Kozhikode)
+    is_west_coast_laterite = (
+        (8.0 <= lat <= 16.0 and 73.0 <= lon <= 76.5)
+        or (16.0 < lat <= 17.5 and 73.0 <= lon <= 73.8)
+    )
+    if is_west_coast_laterite:
+        return {
+            "probable_soil_type": "Laterite Soil",
+            "confidence": "High" if lat <= 16.0 else "Medium",
+            "region": "Western Ghats & Coastal Lateritic Belt",
+            "explanation": "Intense tropical monsoon rainfall causes silica leaching, leaving iron- and aluminum-rich porous lateritic crusts."
+        }
+
+    # 6. Deccan Trap / Central-Western India (Black Soils / Vertisols)
     # Maharashtra, Malwa (MP), North Karnataka, Saurashtra/Gujarat, Western Telangana
     if (16.0 <= lat <= 24.5) and (73.0 <= lon <= 80.5):
         return {
@@ -119,7 +145,7 @@ def _estimate_from_regional_icar(lat: float, lon: float) -> Dict[str, Any]:
             "explanation": "Formed by weathering of Cretaceous basalt lava flows; deep clayey Vertisols with high moisture retention and self-mulching swell-shrink properties."
         }
 
-    # 5. Southern and Eastern Red & Laterite Plateau
+    # 7. Southern and Eastern Red & Laterite Plateau
     # Karnataka, Tamil Nadu, Andhra, Telangana, Odisha, Jharkhand, Chhattisgarh
     if (8.0 <= lat <= 20.0) and (75.5 <= lon <= 85.5):
         # Check coastal / deltaic pockets
@@ -129,14 +155,6 @@ def _estimate_from_regional_icar(lat: float, lon: float) -> Dict[str, Any]:
                 "confidence": "Medium",
                 "region": "Eastern Coastal Deltaic Tract (Krishna-Godavari / Cauvery)",
                 "explanation": "Deltaic riverine alluvium combined with coastal sediments."
-            }
-        if lon < 76.5 and lat < 14.5:
-            # Western Ghats foothills / Malabar
-            return {
-                "probable_soil_type": "Laterite Soil",
-                "confidence": "Medium",
-                "region": "Western Ghats & Coastal Lateritic Belt",
-                "explanation": "Intense tropical leaching leaves iron- and aluminum-rich porous lateritic crusts."
             }
         return {
             "probable_soil_type": "Red Soil",

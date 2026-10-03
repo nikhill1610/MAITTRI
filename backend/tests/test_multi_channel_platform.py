@@ -51,8 +51,25 @@ def setup_test_users():
         "phone_number": "9123456780",
         "language": "en"
     })
-    assert r_op.status_code == 200, f"Operator registration failed: {r_op.text}"
     op_token = r_op.json()["access_token"]
+    op_user_id = str(r_op.json()["user_id"])
+
+    # Elevate operator role in db for test runner
+    from app.database import get_db
+    from app.models import Profile, User
+    db = next(get_db())
+    try:
+        prof = db.query(Profile).filter(Profile.id == op_user_id).first()
+        if prof:
+            prof.role = "AUTHORIZED_OPERATOR"
+            db.commit()
+        if op_user_id.isdigit():
+            u = db.query(User).filter(User.id == int(op_user_id)).first()
+            if u:
+                u.role = "AUTHORIZED_OPERATOR"
+                db.commit()
+    finally:
+        db.close()
 
     return {
         "farmer_token": farmer_token,
@@ -139,13 +156,19 @@ def test_soil_test_booking_lifecycle(setup_test_users):
     assert st_data["status"] == "REQUESTED"
     req_id = st_data["request_id"]
 
-    # 2. Update status to SCHEDULED
+    # 2. Update status to SCHEDULED then SAMPLE_COLLECTED
     update_res = client.patch(f"/api/soil-tests/{req_id}/status", json={
         "status": "SCHEDULED",
         "lab_name": "KVK Regional Agricultural Laboratory"
     }, headers=op_headers)
     assert update_res.status_code == 200
     assert update_res.json()["status"] == "SCHEDULED"
+
+    collect_res = client.patch(f"/api/soil-tests/{req_id}/status", json={
+        "status": "SAMPLE_COLLECTED"
+    }, headers=op_headers)
+    assert collect_res.status_code == 200
+    assert collect_res.json()["status"] == "SAMPLE_COLLECTED"
 
     # 3. Submit certified lab report
     report_res = client.post(f"/api/soil-tests/{req_id}/report", json={

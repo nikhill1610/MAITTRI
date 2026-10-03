@@ -8,9 +8,10 @@ import hmac
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
-from ..models import IoTDevice, IoTSensorReading, Farm, utcnow
+from ..models import IoTDevice, IoTSensorReading, Farm, Farmer, utcnow
+from ..deps import is_elevated_user
 from ..schemas import (
     IoTSensorDataCreate,
     RadarScanPoint,
@@ -41,19 +42,31 @@ def check_device_access(db: Session, device_id: str, user: Optional[Any] = None)
     Operators and Admins can access all devices.
     Unclaimed devices (user_id is None) can be viewed by anyone for prototyping.
     """
-    if not user or not device_id:
-        return
-    role = (getattr(user, "role", None) or "FARMER").upper()
-    if role in ("AUTHORIZED_OPERATOR", "ADMIN"):
+    if not device_id:
         return
 
     device = db.query(IoTDevice).filter(IoTDevice.device_id == device_id).first()
-    if device and device.user_id and str(device.user_id) != str(user.id):
-        # Check if linked to one of user's farms
+    if not device:
+        return
+
+    if device.user_id or device.farm_id:
+        if not user:
+            raise PermissionError(f"Authentication required: Device '{device_id}' is private.")
+        if is_elevated_user(user):
+            return
+        if device.user_id and str(device.user_id) == str(user.id):
+            return
         if device.farm_id:
-            farm = db.query(Farm).filter(Farm.id == device.farm_id, Farm.user_id == user.id).first()
+            farm = db.query(Farm).filter(Farm.id == device.farm_id).first()
             if farm:
-                return
+                if farm.user_id and str(farm.user_id) == str(user.id):
+                    return
+                if getattr(user, "farmer_id", None) and farm.farmer_id == user.farmer_id:
+                    return
+                if farm.farmer_id:
+                    farmer = db.query(Farmer).filter(Farmer.id == farm.farmer_id).first()
+                    if farmer and farmer.user_id and str(farmer.user_id) == str(user.id):
+                        return
         raise PermissionError(f"Access denied: Device '{device_id}' is registered to another user.")
 
 
@@ -92,22 +105,26 @@ def process_incoming_sensor_data(
         if not device.is_active:
             raise PermissionError(f"Access denied: Device '{data.device_id}' is revoked or deactivated.")
 
-        if device.device_token_hash:
-            if not device_token or not hmac.compare_digest(hash_device_token(device_token), device.device_token_hash):
-                raise PermissionError(f"Access denied: Invalid or missing device token for '{data.device_id}'.")
-        elif env == "production":
-            if not device_token:
-                raise PermissionError(f"Access denied: Device '{data.device_id}' requires an X-Device-Token in production.")
-            device.device_token_hash = hash_device_token(device_token)
-    else:
-        if env == "production" and not device_token:
-            raise PermissionError(f"Access denied: Unregistered device '{data.device_id}' requires an X-Device-Token in production.")
+        if not device.device_token_hash:
+            raise PermissionError(f"Access denied: Device '{data.device_id}' has not been provisioned with a secure token.")
 
-        token_hash = hash_device_token(device_token) if device_token else None
+        if not device_token or not hmac.compare_digest(hash_device_token(device_token), device.device_token_hash):
+            raise PermissionError(f"Access denied: Invalid or missing device token for '{data.device_id}'.")
+    else:
+        # In production, unprovisioned devices must not self-register via incoming telemetry
+        if env == "production":
+            raise PermissionError(f"Access denied: Device '{data.device_id}' is not provisioned.")
+
+        if not device_token:
+            raise PermissionError(f"Access denied: Device '{data.device_id}' requires an X-Device-Token.")
+
+        token_hash = hash_device_token(device_token)
+        # In non-production development/test simulation, device can be provisioned with its token hash
+        owner_id = user.id if (user and is_elevated_user(user)) else None
         device = IoTDevice(
             device_id=data.device_id,
-            user_id=user.id if user else None,
-            farm_id=getattr(data, "farm_id", None),
+            user_id=owner_id,
+            farm_id=None,
             controller_type=data.controller_type or "ESP32",
             name=f"MAITRI {data.controller_type or 'ESP'} Node",
             device_token_hash=token_hash,
@@ -120,16 +137,49 @@ def process_incoming_sensor_data(
 
     # Check ownership conflict: if device is owned by User A, User B cannot claim/push to it
     if device.user_id and user and str(device.user_id) != str(user.id):
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
+        if not is_elevated_user(user):
             raise PermissionError(f"Device '{data.device_id}' is registered to another user.")
 
-    if not device.user_id and user:
+    # Do not allow the first authenticated farmer to claim an unowned device.
+    # Device provisioning must be explicit and authorized by an operator or admin.
+    if not device.user_id and user and is_elevated_user(user):
         device.user_id = user.id
 
     farm_id = getattr(data, "farm_id", None)
-    if not device.farm_id and farm_id:
-        device.farm_id = farm_id
+    if farm_id is not None:
+        target_farm = db.query(Farm).filter(Farm.id == farm_id).first()
+        if not target_farm:
+            raise ValueError(f"Farm with id {farm_id} not found.")
+        if user and not is_elevated_user(user):
+            matches_user = target_farm.user_id and str(target_farm.user_id) == str(user.id)
+            target_farmer = db.query(Farmer).filter(Farmer.id == target_farm.farmer_id).first() if target_farm.farmer_id else None
+            matches_farmer = target_farmer and target_farmer.user_id and str(target_farmer.user_id) == str(user.id)
+            if not (matches_user or matches_farmer):
+                raise PermissionError("Access denied: You do not have permission to submit telemetry for this farm.")
+        elif device.user_id:
+            matches_user = target_farm.user_id and str(target_farm.user_id) == str(device.user_id)
+            target_farmer = db.query(Farmer).filter(Farmer.id == target_farm.farmer_id).first() if target_farm.farmer_id else None
+            matches_farmer = target_farmer and target_farmer.user_id and str(target_farmer.user_id) == str(device.user_id)
+            if not (matches_user or matches_farmer):
+                raise PermissionError("Access denied: Telemetry farm_id does not match device owner's farm.")
+
+        if not device.farm_id:
+            if not user:
+                raise PermissionError("Access denied: Unauthenticated request cannot link device to a farm.")
+            device.farm_id = farm_id
+        elif device.farm_id != farm_id:
+            if not user:
+                raise PermissionError("Access denied: Unauthenticated request cannot reassign device farm.")
+            matches_dev_user = str(device.user_id) == str(user.id)
+            farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+            matches_dev_farm = False
+            if device.farm_id:
+                dev_farm = db.query(Farm).filter(Farm.id == device.farm_id).first()
+                if dev_farm:
+                    matches_dev_farm = (dev_farm.user_id and str(dev_farm.user_id) == str(user.id)) or (farmer and dev_farm.farmer_id == farmer.id)
+            if not is_elevated_user(user) and not (matches_dev_user or matches_dev_farm):
+                raise PermissionError("Access denied: Cannot reassign device farm.")
+            device.farm_id = farm_id
 
     device.controller_type = data.controller_type or device.controller_type
     device.last_seen = now
@@ -434,8 +484,16 @@ def get_latest_telemetry(db: Session, device_id: Optional[str] = None, user: Opt
     target_telemetry = None
     if device_id and device_id in _latest_telemetry:
         target_telemetry = _latest_telemetry[device_id]
-    elif not device_id and _latest_overall:
-        target_telemetry = _latest_overall
+    elif not device_id:
+        if user and is_elevated_user(user):
+            target_telemetry = _latest_overall
+        elif user and _latest_overall:
+            latest_dev_id = _latest_overall.get("device_id")
+            try:
+                check_device_access(db, latest_dev_id, user)
+                target_telemetry = _latest_overall
+            except PermissionError:
+                target_telemetry = None
 
     if target_telemetry:
         # Check online / offline based on timestamp
@@ -458,6 +516,23 @@ def get_latest_telemetry(db: Session, device_id: Optional[str] = None, user: Opt
     query = db.query(IoTSensorReading)
     if device_id:
         query = query.filter(IoTSensorReading.device_id == device_id)
+    elif user and not is_elevated_user(user):
+        farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+        farm_filters = [Farm.user_id == user.id]
+        if farmer:
+            farm_filters.append(Farm.farmer_id == farmer.id)
+        user_farm_ids = [f.id for f in db.query(Farm).filter(or_(*farm_filters)).all()]
+        owned_device_ids = [d.device_id for d in db.query(IoTDevice).filter(
+            (IoTDevice.user_id == user.id) | (IoTDevice.farm_id.in_(user_farm_ids)) | (IoTDevice.user_id.is_(None) & IoTDevice.farm_id.is_(None))
+        ).all()]
+        if not owned_device_ids:
+            return get_default_demo_telemetry("MAITRI_ESP32_01", "ESP32")
+        query = query.filter(IoTSensorReading.device_id.in_(owned_device_ids))
+    else:
+        # Anonymous without device_id: do NOT return another farmer's latest private telemetry
+        # Return fallback demo prototype for MAITRI_ESP32_01 so public/live dashboard renders cleanly
+        return get_default_demo_telemetry("MAITRI_ESP32_01", "ESP32")
+
     last_reading = query.order_by(desc(IoTSensorReading.timestamp)).first()
 
     if last_reading:
@@ -518,15 +593,20 @@ def list_registered_devices(db: Session, user: Optional[Any] = None) -> List[Dic
     timeout_sec = _current_thresholds["offline_timeout_seconds"]
 
     query = db.query(IoTDevice)
-    if user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            user_farm_ids = [f.id for f in db.query(Farm).filter(Farm.user_id == user.id).all()]
-            query = query.filter(
-                (IoTDevice.user_id == user.id) |
-                (IoTDevice.farm_id.in_(user_farm_ids)) |
-                (IoTDevice.user_id.is_(None))
-            )
+    if user and not is_elevated_user(user):
+        farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+        farm_filters = [Farm.user_id == user.id]
+        if farmer:
+            farm_filters.append(Farm.farmer_id == farmer.id)
+        user_farm_ids = [f.id for f in db.query(Farm).filter(or_(*farm_filters)).all()]
+        query = query.filter(
+            (IoTDevice.user_id == user.id) |
+            (IoTDevice.farm_id.in_(user_farm_ids)) |
+            (IoTDevice.user_id.is_(None) & IoTDevice.farm_id.is_(None))
+        )
+    else:
+        # Anonymous users only see unclaimed/public devices
+        query = query.filter(IoTDevice.user_id.is_(None), IoTDevice.farm_id.is_(None))
 
     devices = query.order_by(desc(IoTDevice.last_seen)).all()
     results = []
@@ -585,14 +665,22 @@ def get_telemetry_history(db: Session, device_id: Optional[str] = None, limit: i
     query = db.query(IoTSensorReading)
     if device_id:
         query = query.filter(IoTSensorReading.device_id == device_id)
-    elif user:
-        role = (getattr(user, "role", None) or "FARMER").upper()
-        if role not in ("AUTHORIZED_OPERATOR", "ADMIN"):
-            user_farm_ids = [f.id for f in db.query(Farm).filter(Farm.user_id == user.id).all()]
-            owned_device_ids = [d.device_id for d in db.query(IoTDevice).filter(
-                (IoTDevice.user_id == user.id) | (IoTDevice.farm_id.in_(user_farm_ids)) | (IoTDevice.user_id.is_(None))
-            ).all()]
-            query = query.filter(IoTSensorReading.device_id.in_(owned_device_ids))
+    elif user and not is_elevated_user(user):
+        farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+        farm_filters = [Farm.user_id == user.id]
+        if farmer:
+            farm_filters.append(Farm.farmer_id == farmer.id)
+        user_farm_ids = [f.id for f in db.query(Farm).filter(or_(*farm_filters)).all()]
+        owned_device_ids = [d.device_id for d in db.query(IoTDevice).filter(
+            (IoTDevice.user_id == user.id) | (IoTDevice.farm_id.in_(user_farm_ids)) | (IoTDevice.user_id.is_(None) & IoTDevice.farm_id.is_(None))
+        ).all()]
+        query = query.filter(IoTSensorReading.device_id.in_(owned_device_ids))
+    else:
+        # Anonymous without device_id: only return history for unclaimed/public devices
+        unclaimed_ids = [d.device_id for d in db.query(IoTDevice).filter(IoTDevice.user_id.is_(None), IoTDevice.farm_id.is_(None)).all()]
+        if not unclaimed_ids:
+            return []
+        query = query.filter(IoTSensorReading.device_id.in_(unclaimed_ids))
 
     readings = query.order_by(desc(IoTSensorReading.timestamp)).limit(limit).all()
 

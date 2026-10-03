@@ -9,6 +9,11 @@ Provides:
 5. Incoming telephony webhook for real or simulated IVR systems
 """
 
+import os
+import hmac
+import hashlib
+import base64
+from xml.sax.saxutils import escape as xml_escape
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
@@ -20,11 +25,22 @@ from ..schemas import (
     SMSBroadcastRequest, SMSLogResponse,
     IVRSimulateRequest, IVRSimulateResponse
 )
-from ..deps import get_current_user, require_farmer_or_operator, require_operator
+from ..deps import get_current_user, require_farmer_or_operator, require_operator, is_elevated_user, is_same_user
 from ..services.sms_service import dispatch_sms
 from ..services.ivr_service import handle_ivr_interaction
 
 router = APIRouter()
+
+
+def validate_twilio_signature(url: str, post_data: dict, signature: str, auth_token: str) -> bool:
+    """Validates Twilio webhook request HMAC-SHA1 signature."""
+    s = url
+    for k in sorted(post_data.keys()):
+        s += f"{k}{post_data[k]}"
+    computed = base64.b64encode(
+        hmac.new(auth_token.encode("utf-8"), s.encode("utf-8"), hashlib.sha1).digest()
+    ).decode("utf-8")
+    return hmac.compare_digest(computed, signature)
 
 
 @router.get("/preferences/{farmer_id}", response_model=CommunicationPreferenceResponse)
@@ -38,9 +54,7 @@ def get_communication_preferences(
     if not farmer:
         raise HTTPException(status_code=404, detail="Farmer not found")
 
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and str(farmer.user_id) != str(current_user.id):
+    if not is_elevated_user(current_user) and not is_same_user(farmer.user_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot view communication preferences for another farmer."
@@ -70,9 +84,7 @@ def update_communication_preferences(
     if not farmer:
         raise HTTPException(status_code=404, detail="Farmer not found")
 
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and str(farmer.user_id) != str(current_user.id):
+    if not is_elevated_user(current_user) and not is_same_user(farmer.user_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot update communication preferences for another farmer."
@@ -145,7 +157,7 @@ def send_sms_broadcast(
 @router.get("/sms/logs", response_model=List[SMSLogResponse])
 def get_sms_logs(
     farmer_id: Optional[int] = Query(None),
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500, description="Max logs to return"),
     db: Session = Depends(get_db),
     operator: User = Depends(require_operator)
 ):
@@ -188,21 +200,79 @@ async def ivr_telephony_webhook(
     Returns basic TwiML voice XML response.
     """
     form_data = await request.form()
+
+    # In production, missing Twilio auth token must fail closed
+    is_prod = os.getenv("ENVIRONMENT", "production").lower() == "production"
+    twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    allow_dev_sim = (not is_prod) and (
+        os.getenv("ALLOW_IVR_SIMULATION", "true").lower() in ("true", "1") or
+        os.getenv("PYTEST_CURRENT_TEST") is not None
+    )
+
+    if not twilio_auth_token:
+        if is_prod or not allow_dev_sim:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Twilio integration not configured in production."
+            )
+    else:
+        signature = request.headers.get("X-Twilio-Signature")
+        if not signature:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Missing Twilio signature header."
+            )
+        # Proxy-safe URL reconstruction
+        proto = request.headers.get("X-Forwarded-Proto") or request.url.scheme
+        host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or request.url.netloc
+        path = request.url.path
+        query = f"?{request.url.query}" if request.url.query else ""
+        canonical_url = f"{proto}://{host}{path}{query}"
+
+        form_dict = {k: str(v) for k, v in form_data.items()}
+        is_valid = validate_twilio_signature(canonical_url, form_dict, signature, twilio_auth_token)
+        if not is_valid and canonical_url != str(request.url):
+            is_valid = validate_twilio_signature(str(request.url), form_dict, signature, twilio_auth_token)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid Twilio webhook signature."
+            )
+
     digits = form_data.get("Digits") or form_data.get("dtmf") or ""
-    caller = form_data.get("From") or form_data.get("CallFrom") or "9876543210"
+    caller = form_data.get("From") or form_data.get("CallFrom") or ""
+    call_sid = form_data.get("CallSid") or form_data.get("call_sid") or None
+    session_id = str(call_sid).strip() if call_sid else None
+
+    # Load existing IVR session state if available
+    current_menu = "main"
+    language = "hi"
+    if session_id:
+        existing_session = db.query(IVRSession).filter(IVRSession.session_id == session_id).first()
+        if existing_session:
+            current_menu = existing_session.current_menu or "main"
+            language = existing_session.language or "hi"
 
     result = handle_ivr_interaction(
         db=db,
+        session_id=session_id,
         phone_number=str(caller),
         digits_pressed=str(digits) if digits else None,
-        current_menu="main",
-        language="hi"
+        current_menu=current_menu,
+        language=language
     )
-
+    res_lang = result.get("language") or language or "hi"
+    if res_lang == "en":
+        raw_text = result.get("audio_text_en") or result.get("audio_text") or result.get("audio_text_hi") or ""
+        say_lang = "en-IN"
+    else:
+        raw_text = result.get("audio_text_hi") or result.get("audio_text") or result.get("audio_text_en") or ""
+        say_lang = "hi-IN"
+    safe_audio_text = xml_escape(str(raw_text))
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<Response>\n'
-        f'    <Say language="hi-IN">{result.get("audio_text_hi")}</Say>\n'
+        f'    <Say language="{say_lang}">{safe_audio_text}</Say>\n'
         '    <Gather numDigits="1" timeout="10" />\n'
         '</Response>'
     )

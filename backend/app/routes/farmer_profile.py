@@ -8,65 +8,96 @@ Provides the central Farm Profile as the single source of truth for:
 """
 
 import uuid
+import threading
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ..database import get_db
 from ..models import User, Farmer, Farm, CommunicationPreference
 from ..schemas import FarmerUpdate, FarmerResponse
-from ..deps import get_current_user
+from ..deps import get_current_user, is_elevated_user, is_same_user
 
 router = APIRouter()
 
+_farmer_creation_lock = threading.Lock()
+
 
 def ensure_farmer_record(user: User, db: Session) -> Farmer:
-    """Ensures every registered user has a canonical Farmer entity with unique MT-FARM ID."""
+    """
+    Ensures every registered user has a canonical Farmer entity with unique MT-FARM ID.
+    Follows safe temporary ID -> flush -> row.id derivation to avoid count-based race conditions.
+    Protects against duplicate creation under concurrent requests.
+    """
     farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
     if farmer:
         return farmer
 
-    # Auto-generate MAITTRI Farm ID
-    count = db.query(Farmer).count() + 1
-    f_id = f"MT-FARM-{count:06d}"
-    while db.query(Farmer).filter(Farmer.maittri_farmer_id == f_id).first():
-        count += 1
-        f_id = f"MT-FARM-{count:06d}"
+    with _farmer_creation_lock:
+        farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+        if farmer:
+            return farmer
 
-    qr_payload = f"MAITTRI:{f_id}:{uuid.uuid4().hex[:8]}"
+        temp_id = f"TEMP-{uuid.uuid4().hex[:8]}"
+        qr_payload = f"MAITTRI:{temp_id}:{uuid.uuid4().hex[:8]}"
 
-    # Check if user already had a farm
-    existing_farm = db.query(Farm).filter(Farm.user_id == user.id).first()
+        existing_farm = db.query(Farm).filter(Farm.user_id == user.id).first()
+        name_val = getattr(user, "full_name", None) or (
+            user.email.split("@")[0].capitalize() if getattr(user, "email", None) else "Farmer"
+        )
+        phone_val = getattr(user, "phone_number", None) or ""
 
-    farmer = Farmer(
-        maittri_farmer_id=f_id,
-        user_id=user.id,
-        name=getattr(user, "full_name", None) or user.email.split("@")[0].capitalize(),
-        mobile_number=getattr(user, "phone_number", None) or "9876543210",
-        state="Uttar Pradesh",
-        district=existing_farm.location_name if existing_farm and existing_farm.location_name else "Varanasi",
-        farm_area=existing_farm.area if existing_farm else 2.5,
-        soil_type=existing_farm.soil_type if existing_farm else "Alluvial Soil",
-        current_crop=existing_farm.current_crop if existing_farm else "Wheat",
-        previous_crop=existing_farm.previous_crop if existing_farm else "Rice",
-        preferred_language=getattr(user, "language", "hi") or "hi",
-        qr_code_data=qr_payload
-    )
-    db.add(farmer)
-    db.commit()
-    db.refresh(farmer)
+        farmer = Farmer(
+            maittri_farmer_id=temp_id,
+            user_id=user.id,
+            name=name_val,
+            mobile_number=phone_val,
+            state="Uttar Pradesh",
+            district=existing_farm.location_name if existing_farm and existing_farm.location_name else "Varanasi",
+            farm_area=existing_farm.area if existing_farm else 2.5,
+            soil_type=existing_farm.soil_type if existing_farm else "Alluvial Soil",
+            current_crop=existing_farm.current_crop if existing_farm else "Wheat",
+            previous_crop=existing_farm.previous_crop if existing_farm else "Rice",
+            preferred_language=getattr(user, "language", "hi") or "hi",
+            qr_code_data=qr_payload
+        )
 
-    if existing_farm and not existing_farm.farmer_id:
-        existing_farm.farmer_id = farmer.id
-        db.commit()
+        try:
+            db.add(farmer)
+            db.flush()
 
-    # Create default communication preferences
-    pref = CommunicationPreference(farmer_id=farmer.id)
-    db.add(pref)
-    db.commit()
+            final_id = f"MT-FARM-{farmer.id:06d}"
+            farmer.maittri_farmer_id = final_id
+            farmer.qr_code_data = f"MAITTRI:{final_id}:{uuid.uuid4().hex[:8]}"
 
-    return farmer
+            # Concurrency check: verify another transaction did not commit a Farmer for this user
+            concurrent_farmer = db.query(Farmer).filter(
+                Farmer.user_id == user.id,
+                Farmer.id != farmer.id
+            ).first()
+            if concurrent_farmer:
+                db.rollback()
+                return concurrent_farmer
+
+            if existing_farm and not existing_farm.farmer_id:
+                existing_farm.farmer_id = farmer.id
+
+            existing_pref = db.query(CommunicationPreference).filter(CommunicationPreference.farmer_id == farmer.id).first()
+            if not existing_pref:
+                pref = CommunicationPreference(farmer_id=farmer.id)
+                db.add(pref)
+
+            db.commit()
+            db.refresh(farmer)
+            return farmer
+        except IntegrityError:
+            db.rollback()
+            existing = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+            if existing:
+                return existing
+            raise
 
 
 @router.get("/me", response_model=FarmerResponse)
@@ -90,6 +121,10 @@ def update_my_farmer_profile(
     update_data = payload.model_dump(exclude_unset=True)
 
     for k, v in update_data.items():
+        if k in ("id", "user_id", "maittri_farmer_id"):
+            continue
+        if k in ("name", "mobile_number") and (v is None or not str(v).strip()):
+            continue
         setattr(farmer, k, v)
     farmer.updated_at = datetime.now(timezone.utc)
 
@@ -123,9 +158,7 @@ def get_farmer_qr_code(
     if not farmer:
         raise HTTPException(status_code=404, detail="Farmer not found")
 
-    user_role = (getattr(current_user, "role", "FARMER") or "FARMER").upper()
-    is_elevated = user_role in ("AUTHORIZED_OPERATOR", "OPERATOR", "ADMIN")
-    if not is_elevated and str(farmer.user_id) != str(current_user.id):
+    if not is_elevated_user(current_user) and not is_same_user(farmer.user_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: You cannot view another farmer's verification QR token."

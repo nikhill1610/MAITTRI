@@ -94,7 +94,7 @@ CROPS_PATTERNS = {
     "Maize": _ubound(r"मक्का|मकई|makka|makai|corn|maize"),
     "Potato": _ubound(r"आलू|aaloo|aalu|potato"),
     "Tomato": _ubound(r"टमाटर|tamatar|tomato"),
-    "Chickpea": _ubound(r"चना|चने|chana|chane|chickpea|bengal\s*gram|gram"),
+    "Chickpea": _ubound(r"चना|चने|chana|chane|chickpea|bengal\s*gram"),
     "Cotton": _ubound(r"कपास|cotton|kapas"),
     "Sugarcane": _ubound(r"गन्ना|sugarcane|ganna"),
     "Soybean": _ubound(r"सोयाबीन|soybean|soya"),
@@ -145,7 +145,7 @@ PESTICIDE_SAFETY_PATTERNS = [
 
 # Weather / Meteorological Patterns (Requires actual meteorological keywords)
 WEATHER_PATTERNS = [
-    r"(?:मौसम|weather|forecast|\brain\b|ba+rish|बारिश|वर्षा|बरसात|barsat|barsaat|तापमान|temperature|frost|पाला|cold wave|शीतलहर|heatwave|लू|mausam|monsoon|मानसून|drought|सूखा)",
+    r"(?:मौसम|weather|forecast|\brain\b|ba+rish|बारिश|वर्षा|बरसात|barsat|barsaat|तापमान|temperature|frost|पाला|cold wave|शीतलहर|heatwave|(?<![\u0900-\u097Fa-zA-Z0-9])लू(?![\u0900-\u097Fa-zA-Z0-9])|mausam|monsoon|मानसून|drought|(?<![\u0900-\u097Fa-zA-Z0-9])सूखा(?![\u0900-\u097Fa-zA-Z0-9]|\s*(?:रोग|की|का|के|लक्षण)))",
     r"(?:कल|आज|अभी|tomorrow|today|yesterday|aaj|kal|abhi|current|live|now|right\s*now)\s+.*?(?:मौसम|weather|\brain\b|ba+rish|बारिश|वर्षा|बरसात|barsat|barsaat|forecast|तापमान|temperature|frost|पाला|spray|छिड़काव|mausam|sinchai|irrigation|rainfall|humidity|monsoon)",
     r"(?:kya\s+)?(?:abhi|kal|aaj|today|tomorrow)\s+.*?(?:ba+rish|barish|बारिश|वर्षा|barsat|barsaat|rain|raining|precipitation)\s*(?:ho|hogi|hoga|hai|rhi|rahi|pad)",
     r"(?:can i spray|spray karu|छिड़काव करूं|छिड़काव करूँ|spray karun|should i spray)",
@@ -157,18 +157,18 @@ WEATHER_PATTERNS = [
 
 # Mandi & Financial Patterns
 MANDI_PATTERNS = [
-    r"mandi\s*(?:bhav|rate|price|rates)",
-    r"(मंडी|भाव|रेट|rate|price|bhav).*?(क्या है|कितना है|बताएं|बताओ|आज|today|latest|current|modal)",
-    r"(आज|today|latest|current).*?(mandi|भाव|रेट|rate|price|bhav|modal)",
+    r"mandi\s*(?:bhav|\brate\b|\bprice\b|rates)",
+    r"(मंडी|भाव|रेट|\brate\b|\bprice\b|bhav).*?(क्या है|कितना है|बताएं|बताओ|आज|today|latest|current|modal)",
+    r"(आज|today|latest|current).*?(mandi|भाव|रेट|\brate\b|\bprice\b|bhav|modal)",
     r"what is today'?s (mandi|market) price",
     r"today'?s price of",
-    r"mandi rate",
-    r"msp|न्यूनतम समर्थन मूल्य|minimum support price",
-    r"procurement|खरीद|खरीदी|उपार्जन",
-    r"agmarknet|apmc|enam",
+    r"\bmandi\s*rate\b",
+    r"\bmsp\b|न्यूनतम समर्थन मूल्य|minimum support price",
+    r"\bprocurement\b|(?<![\u0900-\u097Fa-zA-Z0-9])(खरीद|खरीदी|उपार्जन)(?![\u0900-\u097Fa-zA-Z0-9])",
+    r"\bagmarknet\b|\bapmc\b|\benam\b",
     r"modal\s*price",
-    r"bazaar\s*(?:bhav|rate|price)",
-    r"market\s*price"
+    r"\bbazaar\s*(?:bhav|rate|price)\b",
+    r"\bmarket\s*price\b"
 ]
 
 INSURANCE_SCHEMES_PATTERNS = [
@@ -239,7 +239,10 @@ VALID_SHORT_WORDS = {
     "is", "me", "ka", "ki", "ke", "ko", "se", "pe", "to", "na", "ha", "ye", "wo", "ab", "do",
     "ho", "ja", "de", "le", "re", "bhi", "par", "kya", "aur", "tai", "mai", "aap", "hum", "hai",
     # English common prepositions & short words
-    "in", "on", "at", "to", "or", "of", "an", "as", "by", "if", "my", "up", "so", "no", "hi", "he", "we", "am"
+    "in", "on", "at", "to", "or", "of", "an", "as", "by", "if", "my", "up", "so", "no", "hi", "he", "we", "am",
+    # Agronomic tokens, nutrients & legitimate agricultural acronyms
+    "ph", "n", "p", "k", "zn", "pmfby", "npk", "dap", "mop", "ec", "fe", "mn", "cu", "b", "mo", "s", "ca", "mg",
+    "cec", "kcc", "msp", "rvo", "fym", "cce", "ror", "dbt", "enam", "imd", "icar"
 }
 
 
@@ -489,13 +492,13 @@ def extract_location_from_text(text: str) -> Optional[str]:
 def detect_weather_time_scope(query: str) -> str:
     """Detects requested temporal horizon for weather: CURRENT, TOMORROW, NEXT_24_HOURS, or TODAY."""
     q = (query or "").lower()
-    if re.search(r"\b(kal|tomorrow|कल)\b", q):
+    if re.search(_ubound(r"kal|tomorrow|कल"), q):
         return "TOMORROW"
-    if re.search(r"\b(abhi|now|currently|right\s*now|इस\s*समय|अभी)\b", q):
+    if re.search(_ubound(r"abhi|now|currently|right\s*now|इस\s*समय|अभी"), q):
         return "CURRENT"
-    if re.search(r"\b(next\s*24|agle\s*24|अगले\s*24)\b", q):
+    if re.search(_ubound(r"next\s*24|agle\s*24|अगले\s*24"), q):
         return "NEXT_24_HOURS"
-    if re.search(r"\b(aaj|today|आज)\b", q):
+    if re.search(_ubound(r"aaj|today|आज"), q):
         return "TODAY"
     return "TODAY"
 
@@ -524,15 +527,15 @@ def extract_entities(query: str, context: Optional[Dict[str, Any]] = None) -> Di
         entities["crop_age_days"] = int(age_match.group(1))
 
     PEST_DISEASE_PATTERNS = {
-        "pod borer": r"\b(pod\s*borer|heliothis|helicoverpa|फली\s*छेदक|चना\s*इल्ली|फली\s*सुंडी)\b",
-        "yellow rust": r"\b(yellow\s*rust|stripe\s*rust|peela\s*ratua|पीला\s*रतुआ)\b",
-        "leaf curl": r"\b(leaf\s*curl|murda|leaf\s*curl\s*virus|पर्ण\s*कुंचन)\b",
-        "whitefly": r"\b(whitefly|white\s*fly|सफेद\s*मक्खी)\b",
-        "stem borer": r"\b(stem\s*borer|तना\s*छेदक)\b",
-        "aphid": r"\b(aphids?|maahu|माहू|मोयला)\b",
-        "fall armyworm": r"\b(fall\s*armyworm|faw|सैनिक\s*कीट)\b",
-        "late blight": r"\b(late\s*blight|jhulsa|झुलसा|पछेती\s*झुलसा)\b",
-        "early blight": r"\b(early\s*blight|अगेती\s*झुलसा)\b"
+        "pod borer": _ubound(r"pod\s*borer|heliothis|helicoverpa|फली\s*छेदक|चना\s*इल्ली|फली\s*सुंडी"),
+        "yellow rust": _ubound(r"yellow\s*rust|stripe\s*rust|peela\s*ratua|पीला\s*रतुआ"),
+        "leaf curl": _ubound(r"leaf\s*curl|murda|leaf\s*curl\s*virus|पर्ण\s*कुंचन"),
+        "whitefly": _ubound(r"whitefly|white\s*fly|सफेद\s*मक्खी"),
+        "stem borer": _ubound(r"stem\s*borer|तना\s*छेदक"),
+        "aphid": _ubound(r"aphids?|maahu|माहू|मोयला"),
+        "fall armyworm": _ubound(r"fall\s*armyworm|faw|सैनिक\s*कीट"),
+        "late blight": _ubound(r"late\s*blight|jhulsa|झुलसा|पछेती\s*झुलसा"),
+        "early blight": _ubound(r"early\s*blight|अगेती\s*झुलसा")
     }
     for t_name, t_pat in PEST_DISEASE_PATTERNS.items():
         if re.search(t_pat, q_lower):
@@ -663,11 +666,11 @@ def classify_query(
     # 3. Pesticide Chemical Safety & Refusal (Top safety priority)
     # Fertilizer dose questions must not trigger pesticide refusal solely because of the word "dose"
     is_pure_fertilizer = bool(re.search(
-        r"\b(urea|dap|npk|potash|khad|fertilizer|fertilizers|gypsum|zinc sulphate|organic manure|compost|यूरिया|डीएपी|खाद|उर्वरक|जिप्सम|पोटाश)\b",
+        _ubound(r"urea|dap|npk|potash|khad|fertilizer|fertilizers|gypsum|zinc sulphate|organic manure|compost|यूरिया|डीएपी|खाद|उर्वरक|जिप्सम|पोटाश"),
         q_lower
     ))
     has_chemical_hazard_term = bool(re.search(
-        r"\b(pesticide|insecticide|fungicide|herbicide|chemical|dawa|dawai|celphos|sulphas|quickphos|aluminium phosphide|कीटनाशक|रसायन|खरपतवारनाशक|फफूंदनाशक|सल्फास|सेलफॉस|सल्फॉस)\b",
+        _ubound(r"pesticide|insecticide|fungicide|herbicide|chemical|dawa|dawai|celphos|sulphas|quickphos|aluminium phosphide|कीटनाशक|रसायन|खरपतवारनाशक|फफूंदनाशक|सल्फास|सेलफॉस|सल्फॉस"),
         q_lower
     ))
 
@@ -774,8 +777,8 @@ def classify_query(
 
     # 6. Financial & Market Query Detection (Mandi Prices, MSP, PMFBY, Schemes)
     is_mandi = any(re.search(p, q_lower) for p in MANDI_PATTERNS) or bool(
-        re.search(r"\b(mandi|bazaar|market|apmc|agmarknet|enam|मंडी|बाज़ार)\b", q_lower) and
-        re.search(r"\b(bhav|rate|price|rates|prices|modal|bazaar|daam|dam|भाव|रेट|दाम)\b", q_lower)
+        re.search(_ubound(r"mandi|bazaar|market|apmc|agmarknet|enam|मंडी|बाज़ार"), q_lower) and
+        re.search(_ubound(r"bhav|rate|price|rates|prices|modal|bazaar|daam|dam|भाव|रेट|दाम"), q_lower)
     )
     is_insurance_or_scheme = any(re.search(p, q_lower) for p in INSURANCE_SCHEMES_PATTERNS)
 

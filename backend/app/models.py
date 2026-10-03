@@ -28,9 +28,8 @@ class GUID(TypeDecorator):
         try:
             import uuid as _u
             return str(_u.UUID(val_str))
-        except (ValueError, AttributeError):
-            import uuid as _u
-            return str(_u.uuid5(_u.NAMESPACE_OID, val_str))
+        except (ValueError, AttributeError) as exc:
+            raise ValueError(f"Invalid UUID value for GUID column: {value}") from exc
 
     def process_result_value(self, value, dialect):
         return str(value) if value is not None else None
@@ -74,7 +73,7 @@ class Profile(Base):
 class Farm(Base):
     __tablename__ = "farms"
     id = Column(Integer, primary_key=True)
-    user_id = Column(GUID, nullable=False, index=True)
+    user_id = Column(GUID, nullable=True, index=True)
     farmer_id = Column(Integer, nullable=True, index=True)
     name = Column(String(120), default="My Farm")
     latitude = Column(Float)
@@ -465,9 +464,11 @@ class Farmer(Base):
     def __init__(self, **kwargs):
         if "full_name" in kwargs and "name" not in kwargs:
             kwargs["name"] = kwargs.pop("full_name")
-        if "mobile_number" not in kwargs:
-            import random
-            kwargs["mobile_number"] = f"98765{random.randint(10000, 99999)}"
+        # Do not invent random fake mobile numbers (e.g. 98765XXXXX).
+        # Existing database has a NOT NULL constraint on farmers.mobile_number.
+        # Use an empty string if omitted or None rather than inventing a fake phone number.
+        if "mobile_number" not in kwargs or kwargs["mobile_number"] is None:
+            kwargs["mobile_number"] = ""
         super().__init__(**kwargs)
 
 
@@ -616,6 +617,8 @@ class Notification(Base):
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True)
     farmer_id = Column(Integer, ForeignKey("farmers.id"), nullable=True, index=True)
+    # Architecture exception: user_id intentionally references local users.id (Integer PK).
+    # Do not convert to GUID as production PostgreSQL schema defines notifications.user_id as INTEGER.
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     title = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)

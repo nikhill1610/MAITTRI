@@ -8,13 +8,13 @@ GET  /api/chat/status  - Status, vector store stats & model information
 """
 
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import get_optional_current_user
+from ..deps import get_optional_current_user, is_elevated_user
 from ..models import User, Farm, FarmPlan
 from ..services.chat_service import process_chat_message, DEFAULT_OPENROUTER_MODEL
 from ..services.rag_service import query_knowledge_base, get_chroma_collection
@@ -23,10 +23,28 @@ from ..services.iot_service import get_latest_telemetry
 router = APIRouter()
 
 
+class ChatContext(BaseModel):
+    crop: Optional[str] = Field(default=None, max_length=100)
+    location: Optional[str] = Field(default=None, max_length=150)
+    farm_id: Optional[int] = Field(default=None)
+    soil_type: Optional[str] = Field(default=None, max_length=100)
+    land_area: Optional[float] = Field(default=None, ge=0)
+    crop_age_days: Optional[int] = Field(default=None, ge=0)
+    soil_moisture: Optional[float] = Field(default=None, ge=0, le=100)
+    temperature: Optional[float] = Field(default=None, ge=-50, le=70)
+    previous_crop: Optional[str] = Field(default=None, max_length=100)
+    sowing_date: Optional[str] = Field(default=None, max_length=50)
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
 class ChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000, description="Farmer message/question")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Optional crop/soil/farm context")
-    history: Optional[List[Dict[str, str]]] = Field(default=None, description="Recent conversation turns")
+    context: Optional[ChatContext] = Field(default=None, description="Optional crop/soil/farm context")
+    history: Optional[List[ChatTurn]] = Field(default=None, max_length=10, description="Recent conversation turns (max 10)")
     model: Optional[str] = Field(default=None, description="Optional override for OpenRouter model")
 
 
@@ -62,17 +80,37 @@ class ChatMessageResponse(BaseModel):
 
 class ChatDebugRequest(BaseModel):
     query: str = Field(..., min_length=1)
-    top_k: Optional[int] = 4
+    top_k: Optional[int] = Field(default=4, ge=1, le=20, description="Top K knowledge chunks (1-20)")
 
 
-def _enrich_user_farm_context(db: Session, user: Optional[User], client_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _enrich_user_farm_context(db: Session, user: Optional[User], client_context: Optional[Any]) -> Dict[str, Any]:
     """Combines client-provided context with authenticated farmer's real farm and IoT data."""
-    ctx = dict(client_context) if client_context else {}
+    if hasattr(client_context, "model_dump"):
+        ctx = client_context.model_dump(exclude_unset=True)
+    elif isinstance(client_context, dict):
+        ctx = dict(client_context)
+    else:
+        ctx = {}
 
-    # If user is logged in, load farm profile
-    if user:
-        farm = db.query(Farm).filter(Farm.user_id == user.id).order_by(Farm.id.desc()).first()
+    # Anonymous requests must not supply an arbitrary farm_id
+    if not user:
+        ctx.pop("farm_id", None)
+    else:
+        req_farm_id = ctx.get("farm_id")
+        if req_farm_id is not None:
+            # Query exactly that farm belonging to the authenticated user
+            farm = db.query(Farm).filter(Farm.id == req_farm_id, Farm.user_id == user.id).first()
+            if not farm:
+                # Disallow cross-user farm access and do not silently fallback
+                ctx.pop("farm_id", None)
+        else:
+            # Preserve newest farm fallback behavior
+            farm = db.query(Farm).filter(Farm.user_id == user.id).order_by(Farm.id.desc()).first()
+
         if farm:
+            ctx["farm_id"] = farm.id
+            if not ctx.get("farm_name") and farm.name:
+                ctx["farm_name"] = farm.name
             if not ctx.get("crop") and farm.current_crop:
                 ctx["crop"] = farm.current_crop
             if not ctx.get("soil_type") and farm.soil_type:
@@ -123,30 +161,60 @@ def send_chat_message(
             detail="Please enter your farming question."
         )
 
-    enriched_context = _enrich_user_farm_context(db, user, payload.context)
+    context_dict = payload.context.model_dump(exclude_unset=True) if payload.context else {}
+    enriched_context = _enrich_user_farm_context(db, user, context_dict)
+
+    # Server-side model allowlist applied to both authenticated and anonymous callers
+    allowed_models = {
+        DEFAULT_OPENROUTER_MODEL,
+        os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
+    }
+    chat_allowed = os.getenv("CHAT_ALLOWED_MODELS", "")
+    if chat_allowed:
+        for m in chat_allowed.split(","):
+            if m.strip():
+                allowed_models.add(m.strip())
+
+    selected_model = None
+    if payload.model:
+        if payload.model in allowed_models:
+            selected_model = payload.model
+        else:
+            selected_model = None  # Safely fallback to server default
+
+    history_dicts = [t.model_dump() for t in payload.history] if payload.history else None
 
     response_data = process_chat_message(
         message=payload.message,
         context=enriched_context,
-        history=payload.history,
-        model=payload.model
+        history=history_dicts,
+        model=selected_model
     )
 
     return response_data
 
 
 @router.post("/debug", status_code=status.HTTP_200_OK)
-def debug_rag_retrieval(payload: ChatDebugRequest):
+def debug_rag_retrieval(
+    payload: ChatDebugRequest,
+    user: Optional[Any] = Depends(get_optional_current_user)
+):
     """
     Development debug endpoint to inspect exact chunks, scores, and sources retrieved for a query.
-    Disabled in production.
+    Requires authorized operator privileges and disabled in production.
     """
     if os.getenv("ENVIRONMENT", "production").lower() == "production":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="RAG debug inspection endpoint disabled in production."
         )
-    return query_knowledge_base(payload.query, top_k=payload.top_k or 4)
+    if not user or not is_elevated_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to Authorized Agriculture / Seva Operators."
+        )
+    clamped_top_k = max(1, min(int(payload.top_k or 4), 20))
+    return query_knowledge_base(payload.query, top_k=clamped_top_k)
 
 
 @router.get("/status", status_code=status.HTTP_200_OK)
