@@ -168,8 +168,8 @@ class FarmPlan(Base):
     sowing_date = Column(String(40), nullable=True)
     variety = Column(String(80), nullable=True)
     current_stage = Column(String(80), nullable=True)
-    plan_json = Column(Text)
-    plan_data_json = Column(Text, nullable=True)
+    plan_json = Column(JSONType)
+    plan_data_json = Column(JSONType, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -206,8 +206,8 @@ class FarmPlanCompletion(Base):
     completion_date = Column(String(40), nullable=False, index=True)
     completed_at = Column(DateTime, default=utcnow)
     farmer_notes = Column(Text, nullable=True)
-    sensor_snapshot_json = Column(Text, nullable=True)
-    weather_snapshot_json = Column(Text, nullable=True)
+    sensor_snapshot_json = Column(JSONType, nullable=True)
+    weather_snapshot_json = Column(JSONType, nullable=True)
 
 class NutrientAnalysisRecord(Base):
     __tablename__ = "nutrient_analyses"
