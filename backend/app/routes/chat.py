@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import get_optional_current_user, is_elevated_user
 from ..models import User, Farm, FarmPlan
-from ..services.chat_service import process_chat_message, DEFAULT_OPENROUTER_MODEL
+from ..services.chat_service import process_chat_message, DEFAULT_OPENROUTER_MODEL, clean_model_output
 from ..services.rag_service import query_knowledge_base, get_chroma_collection
 from ..services.iot_service import get_latest_telemetry
 
@@ -190,6 +190,9 @@ def send_chat_message(
         history=history_dicts,
         model=selected_model
     )
+
+    if response_data and isinstance(response_data, dict) and "reply" in response_data:
+        response_data["reply"] = clean_model_output(response_data["reply"])
 
     return response_data
 

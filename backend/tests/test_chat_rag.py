@@ -1209,3 +1209,162 @@ Source: ICAR-IIWBR, Karnal"""
         assert "Source: ICAR-IIWBR, Karnal" in reply
 
 
+def test_clean_model_output_removes_current_failure_with_revised_draft():
+    """
+    Test the exact current failure reported:
+    Contains 'Let's count words roughly:', 'Check rules:', and '- Revised draft:'.
+    Expected: ONLY the final farmer-facing answer.
+    """
+    from app.services.chat_service import clean_model_output
+
+    test_input = '''Let's count words roughly:
+"Wheat has six critical irrigation stages..."
+
+Check rules:
+- Direct answer in first sentence: Yes.
+- Hyphen bullets: Yes.
+- Word count: ...
+- Revised draft:
+"Wheat's most critical irrigation stage is CRI..."'''
+
+    cleaned = clean_model_output(test_input)
+    assert "Let's count words roughly" not in cleaned
+    assert "Check rules" not in cleaned
+    assert "Direct answer in first sentence" not in cleaned
+    assert "Hyphen bullets" not in cleaned
+    assert "Word count" not in cleaned
+    assert "Revised draft" not in cleaned
+    assert cleaned == "Wheat's most critical irrigation stage is CRI..."
+
+
+def test_clean_model_output_variants():
+    """
+    Tests various leak patterns:
+    - 'Let's count...'
+    - 'Check rules:'
+    - 'Revised draft:'
+    - 'Let's rewrite...'
+    - 'I should avoid...'
+    - 'Check for forbidden patterns:'
+    - 'Word count:'
+    - mixed planning + final answer
+    - planning without 'Final Answer:' marker
+    """
+    from app.services.chat_service import clean_model_output
+
+    # Variant A: Planning without any 'Final Answer' or 'Revised draft' marker
+    var_a = '''Let's count words roughly:
+"Wheat has six critical irrigation stages..."
+
+Check rules:
+- Direct answer in first sentence: Yes.
+- Hyphen bullets: Yes.
+- Word count: ...
+
+"Wheat's most critical irrigation stage is CRI (20-25 days)."'''
+
+    res_a = clean_model_output(var_a)
+    assert "Let's count" not in res_a
+    assert "Check rules" not in res_a
+    assert "Direct answer" not in res_a
+    assert res_a == "Wheat's most critical irrigation stage is CRI (20-25 days)."
+
+    # Variant B: 'Let's rewrite...', 'I should avoid...'
+    var_b = '''Let's rewrite the response.
+I should avoid ungrounded chemical advice.
+I need to keep it concise.
+Wheat's most critical irrigation stage is Crown Root Initiation (CRI) at 20-25 days after sowing.
+- CRI stage (20-25 DAS): First irrigation must be applied.
+- Tillering stage (40-45 DAS): Second irrigation.
+Source: ICAR-IIWBR, Karnal.'''
+
+    res_b = clean_model_output(var_b)
+    assert "Let's rewrite" not in res_b
+    assert "I should avoid" not in res_b
+    assert "I need to keep" not in res_b
+    assert "Wheat's most critical irrigation stage is Crown Root Initiation" in res_b
+    assert "Source: ICAR-IIWBR, Karnal" in res_b
+
+    # Variant C: 'Check for forbidden patterns:', 'Word count:'
+    var_c = '''Check for forbidden patterns: None found.
+Word count: 85 words.
+Direct answer in first sentence: Yes.
+
+Wheat's most critical irrigation stage is CRI (20-25 DAS).
+- CRI: Apply 4-5 cm irrigation.
+Source: ICAR.'''
+
+    res_c = clean_model_output(var_c)
+    assert "Check for forbidden patterns" not in res_c
+    assert "Word count" not in res_c
+    assert "Direct answer" not in res_c
+    assert "Wheat's most critical irrigation stage is CRI (20-25 DAS)." in res_c
+
+    # Variant D: Standalone single-word meta directives like 'Summarize.'
+    var_d = '''Summarize.
+Wheat's most critical irrigation stage is CRI (20-25 DAS).
+- CRI: Apply light irrigation.'''
+
+    res_d = clean_model_output(var_d)
+    assert "Summarize." not in res_d
+    assert "Wheat's most critical irrigation stage is CRI" in res_d
+
+
+def test_clean_model_output_preserves_legitimate_agricultural_advice():
+    """
+    CRITICAL: Verifies that words like 'check', 'draft', 'source', or 'avoid'
+    in normal farming advisory context are NOT stripped.
+    """
+    from app.services.chat_service import clean_model_output
+
+    agri_advice = '''Check the underside of leaves for whitefly.
+- Check soil moisture at 4-6 inches depth before irrigating.
+- Draft animals or power tillers can be used for field operations.
+- Avoid waterlogging around root zone.
+Source: ICAR-IIVR, Varanasi.'''
+
+    res = clean_model_output(agri_advice)
+    assert "Check the underside of leaves for whitefly." in res
+    assert "- Check soil moisture at 4-6 inches depth before irrigating." in res
+    assert "- Draft animals or power tillers can be used for field operations." in res
+    assert "- Avoid waterlogging around root zone." in res
+    assert "Source: ICAR-IIVR, Varanasi." in res
+
+
+def test_process_chat_message_defense_in_depth_current_leakage():
+    """
+    Verifies process_chat_message end-to-end with the current reported leakage test input.
+    """
+    from app.services.chat_service import process_chat_message
+
+    test_input = '''Let's count words roughly:
+"Wheat has six critical irrigation stages..."
+
+Check rules:
+- Direct answer in first sentence: Yes.
+- Hyphen bullets: Yes.
+- Word count: ...
+- Revised draft:
+"Wheat's most critical irrigation stage is Crown Root Initiation (CRI), usually around 20–25 days after sowing.
+
+- CRI (20–25 DAS): Most critical irrigation stage.
+- Tillering (40–45 DAS): Supports shoot development.
+
+Source: ICAR-IIWBR, Karnal."'''
+
+    with patch("app.services.chat_service.call_openrouter") as mock_openrouter:
+        mock_openrouter.return_value = (True, test_input, "mock-model")
+
+        res = process_chat_message("What are the critical irrigation stages for wheat, especially CRI stage?")
+        reply = res.get("reply", "")
+
+        assert "Let's count words roughly" not in reply
+        assert "Check rules" not in reply
+        assert "Direct answer in first sentence" not in reply
+        assert "Hyphen bullets" not in reply
+        assert "Word count" not in reply
+        assert "Revised draft" not in reply
+        assert "Wheat's most critical irrigation stage is Crown Root Initiation" in reply
+        assert "Source: ICAR-IIWBR, Karnal" in reply
+
+

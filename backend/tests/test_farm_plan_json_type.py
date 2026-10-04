@@ -164,8 +164,6 @@ def test_farm_plan_completion_persistence_with_dict_and_string_json():
         assert fetched_none.weather_snapshot_json is None
 
         # Cleanup
-        db.delete(comp_str)
-        db.delete(comp_none)
         db.delete(plan)
         db.commit()
     finally:

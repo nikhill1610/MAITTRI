@@ -101,11 +101,12 @@ def clean_farmer_markdown(text: str) -> str:
     cleaned = re.sub(r"^[ \t]*-[ \t]*(?:A|Q|Answer|Question|उत्तर|प्रश्न)\s*[:：]\s*", "- ", cleaned, flags=re.MULTILINE | re.I)
     cleaned = re.sub(r"^[ \t]*(?:A|Q|Answer|Question|उत्तर|प्रश्न)\s*[:：]\s*", "", cleaned, flags=re.MULTILINE | re.I)
 
-    # 7c. Strip residual 'Final Answer:' / 'Farmer Advisory:' standalone header lines
+    # 7c. Strip residual 'Final Answer:' / 'Farmer Advisory:' / 'Revised draft:' standalone header lines
     cleaned = re.sub(
         r"^[ \t]*(?:Final\s+(?:Answer|Response|Reply|Advisory|Farmer\s+Advisory)|"
         r"Farmer[- ]Facing\s+(?:Answer|Response|Advisory)|"
         r"Farmer\s+Advisory|Final\s+Direct\s+Answer|Direct\s+Answer|"
+        r"Revised\s+draft|Final\s+draft|Refined\s+draft|Clean\s+draft|New\s+draft|Draft|"
         r"अंतिम\s+उत्तर|किसान\s+सलाह)\s*[:：]?\s*$",
         "",
         cleaned,
@@ -284,17 +285,17 @@ def build_rag_system_prompt(
         "hi": (
             "उत्तर केवल स्पष्ट, सरल और व्यावहारिक हिन्दी (शुद्ध देवनागरी लिपि) में दें। "
             "पहले वाक्य में किसान के प्रश्न का सीधा उत्तर दें। अधिकतम 3 से 5 संक्षिप्त बिंदु (हाइफ़न बुलेट - ) रखें। "
-            "सामान्य प्रश्नों के लिए उत्तर लगभग 60 से 120 शब्दों में रखें।"
+            "उत्तर संक्षिप्त और सीधा रखें।"
         ),
         "hinglish": (
             "Respond in natural, conversational Hinglish (Roman Hindi) suitable for Indian farmers. "
             "Answer the farmer's question directly in the very first sentence. Use at most 3 to 5 concise hyphen bullets (- ). "
-            "Keep the response concise (60 to 120 words) and directly actionable."
+            "Keep the response concise, directly actionable, and normally under about 120 words."
         ),
         "en": (
             "Respond in clear, professional, farmer-friendly English tailored to agriculture. "
             "Answer the farmer's question directly in the very first sentence. Use at most 3 to 5 concise hyphen bullets (- ). "
-            "Keep the response concise (60 to 120 words) and directly actionable."
+            "Keep the response concise, directly actionable, and normally under about 120 words."
         )
     }
     lang_inst = lang_instructions.get(language, lang_instructions["hi"])
@@ -335,11 +336,7 @@ def build_rag_system_prompt(
 
 Your goal is to provide a helpful, safe, and strictly grounded answer to the farmer's question using ONLY the retrieved agricultural knowledge provided below.
 
-CRITICAL INSTRUCTION - ZERO INTERNAL PLANNING OR REASONING EXPOSURE:
-- You must output ONLY the clean, final farmer-facing advisory.
-- NEVER include chain-of-thought, internal planning, reasoning scratchpad, rule analysis, drafting steps, or verification checks.
-- Do NOT output headings like "Identify Core Requirements", "Retrieve Knowledge", "Draft", "Verify against rules", "Word count", "Question intent fidelity", or "Final Answer:".
-- Start immediately with the direct answer in the very first sentence.
+Answer the farmer's question directly and concisely. Do not describe your reasoning, drafting process, instruction-following, word count, or response verification. Return only the final farmer-facing answer.
 
 CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
 1. DIRECT ANSWER IN FIRST SENTENCE: Answer the farmer's actual question directly in the very first sentence.
@@ -367,10 +364,10 @@ CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
      3) Immediate low-risk management (uproot severely infected early plants, yellow sticky traps, vector control; state clearly that no chemical cures the virus once infected)
      4) When expert/lab confirmation is useful (consult KVK before major crop decisions).
    - Include a relevant source line at the end (e.g. 'Source: ICAR-IIVR, Varanasi').
-8. TARGET LENGTH & STYLE:
-   - Normal simple questions should stay within about 60–120 words unless more detail is genuinely required.
+8. LENGTH & STYLE:
+   - Keep the answer concise and normally under about 120 words unless the question requires more detail.
    - Language: {lang_inst}
-   - Output ONLY the final farmer-facing response. No meta-commentary, no thinking blocks.
+   - Output only the final farmer-facing response.
 9. SOURCE ATTRIBUTION:
    - If citing the source institution, mention it simply at the bottom (e.g. 'Source: ICAR-IIWBR, Karnal').
 10. QUESTION INTENT FIDELITY & DIRECT ANSWERS:
@@ -384,8 +381,8 @@ CRITICAL FARMER-FACING ADVISORY & FORMATTING RULES:
      * If crop age is outside the CRI window (e.g. 10–12 days), clearly explain that first irrigation is not yet due and advise waiting until 20–25 DAS. If 40–45 days, advise that 2nd irrigation at tillering stage and final urea split are due.
      * Never output raw FAQ markers like "Q:" or "A:".
 
-FINAL DIRECTIVE:
-Generate ONLY the final farmer-facing text. Do not expose internal thoughts, analysis of the rules, drafting, or word-count checks.
+FINAL INSTRUCTION:
+Return only the direct farmer-facing answer without internal reasoning, scratchpad, drafting notes, or verification.
 
 {context_str}### RETRIEVED AGRICULTURAL KNOWLEDGE PIECES:
 {knowledge_str}
@@ -394,67 +391,133 @@ Generate ONLY the final farmer-facing text. Do not expose internal thoughts, ana
 
 
 # -----------------------------------------------------------------------------
-# Clean Reasoning / Thinking Tokens
+# Clean Reasoning / Thinking Tokens & Structural Sanitizer
 # -----------------------------------------------------------------------------
+DRAFT_TRANSITION_PATTERN = re.compile(
+    r"(?:^|\n)[ \t]*(?:[-*•]\s*|\d+\.\s*)?(?:\*\*|#+)?\s*"
+    r"(?:Revised\s+draft|Final\s+draft|Refined\s+draft|Clean\s+draft|New\s+draft|Second\s+draft|"
+    r"Final\s+(?:Answer|Response|Reply|Advisory|Farmer\s+Advisory)|"
+    r"Farmer[- ]Facing\s+(?:Answer|Response|Advisory)|"
+    r"Farmer\s+Advisory|Final\s+Direct\s+Answer|"
+    r"(?:Direct\s+Answer|Final\s+Answer)\s*[:：]?|"
+    r"Here\s+(?:is|are)\s+(?:the\s+)?(?:revised|final|clean)\s+(?:draft|answer|response|advisory)|"
+    r"Rewritten\s+(?:draft|response|answer)|"
+    r"अंतिम\s+उत्तर|किसान\s+सलाह)\s*[:：]?\s*(?:\*\*)?(?:\n|$)",
+    re.IGNORECASE
+)
+
+REVIEW_SECTION_HEADER = re.compile(
+    r"(?:^|\n)[ \t]*(?:[-*•]\s*|\d+\.\s*)?(?:\*\*|#+)?\s*"
+    r"(?:Check\s+rules|Checking\s+rules|Rule\s+check|Rules\s+check|"
+    r"Verify\s+against\s+rules|Verification\s+against\s+rules|"
+    r"Check\s+for\s+forbidden\s+patterns|Compliance\s+check|Self[- ]evaluation)\s*[:：]?\s*(?:\*\*)?(?:\n|$)",
+    re.IGNORECASE
+)
+
+META_LINE_PATTERNS = [
+    # First-person cognitive planning
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*Let['’]s\s+(?:count|check|rewrite|draft|analyze|review|ensure|verify|summarize|map|formulate|look|see|write|start|think)\b", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*I\s+(?:should|need\s+to|must|will|have\s+to|shall|can|am\s+going\s+to)\s+(?:avoid|check|ensure|make\s+sure|keep|write|draft|follow|include|answer|provide|focus|use|rephrase|remove|state)\b", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*We\s+(?:need\s+to|should|must|will|have\s+to)\s+(?:ensure|check|verify|draft|keep|provide|avoid|write)\b", re.I),
+    # Checklists and compliance evaluations
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Check\s+(?:rules|against\s+rules|for\s+forbidden(?:\s+patterns)?|constraints|guidelines|requirements)|Checking\s+rules|Rule\s+check|Rules\s+check|Verify\s+(?:against\s+)?rules|Verification\s+(?:against\s+)?rules|Constraint\s+check|Compliance\s+check)\b", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*Direct\s+answer(?:\s+in\s+first\s+sentence)?\s*[:：]\s*(?:yes|no|done|check|true|verified|achieved|satisfied|\.{3})", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Hyphen\s+bullets|Bullet\s+points|Bullets?)\s*[:：]\s*(?:yes|no|done|check|true|verified|hyphens?|satisfied|\.{3})", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Word\s+count|Target\s+length|Length\s+check|Target\s+word\s+count)\s*(?:roughly)?\s*[:：]", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Forbidden\s+patterns?|Prohibited\s+patterns?|Forbidden\s+words?)\s*(?:check|checked|verified)?\s*[:：]", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Question\s+intent(?:\s+fidelity)?|User\s+intent|User\s+query\s+analysis)\s*[:：]", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:The\s+user\s+is\s+asking|User\s+is\s+asking|User\s+wants\s+to\s+know)\b", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Retrieved\s+(?:agricultural\s+)?knowledge|\[?Knowledge\s+piece(?:\s+#\d+)?)\s*[:：]?", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Thinking\s+process|Thought\s+process|Chain\s+of\s+thought|Internal\s+analysis)\s*[:：]", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Identify\s+Core\s+Requirements|Retrieve\s+Knowledge|Draft\s+first\s+sentence|Draft\s+response|Drafting\s+response)\b", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Step\s+\d+\s*[:：]\s*(?:Identify|Retrieve|Draft|Verify|Check))\b", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*Rule\s+\d+\s*[:：]", re.I),
+    # Standalone draft headers or single-word directives
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Revised\s+draft|Initial\s+draft|First\s+draft|Second\s+draft|Final\s+draft|Draft\s+\d+|Drafting\s+(?:the\s+)?(?:response|answer)|Clean\s+draft|Draft|Rewrite|Rewriting|Summarize|Summarizing)\s*[:：]?$", re.I),
+    re.compile(r"^[-*•\s]*(?:\*\*|#+)?\s*(?:Summarize|Rewrite|Check rules|Verify)\.\s*$", re.I),
+]
+
+PLANNING_INDICATORS = [
+    "thinking process", "thought process", "internal analysis", "chain of thought",
+    "identify core requirements", "core requirements from rules",
+    "retrieve knowledge", "retrieved agricultural knowledge", "retrieved knowledge",
+    "knowledge piece", "draft first sentence", "drafting the response",
+    "draft response", "drafting:", "verify against rules", "verification against rules",
+    "verify rules", "rule check", "question intent fidelity", "word count",
+    "target length", "analyze user", "analyzing the query", "user is asking",
+    "user query analysis", "constraints check", "let's analyze", "let's map",
+    "step 1: identify", "step 2: retrieve", "step 3: draft", "step 4: verify",
+    "i will draft", "i will formulate", "i should provide", "i need to follow",
+    "let's count words", "check rules:", "revised draft:"
+]
+
+
+def is_meta_planning_line(line: str) -> bool:
+    """Carefully distinguishes agricultural advice from meta-planning, rule checking, or drafting notes."""
+    l_str = line.strip()
+    if not l_str:
+        return False
+    return any(p.search(l_str) for p in META_LINE_PATTERNS)
+
+
+def strip_enclosing_quotes(text: str) -> str:
+    """Strips outermost quotes if the extracted advisory was returned in quotes."""
+    s = text.strip()
+    if len(s) >= 2 and ((s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")) or (s.startswith("“") and s.endswith("”"))):
+        return s[1:-1].strip()
+    return s
+
+
 def clean_model_output(raw_text: str) -> str:
-    """Removes thinking process, reasoning blocks, scratchpad, and planning preambles from model output."""
+    """Removes thinking process, reasoning blocks, scratchpad, checklists, and planning preambles from model output."""
     if not raw_text:
         return ""
 
     cleaned = raw_text.strip()
 
     # 1. Remove XML / bracketed think / thought / reasoning / scratchpad / plan tags
-    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-    cleaned = re.sub(r"<thought>.*?</thought>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-    cleaned = re.sub(r"<reasoning>.*?</reasoning>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-    cleaned = re.sub(r"<scratchpad>.*?</scratchpad>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-    cleaned = re.sub(r"<plan>.*?</plan>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-    cleaned = re.sub(r"<planning>.*?</planning>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    for tag in ["think", "thought", "reasoning", "scratchpad", "plan", "planning"]:
+        cleaned = re.sub(rf"<{tag}>.*?</{tag}>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
     cleaned = re.sub(r"\[THOUGHT\].*?\[/THOUGHT\]", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
     cleaned = re.sub(r"\[REASONING\].*?\[/REASONING\]", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-    # Strip unclosed leading tag if present
     cleaned = re.sub(r"^<(?:think|thought|reasoning|scratchpad|plan|planning)>\s*", "", cleaned, flags=re.IGNORECASE)
 
-    # 2. Check for explicit Final Answer / Final Advisory / Farmer Response divider
-    final_marker_pattern = (
-        r"(?:^|\n)(?:\*\*|#+)?\s*"
-        r"(?:Final\s+(?:Answer|Response|Reply|Advisory|Farmer\s+Advisory)|"
-        r"Farmer[- ]Facing\s+(?:Answer|Response|Advisory)|"
-        r"Farmer\s+Advisory|Final\s+Direct\s+Answer|Direct\s+Answer|"
-        r"अंतिम\s+उत्तर|किसान\s+सलाह|सलाह)\s*[:：]?\s*(?:\*\*)?\n*"
-    )
-    m_final = re.search(final_marker_pattern, cleaned, re.IGNORECASE)
-    if m_final and m_final.start() > 0:
-        candidate = cleaned[m_final.end():].strip()
-        if len(candidate) > 20:
+    # 2. Check for explicit draft transition / final answer marker
+    matches = list(DRAFT_TRANSITION_PATTERN.finditer(cleaned))
+    if matches:
+        last_match = matches[-1]
+        candidate = cleaned[last_match.end():].strip()
+        if len(candidate) > 15:
             cleaned = candidate
 
     # 3. Check for horizontal rules (---, ***, ___) separating reasoning/planning from the actual reply
     parts = re.split(r"\n\s*(?:---+|\*\*\*+|___+)\s*\n", cleaned)
     if len(parts) > 1:
         p0_lower = parts[0].lower()
-        if any(marker in p0_lower for marker in [
-            "thinking process", "identify core requirements", "retrieve knowledge",
-            "retrieved knowledge", "draft", "verify against rules", "word count",
-            "question intent fidelity", "knowledge piece", "internal analysis",
-            "user is asking", "constraints:", "rules:", "user wants"
-        ]):
+        if any(marker in p0_lower for marker in PLANNING_INDICATORS):
             cleaned = "\n\n".join(parts[1:]).strip()
 
-    # 4. Strip leading planning / reasoning preambles paragraph by paragraph
-    planning_indicators = [
-        "thinking process", "thought process", "internal analysis", "chain of thought",
-        "identify core requirements", "core requirements from rules",
-        "retrieve knowledge", "retrieved agricultural knowledge", "retrieved knowledge",
-        "knowledge piece", "draft first sentence", "drafting the response",
-        "draft response", "drafting:", "verify against rules", "verification against rules",
-        "verify rules", "rule check", "question intent fidelity", "word count",
-        "target length", "analyze user", "analyzing the query", "user is asking",
-        "user query analysis", "constraints check", "let's analyze", "let's map",
-        "step 1: identify", "step 2: retrieve", "step 3: draft", "step 4: verify",
-        "i will draft", "i will formulate", "i should provide", "i need to follow"
-    ]
+    # 4. If there is a standalone Review / Check Rules section dividing scratchpad from final answer
+    rev_matches = list(REVIEW_SECTION_HEADER.finditer(cleaned))
+    if rev_matches:
+        prefix = cleaned[:rev_matches[-1].start()]
+        if any(marker in prefix.lower() for marker in [
+            "let's count", "draft", "thinking", "rules", "user is asking", "step 1", "identify"
+        ]):
+            post_rev = cleaned[rev_matches[-1].end():].strip()
+            lines_after = post_rev.split("\n")
+            idx = 0
+            while idx < len(lines_after):
+                l = lines_after[idx].strip()
+                if not l or is_meta_planning_line(l):
+                    idx += 1
+                else:
+                    break
+            cand = "\n".join(lines_after[idx:]).strip()
+            if len(cand) > 15:
+                cleaned = cand
 
+    # 5. Filter leading planning paragraphs
     paragraphs = cleaned.split("\n\n")
     actual_paragraphs = []
     skipping = True
@@ -464,9 +527,12 @@ def clean_model_output(raw_text: str) -> str:
             continue
         p_lower = p_str.lower()
         if skipping:
-            is_planning = any(ind in p_lower for ind in planning_indicators)
+            is_planning = any(ind in p_lower for ind in PLANNING_INDICATORS)
             if not is_planning:
-                if re.match(r"^(?:\*\*|\d+\.|\#+)?\s*(?:identify|retrieve|draft|verify|check|rule|intent|step \d)\b", p_lower):
+                p_lines = [l.strip() for l in p_str.split("\n") if l.strip()]
+                if p_lines and all(is_meta_planning_line(l) for l in p_lines):
+                    is_planning = True
+                elif re.match(r"^(?:\*\*|\d+\.|\#+)?\s*(?:identify|retrieve|draft|verify|check|rule|intent|step \d)\b", p_lower):
                     is_planning = True
             if is_planning:
                 continue
@@ -478,27 +544,48 @@ def clean_model_output(raw_text: str) -> str:
 
     if actual_paragraphs:
         cleaned = "\n\n".join(actual_paragraphs).strip()
-    elif not cleaned:
-        cleaned = raw_text.strip()
 
-    # 5. Strip trailing verification blocks (e.g. Word count: 85 words, Verify against rules...)
+    # 6. Filter individual leading meta lines if any remain at the top of the first paragraph
+    lines = cleaned.split("\n")
+    start_idx = 0
+    while start_idx < len(lines):
+        line = lines[start_idx].strip()
+        if not line or is_meta_planning_line(line):
+            start_idx += 1
+            continue
+        break
+
+    cleaned_lines = lines[start_idx:]
+    cleaned = "\n".join(cleaned_lines).strip()
+
+    # 7. Check once more if any draft transition was exposed
+    sub_matches = list(DRAFT_TRANSITION_PATTERN.finditer(cleaned))
+    if sub_matches:
+        cand = cleaned[sub_matches[-1].end():].strip()
+        if len(cand) > 15:
+            cleaned = cand
+
+    # 8. Remove trailing verification / evaluation / word count lines
     trail_pattern = (
         r"(?:\n+(?:\*\*|#+)?\s*(?:\d+\.\s*)?"
         r"(?:Verify against rules|Verification against rules|Verification|"
-        r"Word count|Rule check|Check against rules|Question intent fidelity|"
-        r"Constraints check)[\s\S]*$)"
+        r"Word count|Rule check|Check against rules|Check rules|Check for forbidden patterns|"
+        r"Question intent fidelity|Constraints check|All constraints satisfied)[\s\S]*$)"
     )
     cleaned = re.sub(trail_pattern, "", cleaned, flags=re.IGNORECASE)
 
-    # Standalone trailing word count line
+    # Standalone trailing word count or checklist lines
     cleaned = re.sub(
-        r"(?:\n+(?:\*\*|#+)?\s*Word\s+count\s*[:：]?\s*\d+\s*(?:words)?\s*(?:\*\*)?\s*)$",
+        r"(?:\n+(?:\*\*|#+)?\s*(?:Word\s+count|Check\s+rules|Check\s+for\s+forbidden\s+patterns)[\s\S]*)$",
         "",
         cleaned,
         flags=re.IGNORECASE
     )
 
-    # 6. Remove any stray 'Knowledge Piece #X' citations if left in text
+    # 9. Strip enclosing quotes if the answer is enclosed in quotes
+    cleaned = strip_enclosing_quotes(cleaned)
+
+    # 10. Remove any stray 'Knowledge Piece #X' citations if left in text
     cleaned = re.sub(r"\[?Knowledge Piece #\d+[^\]\n]*\]?:?\s*", "", cleaned, flags=re.IGNORECASE)
 
     return clean_farmer_markdown(cleaned.strip())
@@ -1381,17 +1468,17 @@ def build_web_grounded_system_prompt(
         "hi": (
             "उत्तर केवल स्पष्ट, सरल और व्यावहारिक हिन्दी (शुद्ध देवनागरी लिपि) में दें। "
             "पहले वाक्य में सीधे उत्तर दें। 3 से 5 संक्षिप्त बिंदु (हाइफ़न बुलेट - ) रखें। "
-            "उत्तर लगभग 60 से 120 शब्दों में रखें।"
+            "उत्तर संक्षिप्त और सीधा रखें।"
         ),
         "hinglish": (
             "Respond in natural, conversational Hinglish (Roman Hindi) suitable for Indian farmers. "
             "Answer directly in the first sentence. Use 3 to 5 concise hyphen bullets (- ). "
-            "Keep the response concise (60 to 120 words) and directly actionable."
+            "Keep the response concise, directly actionable, and normally under about 120 words."
         ),
         "en": (
             "Respond in clear, professional, farmer-friendly English tailored to agriculture. "
             "Answer directly in the first sentence. Use 3 to 5 concise hyphen bullets (- ). "
-            "Keep the response concise (60 to 120 words) and directly actionable."
+            "Keep the response concise, directly actionable, and normally under about 120 words."
         )
     }
     lang_inst = lang_instructions.get(language, lang_instructions["hi"])
@@ -1409,11 +1496,7 @@ def build_web_grounded_system_prompt(
 
 Your task is to answer the farmer's question using ONLY the verified web search evidence provided below.
 
-CRITICAL INSTRUCTION - ZERO INTERNAL PLANNING OR REASONING EXPOSURE:
-- You must output ONLY the clean, final farmer-facing advisory.
-- NEVER include chain-of-thought, internal planning, reasoning scratchpad, rule analysis, drafting steps, or verification checks.
-- Do NOT output headings like "Identify Core Requirements", "Retrieve Knowledge", "Draft", "Verify against rules", "Word count", "Question intent fidelity", or "Final Answer:".
-- Start immediately with the direct answer in the very first sentence.
+Answer the farmer's question directly and concisely. Do not describe your reasoning, drafting process, instruction-following, word count, or response verification. Return only the final farmer-facing answer.
 
 CRITICAL GROUNDING & FORMATTING RULES:
 1. STRICT GROUNDING: Answer ONLY from the provided web evidence. Do NOT invent facts, rules, dates, or numbers absent from the sources.
@@ -1425,17 +1508,17 @@ CRITICAL GROUNDING & FORMATTING RULES:
    - Do NOT use double underscores (no __).
    - Use clean plain text and hyphen bullets (- ) only. Emojis (🌐, 📌) are allowed only where useful.
 5. NO VERBATIM DUMP: Summarize the evidence into a concise farmer advisory without repeating text verbatim.
-6. TARGET LENGTH:
-   - Target: 60–120 words for normal questions. Direct, structured, and farmer-friendly.
+6. LENGTH & STYLE:
+   - Keep the answer concise and normally under about 120 words unless the question requires more detail.
    - Language: {lang_inst}
-   - Output ONLY the final farmer-facing response without meta-commentary or thinking tags.
+   - Output only the final farmer-facing response.
 7. CHEMICAL SAFETY & STATUTORY CIBRC GATE:
    - If agricultural chemicals or pesticides are mentioned, insist strictly on CIBRC-registered label dosages and protective PPE. Never advise unauthorized chemical mixing.
 8. PROVISIONAL NON-DEFINITIVE DIAGNOSIS:
    - For symptom/pest/disease questions, frame advice non-definitively ('Possible causes based on reported symptoms...') and advise field confirmation with the local KVK or agricultural officer.
 
-FINAL DIRECTIVE:
-Generate ONLY the final farmer-facing text. Do not expose internal thoughts, analysis of the rules, drafting, or word-count checks.
+FINAL INSTRUCTION:
+Return only the direct farmer-facing answer without internal reasoning, scratchpad, drafting notes, or verification.
 
 ### VERIFIED LIVE WEB EVIDENCE:
 {evidence_str}
@@ -3123,6 +3206,47 @@ def generate_market_price_reply(
             )
 
 
+def validate_and_finalize_chat_response(
+    response: Dict[str, Any],
+    query: str = "",
+    language: str = "en",
+    retrieved_chunks: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    Defense-in-depth validator executed on final chat replies before returning to caller.
+    Guarantees no internal reasoning, scratchpad, rule analysis, drafting notes, or
+    word-count verification lines reach the user.
+    """
+    if not response or not isinstance(response, dict):
+        return response
+
+    reply = response.get("reply", "")
+    if not reply or not isinstance(reply, str):
+        return response
+
+    # 1. Clean through clean_model_output
+    cleaned = clean_model_output(reply)
+
+    # 2. Check for residual planning / reasoning indicators
+    lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
+    if any(is_meta_planning_line(l) for l in lines):
+        logger.warning("Planning/reasoning leakage detected in final response validation. Sanitizing lines.")
+        filtered_lines = [l for l in lines if not is_meta_planning_line(l)]
+        cleaned = "\n".join(filtered_lines).strip()
+        cleaned = clean_farmer_markdown(cleaned)
+
+    # 3. If cleaning removed everything or resulted in a non-response (< 20 chars), fallback safely
+    if len(cleaned) < 20 and retrieved_chunks:
+        logger.warning("Response was empty after stripping planning leakage. Falling back to offline grounded RAG.")
+        offline_reply = generate_grounded_offline_reply(query, language, retrieved_chunks)
+        response["reply"] = clean_farmer_markdown(offline_reply)
+        response["provider"] = "grounded_offline_fallback"
+    else:
+        response["reply"] = cleaned
+
+    return response
+
+
 # -----------------------------------------------------------------------------
 # Main Chat Execution Handler
 # -----------------------------------------------------------------------------
@@ -3700,7 +3824,7 @@ def process_chat_message(
 
             success, result, model_used = call_openrouter(messages, model=model)
             if success:
-                return {
+                return validate_and_finalize_chat_response({
                     "reply": clean_model_output(result),
                     "sources": formatted_sources,
                     "retrieved_chunks": len(evidence),
@@ -3710,7 +3834,7 @@ def process_chat_message(
                     "model": model_used,
                     "intent": route_decision.intent.value,
                     "route": route_decision.action.value
-                }
+                }, query=clean_msg, language=lang)
             else:
                 offline_web_reply = generate_web_grounded_offline_reply(clean_msg, lang, evidence)
                 return {
@@ -3929,8 +4053,8 @@ def process_chat_message(
 
                 success, result, model_used = call_openrouter(messages, model=model)
                 if success:
-                    return {
-                        "reply": clean_farmer_markdown(result),
+                    return validate_and_finalize_chat_response({
+                        "reply": clean_model_output(result),
                         "sources": formatted_sources,
                         "retrieved_chunks": len(fallback_evidence),
                         "confidence": max((e.score for e in fallback_evidence), default=0.75),
@@ -3940,7 +4064,7 @@ def process_chat_message(
                         "intent": route_decision.intent.value,
                         "route": RouteAction.RAG_WEB_FALLBACK.value,
                         "detected_entities": route_decision.detected_entities
-                    }
+                    }, query=clean_msg, language=lang)
                 else:
                     offline_reply = generate_web_grounded_offline_reply(clean_msg, lang, fallback_evidence)
                     return {
@@ -4063,7 +4187,7 @@ def process_chat_message(
             _safe_print(f"- {s.get('organization')} ({s.get('source_type')}) — {s.get('title')}")
         _safe_print("=" * 60 + "\n")
 
-        return {
+        return validate_and_finalize_chat_response({
             "reply": clean_farmer_markdown(final_reply),
             "sources": sources,
             "retrieved_chunks": len(chunks),
@@ -4074,7 +4198,7 @@ def process_chat_message(
             "intent": route_decision.intent.value,
             "route": route_decision.action.value,
             "detected_entities": route_decision.detected_entities
-        }
+        }, query=clean_msg, language=lang, retrieved_chunks=chunks)
 
     # 8. Fallback: Synthesize cleanly from retrieved chunks
     _safe_print(f"\nOPENROUTER UNAVAILABLE ({result}). Generating grounded local RAG synthesis.")
