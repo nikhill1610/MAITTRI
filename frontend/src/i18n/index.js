@@ -6,6 +6,23 @@
 import enDict from "./en.js";
 import hiDict from "./hi.js";
 
+// Canonical alias mapping for Farmer Planning & Crop Calendar
+export const PLANNING_ALIASES = {
+  farmerPlanningTagline: "farmerPlanning.subtitle",
+  whenDidYouSowHi: "farmerPlanning.sowingDatePrompt",
+  generatePlan: "farmerPlanning.generatePlanBtn",
+  recalculatePlan: "farmerPlanning.recalculatePlanBtn",
+  whatShouldIDoToday: "farmerPlanning.todayGoal",
+  whyMaittriRecommends: "farmerPlanning.whyRecommended",
+  thisWeekPlan: "farmerPlanning.tabThisWeek",
+  upcomingWeeks: "farmerPlanning.tabUpcoming",
+  cropLifecycleTimeline: "farmerPlanning.tabFullLifecycle",
+  farmDiary: "farmerPlanning.digitalFarmDiary",
+  addNote: "farmerPlanning.addObservationNote",
+  saveNote: "farmerPlanning.saveObservation",
+  variety: "farmerPlanning.varietyOptional"
+};
+
 // Helper to flatten nested objects into dot-notated and flat keys
 function flattenDictionary(obj, prefix = "", rootObj = null) {
   const root = rootObj || obj;
@@ -28,6 +45,18 @@ function flattenDictionary(obj, prefix = "", rootObj = null) {
       }
     }
   }
+
+  // At root level, resolve planning aliases from the nested namespace
+  if (!prefix) {
+    for (const [aliasKey, targetPath] of Object.entries(PLANNING_ALIASES)) {
+      if (!res[aliasKey] && !(aliasKey in root)) {
+        if (res[targetPath]) {
+          res[aliasKey] = res[targetPath];
+        }
+      }
+    }
+  }
+
   return res;
 }
 
@@ -47,18 +76,29 @@ export const T = {
  *   t("common.save")
  *   t("save")
  */
-export function t(key, fallback = "", lang = "en") {
-  if (!key) return fallback || "";
+export function t(key, fallback = undefined, lang = "en") {
+  if (!key) return fallback !== undefined ? fallback : "";
   const rawDict = lang === "hi" ? hiDict : enDict;
+  const flatDict = lang === "hi" ? hiFlat : enFlat;
 
   // 1. Direct top-level match in raw dictionary
   if (rawDict && typeof rawDict[key] === "string") return rawDict[key];
 
-  // 2. Flattened dot-path or unique flat key
-  const dict = lang === "hi" ? hiFlat : enFlat;
-  if (dict[key] != null && typeof dict[key] === "string") return dict[key];
+  // 2. Flattened dot-path or unique flat key (includes aliases)
+  if (flatDict[key] != null && typeof flatDict[key] === "string") return flatDict[key];
 
-  // 3. Try dot-path traversal on nested dictionary
+  // 3. Namespace lookup: direct match in rawDict.farmerPlanning
+  if (rawDict?.farmerPlanning && typeof rawDict.farmerPlanning[key] === "string") {
+    return rawDict.farmerPlanning[key];
+  }
+
+  // 4. Alias lookup
+  if (PLANNING_ALIASES[key]) {
+    const target = PLANNING_ALIASES[key];
+    if (flatDict[target] != null && typeof flatDict[target] === "string") return flatDict[target];
+  }
+
+  // 5. Try dot-path traversal on nested dictionary
   const parts = key.split(".");
   let cur = rawDict;
   for (const part of parts) {
@@ -71,14 +111,22 @@ export function t(key, fallback = "", lang = "en") {
   }
   if (typeof cur === "string") return cur;
 
-  // 4. Fallback to English if Hindi key is missing
+  // 6. Fallback to English if Hindi key is missing
   if (lang === "hi") {
     if (typeof enDict[key] === "string") return enDict[key];
     if (enFlat[key] != null && typeof enFlat[key] === "string") return enFlat[key];
+    if (enDict?.farmerPlanning && typeof enDict.farmerPlanning[key] === "string") {
+      return enDict.farmerPlanning[key];
+    }
+    if (PLANNING_ALIASES[key]) {
+      const target = PLANNING_ALIASES[key];
+      if (enFlat[target] != null && typeof enFlat[target] === "string") return enFlat[target];
+    }
   }
 
+  // 7. Genuinely missing translation: return explicit fallback or undefined
   if (fallback !== undefined) return fallback;
-  return "";
+  return undefined;
 }
 
 // -------------------------------------------------------------

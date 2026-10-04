@@ -290,6 +290,18 @@ function Auth({ mode = "login", onAuth }) {
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      const storedRole = localStorage.getItem("role");
+      if (isOfficialRole(storedRole)) {
+        nav("/operator", { replace: true });
+      } else {
+        nav("/dashboard", { replace: true });
+      }
+    }
+  }, [nav]);
+
   const getErrorMessage = (err) => {
     const detail = err.response?.data?.detail;
     if (typeof detail === "string") {
@@ -327,15 +339,16 @@ function Auth({ mode = "login", onAuth }) {
         throw new Error(lang === "hi" ? "प्रमाणीकरण टोकन प्राप्त नहीं हुआ।" : "Authentication token was not received.");
       }
       localStorage.setItem("token", data.access_token);
-      const assignedRole = data.role || role || "FARMER";
+      const rawRole = data.role || (isOfficialRole(role) ? "AUTHORIZED_OPERATOR" : "FARMER");
+      const assignedRole = String(rawRole).trim().toUpperCase();
       localStorage.setItem("role", assignedRole);
       if (data.user_id) localStorage.setItem("user_id", String(data.user_id));
       if (data.full_name) localStorage.setItem("full_name", data.full_name);
       if (data.email) localStorage.setItem("email", data.email);
       if (onAuth) onAuth();
 
-      // Automatically authenticated and redirected directly to Dashboard
-      if (assignedRole === "AUTHORIZED_OPERATOR") {
+      // Automatically authenticated and redirected directly to appropriate portal
+      if (isOfficialRole(assignedRole)) {
         nav("/operator", { replace: true });
       } else {
         nav("/dashboard", { replace: true });
@@ -485,6 +498,42 @@ function Auth({ mode = "login", onAuth }) {
   );
 }
 
+export function isOfficialRole(role) {
+  if (!role || typeof role !== "string") return false;
+  const r = role.trim().toUpperCase();
+  return r === "AUTHORIZED_OPERATOR" || r === "OPERATOR" || r === "ADMIN" || r === "OFFICIAL";
+}
+
+function OperatorRoute({ children }) {
+  const token = localStorage.getItem("token");
+  if (!token) return <Navigate to="/login" replace />;
+  const role = localStorage.getItem("role");
+  if (!isOfficialRole(role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+function FarmerRoute({ children }) {
+  const token = localStorage.getItem("token");
+  if (!token) return <Navigate to="/login" replace />;
+  const role = localStorage.getItem("role");
+  if (isOfficialRole(role)) {
+    return <Navigate to="/operator" replace />;
+  }
+  return children;
+}
+
+function RootRedirect() {
+  const token = localStorage.getItem("token");
+  if (!token) return <Navigate to="/login" replace />;
+  const role = localStorage.getItem("role");
+  if (isOfficialRole(role)) {
+    return <Navigate to="/operator" replace />;
+  }
+  return <Navigate to="/dashboard" replace />;
+}
+
 function Protected({ children }) { return localStorage.getItem("token") ? children : <Navigate to="/login" replace/>; }
 
 /**
@@ -592,7 +641,7 @@ function Layout({ children }) {
         </div>
 
         <nav className="sidebarNav">
-          {localStorage.getItem("role") === "AUTHORIZED_OPERATOR" && (
+          {isOfficialRole(localStorage.getItem("role")) && (
             <Link
               to="/operator"
               onClick={() => setOpen(false)}
@@ -788,7 +837,7 @@ function Layout({ children }) {
             </div>
           </div>
           <div className="topbarRight">
-            {localStorage.getItem("role") === "AUTHORIZED_OPERATOR" && (
+            {isOfficialRole(localStorage.getItem("role")) && (
               <Link to="/operator" className="operatorSwitchLink" style={{ marginRight: 10 }}>
                 🏛️ {lang === "hi" ? "सेवा ऑपरेटर कंसोल" : "Seva Operator Console"}
               </Link>
@@ -2584,19 +2633,42 @@ function Horticulture() {
 }
 
 function AppContent() {
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      api.get("/auth/me")
+        .then((res) => {
+          if (res.data && res.data.role) {
+            const authoritativeRole = String(res.data.role).trim().toUpperCase();
+            localStorage.setItem("role", authoritativeRole);
+            if (res.data.full_name) localStorage.setItem("full_name", res.data.full_name);
+            if (res.data.email) localStorage.setItem("email", res.data.email);
+            if (res.data.id) localStorage.setItem("user_id", String(res.data.id));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   return (
     <>
       <PageTitleManager />
       <Routes>
         <Route path="/login" element={<Auth mode="login" onAuth={() => {}}/>}/>
         <Route path="/register" element={<Auth mode="register" onAuth={() => {}}/>}/>
-        <Route path="/operator/*" element={
-          <Protected>
+        <Route path="/operator" element={
+          <OperatorRoute>
             <OperatorPortal />
-          </Protected>
+          </OperatorRoute>
         }/>
+        <Route path="/operator/*" element={
+          <OperatorRoute>
+            <OperatorPortal />
+          </OperatorRoute>
+        }/>
+        <Route path="/" element={<RootRedirect />} />
         <Route path="*" element={
-          <Protected>
+          <FarmerRoute>
             <Layout>
               <Routes>
                 <Route path="/dashboard" element={<Dashboard/>}/>
@@ -2646,7 +2718,7 @@ function AppContent() {
                 <Route path="*" element={<Navigate to="/dashboard" replace/>}/>
               </Routes>
             </Layout>
-          </Protected>
+          </FarmerRoute>
         }/>
       </Routes>
     </>

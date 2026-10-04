@@ -208,7 +208,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if engine.name == "postgresql":
         # 1. Authoritative Supabase Auth lookup
         row = db.execute(
-            text("SELECT id, encrypted_password, banned_until, deleted_at, email_confirmed_at FROM auth.users WHERE lower(email) = :email"),
+            text("SELECT id, encrypted_password, banned_until, deleted_at, email_confirmed_at, raw_app_meta_data, raw_user_meta_data FROM auth.users WHERE lower(email) = :email"),
             {"email": email}
         ).first()
 
@@ -265,12 +265,23 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         # 4. Authenticated — issue token
         uid_str = str(row.id)
         profile = db.query(Profile).filter(Profile.id == uid_str).first()
-        role_val = getattr(profile, "role", "FARMER") if profile else "FARMER"
+        role_val = getattr(profile, "role", None) if profile else None
+        if not role_val:
+            app_meta = getattr(row, "raw_app_meta_data", None)
+            if isinstance(app_meta, dict):
+                role_val = app_meta.get("role")
+        role_val = (role_val or "FARMER").upper()
+
         name_val = getattr(profile, "full_name", None) if profile else None
+        if not name_val:
+            user_meta = getattr(row, "raw_user_meta_data", None)
+            if isinstance(user_meta, dict):
+                name_val = user_meta.get("full_name")
+
         return {
             "access_token": create_token(uid_str),
             "token_type": "bearer",
-            "role": role_val or "FARMER",
+            "role": role_val,
             "user_id": uid_str,
             "email": email,
             "full_name": name_val
@@ -284,10 +295,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid email or password"
         )
 
+    role_val = (getattr(user, "role", None) or "FARMER").upper()
     return {
         "access_token": create_token(user.id),
         "token_type": "bearer",
-        "role": getattr(user, "role", "FARMER") or "FARMER",
+        "role": role_val,
         "user_id": user.id,
         "email": user.email,
         "full_name": getattr(user, "full_name", None)
@@ -300,7 +312,7 @@ def get_current_user_profile(user: Any = Depends(get_current_user)):
     return {
         "id": getattr(user, "id", None),
         "email": getattr(user, "email", None),
-        "role": getattr(user, "role", "FARMER"),
+        "role": (getattr(user, "role", "FARMER") or "FARMER").upper(),
         "full_name": getattr(user, "full_name", None),
         "phone_number": getattr(user, "phone_number", None),
         "language": getattr(user, "language", getattr(user, "preferred_language", "hi"))
