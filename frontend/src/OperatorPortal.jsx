@@ -5,7 +5,7 @@ import {
   FlaskConical, FileText, LifeBuoy, CloudRain, IndianRupee, ShieldAlert,
   Landmark, Shield, PhoneCall, BarChart3, History, CheckCircle2,
   Clock, AlertTriangle, RefreshCw, Send, Phone, ArrowRight,
-  LogOut, Languages, ChevronRight, X, Eye, Upload, Download, QrCode
+  LogOut, Languages, ChevronRight, X, Eye, Upload, Download, QrCode, Menu
 } from "lucide-react";
 import api, { clearAuthSession } from "./api";
 import Logo from "./Logo";
@@ -15,6 +15,7 @@ export default function OperatorPortal() {
   const [lang, setLang, t] = useLang();
   const nav = useNavigate();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Global operator state
   const [stats, setStats] = useState(null);
@@ -87,7 +88,7 @@ export default function OperatorPortal() {
   // Load operator overview stats
   const loadStats = async () => {
     try {
-      const { data } = await api.get("/operators/dashboard-stats");
+      const { data } = await api.get("/operators/stats");
       setStats(data);
     } catch (e) {
       console.error(e);
@@ -370,14 +371,30 @@ export default function OperatorPortal() {
 
   return (
     <div className="operatorContainer">
+      {/* Mobile Drawer Backdrop */}
+      {mobileSidebarOpen && (
+        <div
+          className="operatorDrawerBackdrop"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* SIDEBAR */}
-      <aside className="operatorSidebar">
+      <aside className={`operatorSidebar ${mobileSidebarOpen ? "open" : ""}`}>
         <div className="operatorBrand">
           <Logo size="compact" variant="icon" />
           <div className="operatorBrandText">
             <span className="operatorBrandTitle">MAITTRI SEVA</span>
             <span className="operatorBrandSub">{t.operator?.brandSubtitle || (lang === "hi" ? "अधिकृत सेवा ऑपरेटर केंद्र" : "Authorized Seva Operator Center")}</span>
           </div>
+          <button
+            type="button"
+            className="operatorSidebarCloseBtn"
+            onClick={() => setMobileSidebarOpen(false)}
+            aria-label="Close navigation menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <div className="operatorTagline">
@@ -389,7 +406,10 @@ export default function OperatorPortal() {
             <button
               key={item.id}
               className={`operatorNavItem ${activeTab === item.id ? "active" : ""}`}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id);
+                setMobileSidebarOpen(false);
+              }}
             >
               <span className="operatorNavIcon">{item.icon}</span>
               <span className="operatorNavText">{item.label}</span>
@@ -434,6 +454,23 @@ export default function OperatorPortal() {
               हिन्दी
             </button>
           </div>
+          <Link
+            to="/"
+            onClick={() => setMobileSidebarOpen(false)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "#95f8a7",
+              fontSize: "12px",
+              fontWeight: "600",
+              textDecoration: "none",
+              marginBottom: "8px",
+              padding: "4px 8px"
+            }}
+          >
+            ← {lang === "hi" ? "मुख्य पृष्ठ (Home)" : "Platform Home"}
+          </Link>
           <button className="operatorLogoutBtn" onClick={logout}>
             <LogOut size={15} /> {t.operator?.logoutBtn || (lang === "hi" ? "लॉगआउट" : "Logout")}
           </button>
@@ -445,8 +482,18 @@ export default function OperatorPortal() {
         {/* TOPBAR */}
         <header className="operatorTopbar">
           <div className="operatorTopbarLeft">
-            <h2>{menuItems.find(m => m.id === activeTab)?.label || (lang === "hi" ? "सेवा केंद्र" : "Seva Center")}</h2>
-            <p>{t.operator?.protocolBadge || (lang === "hi" ? "अधिकृत कृषि / सेवा ऑपरेटर कंसोल · प्रोटोकॉल 2026.1" : "Authorized Agriculture Operator Console · Protocol 2026.1")}</p>
+            <button
+              type="button"
+              className="operatorMobileMenuBtn"
+              onClick={() => setMobileSidebarOpen(prev => !prev)}
+              aria-label="Toggle navigation menu"
+            >
+              {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <div>
+              <h2>{menuItems.find(m => m.id === activeTab)?.label || (lang === "hi" ? "सेवा केंद्र" : "Seva Center")}</h2>
+              <p>{t.operator?.protocolBadge || (lang === "hi" ? "अधिकृत कृषि / सेवा ऑपरेटर कंसोल · प्रोटोकॉल 2026.1" : "Authorized Agriculture Operator Console · Protocol 2026.1")}</p>
+            </div>
           </div>
           <div className="operatorTopbarRight">
             <div style={{ display: "inline-flex", gap: "2px", background: "#f1f5f9", borderRadius: "16px", padding: "2px", border: "1px solid #cbd5e1" }}>

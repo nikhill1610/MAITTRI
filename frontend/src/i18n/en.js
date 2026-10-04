@@ -700,5 +700,146 @@ export default {
   farmDecisionAdvisories: "Farm Decision Advisories",
   farmUpdated: "Farm profile updated successfully.",
   saveChanges: "Save Changes",
-  confirmDelete: "Are you sure you want to delete this farm?"
+  confirmDelete: "Are you sure you want to delete this farm?",
+
+  // LANDING PAGE STRINGS (STITCH EXTRACTED & MODERNIZED)
+  landing: {
+    nav: {
+      home: "Home",
+      howItWorks: "How It Works",
+      features: "Features",
+      technology: "Technology",
+      forFarmers: "For Farmers",
+      about: "About",
+      login: "Login",
+      getStarted: "Get Started",
+      goToDashboard: "Farmer Dashboard",
+      goToOperator: "Official Portal"
+    },
+    hero: {
+      badge: "AI-Powered Agritech for India",
+      title: "Helping Farmers Make Smarter Decisions.",
+      subtitle: "MAITTRI brings agricultural knowledge, AI-powered guidance, market intelligence, government schemes and smart IoT insights together in one simple, farmer-friendly platform.",
+      primaryCta: "Get Started Free",
+      secondaryCta: "Explore Features",
+      trustBadge: "ICAR & Krishi Vigyan Grounded • 14 Agro-Climatic Zones • Dual Language EN/HI",
+      liveStudio: "MAITTRI Intelligence Studio",
+      fieldActive: "Field Active",
+      currentCrop: "Wheat (HD-2967)",
+      soilType: "Alluvial Soil • pH 6.8",
+      soilMoisture: "Soil Moisture",
+      npkStatus: "NPK Nutrient Status",
+      balanced: "Balanced",
+      nextAdvisory: "Next Action: Crown Root Irrigation (CRI) recommended in 3 days."
+    },
+    ribbon: {
+      aiGuidance: "AI-Powered Guidance",
+      aiGuidanceDesc: "Contextual agronomy reasoning",
+      realtime: "Real-Time Intelligence",
+      realtimeDesc: "Mandi prices & hyper-local weather",
+      schemes: "Scheme Discovery",
+      schemesDesc: "Eligibility & direct benefit sync",
+      iot: "Smart IoT Monitoring",
+      iotDesc: "Real-time soil & ambient telemetry"
+    },
+    problem: {
+      eyebrow: "The Challenge",
+      title: "Farming Decisions Shouldn't Depend on Guesswork.",
+      subtitle: "Farmers often need information from multiple places — crop guidance, soil knowledge, weather, market prices, government schemes and production practices. MAITTRI brings these decision-support tools into one connected platform.",
+      card1Title: "Information is Scattered",
+      card1Desc: "Weather alerts come from one source, mandi prices from another, and fertilizer advice from local retail counters with conflicting suggestions.",
+      card2Title: "Technology is Hard to Access",
+      card2Desc: "Complex dashboards and English-only tools leave millions of smallholder farmers without actionable digital guidance in their native language.",
+      card3Title: "Decisions Need Context",
+      card3Desc: "Generic advice fails. Real farming guidance must factor in specific plot location, soil texture, water availability, and local sowing calendar."
+    },
+    workflow: {
+      eyebrow: "System Workflow",
+      title: "From Farm Data to Practical Guidance",
+      subtitle: "A simple three-step process to transform field conditions into clear, profitable agricultural decisions.",
+      step1Title: "Tell Us About Your Farm",
+      step1Desc: "Input plot location, land size, soil type, crop history, irrigation setup, and current season plans via form or voice.",
+      step2Title: "MAITTRI Evaluates & Reasons",
+      step2Desc: "AI models paired with verified agronomic rules evaluate soil health, weather forecasts, market trends, and eligible schemes.",
+      step3Title: "Act with Confidence",
+      step3Desc: "Receive an actionable crop calendar, daily farm priorities, precise fertilizer doses, and harvest selling advisories."
+    },
+    features: {
+      eyebrow: "Platform Capabilities",
+      title: "One Platform. Multiple Farming Decisions.",
+      subtitle: "Explore MAITTRI's comprehensive suite of decision-support engines built specifically for Indian agriculture.",
+      f1Title: "AI Crop Recommendation",
+      f1Desc: "Identify suitable, climate-resilient crops based on farm conditions, historical yield, and seasonal forecasts.",
+      f2Title: "Personal Farm Planner & Calendar",
+      f2Desc: "Stage-by-stage crop timelines tracking vegetative growth, flowering, irrigation alerts, and digital farm notes.",
+      f3Title: "Soil & Nutrient Intelligence",
+      f3Desc: "Assess Nitrogen, Phosphorus, Potassium, and pH levels with automated soil health cards and corrective advice.",
+      f4Title: "Fertilizer Intelligence",
+      f4Desc: "Calculate optimal basal and top-dressing dosages of Urea, DAP, MOP, and bio-fertilizers without wastage.",
+      f5Title: "Mandi Market Price Trends",
+      f5Desc: "Live prices, modal rates, 30-day historical trends, and revenue projections across Indian mandis.",
+      f6Title: "Government Schemes & Subsidies",
+      f6Desc: "Discover central and state schemes (PM-Kisan, PMFBY, Soil Health Card) with direct eligibility checks.",
+      f7Title: "Parali & Residue Management",
+      f7Desc: "Eco-friendly, profitable stubble solutions: bio-decomposers, happy seeders, straw baling, and market linkages.",
+      f8Title: "Krishi Assistant AI",
+      f8Desc: "Ask questions in Hindi or English about pests, diseases, irrigation stages, and get ICAR-grounded advice."
+    },
+    assistant: {
+      eyebrow: "Cognitive Agronomy",
+      title: "An Agricultural Intelligence Layer Built for Real Questions.",
+      subtitle: "MAITTRI combines agronomic knowledge retrieval with conversational AI to provide grounded, reliable answers instead of hallucinations.",
+      point1Title: "Verified Agronomic Knowledge",
+      point1Desc: "Responses are strictly grounded in ICAR research and agricultural university extension manuals.",
+      point2Title: "Dual-Language Native Understanding",
+      point2Desc: "Communicate naturally in Hindi or English with full agricultural context and terminology.",
+      sampleQ: "What is the critical irrigation stage for wheat, especially CRI stage?",
+      sampleA: "Crown Root Initiation (CRI) occurs 20-25 days after sowing. It is the most critical stage for wheat; delay causes significant tiller reduction."
+    },
+    telemetry: {
+      eyebrow: "Hardware & Telemetry",
+      title: "Connect the Physical Farm to Digital Intelligence.",
+      subtitle: "Low-power IoT field nodes collect live soil moisture, ambient temperature, and ultrasonic field radar scans to safeguard crops.",
+      nodeTitle: "ESP32 Low-Power Field Nodes",
+      nodeDesc: "Solar-supported microcontrollers transmitting volumetric soil moisture and temperature updates.",
+      radarTitle: "Ultrasonic Obstacle & Animal Radar",
+      radarDesc: "Detect field intrusion and obstacles with real-time sweep visualization and distance telemetry."
+    },
+    accessibility: {
+      eyebrow: "Inclusive Design",
+      title: "Technology That Meets Farmers Where They Are.",
+      subtitle: "No smartphone? Low digital literacy? MAITTRI is engineered with an Authorized Seva Nirmata portal so village operators can assist any farmer.",
+      a1Title: "Bilingual Voice & Text",
+      a1Desc: "Voice search and Hindi text designed with high-contrast typography for readability in direct sunlight.",
+      a2Title: "Authorized Seva Nirmata Portal",
+      a2Desc: "Village-level entrepreneurs can create farm profiles, register offline farmers, and print official guidance sheets.",
+      a3Title: "Low-Bandwidth Optimization",
+      a3Desc: "Optimized payload sizes ensure fast loading even on 2G/3G rural networks with offline caching."
+    },
+    principles: {
+      eyebrow: "Core Principles",
+      title: "Designed Around the Farmer.",
+      simple: "Simple & Actionable",
+      simpleDesc: "Complex agronomy presented in plain language without convoluted technical jargon.",
+      contextual: "Context-Aware",
+      contextualDesc: "Every recommendation factors in specific soil type, location, weather, and farm size.",
+      trustworthy: "Trustworthy & Independent",
+      trustworthyDesc: "Unbiased guidance with no vendor lock-in or forced commercial product promotions."
+    },
+    cta: {
+      title: "Let's Build a Smarter Future for Farming.",
+      subtitle: "Join thousands of farmers making informed decisions with MAITTRI today.",
+      button: "Get Started Free",
+      loginLink: "Already registered? Login here"
+    },
+    footer: {
+      desc: "MAITTRI is an AI-powered agricultural decision support platform built for Indian farmers, field operators, and agronomists.",
+      product: "Platform Modules",
+      portals: "Portals",
+      farmerPortal: "Farmer Portal",
+      operatorPortal: "Official / Seva Operator",
+      copyright: "© 2026 MAITTRI. Smart Agriculture Platform. All rights reserved.",
+      developedFor: "Built for Indian Agriculture • Grounded in Science"
+    }
+  }
 };

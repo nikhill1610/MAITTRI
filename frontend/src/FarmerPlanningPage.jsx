@@ -360,7 +360,7 @@ export default function FarmerPlanningPage() {
       </div>
 
       {/* 2. Mode Navigation Tabs */}
-      <div style={{ display: "flex", gap: "12px", marginBottom: "24px", borderBottom: "2px solid #e2e8f0", paddingBottom: "8px" }}>
+      <div className="plannerTabs" style={{ marginBottom: "24px", borderBottom: "2px solid #e2e8f0", paddingBottom: "8px" }}>
         <button
           onClick={() => setActiveTab("plan")}
           style={{

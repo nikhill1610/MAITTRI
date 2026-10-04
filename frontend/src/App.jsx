@@ -5,7 +5,7 @@ import {
   Beef, Bird, LogOut, Plus, Languages, Menu, X, Leaf, IndianRupee,
   AlertTriangle, CheckCircle2, Droplets, ThermometerSun, Wind,
   Compass, Sun, CloudRain, Search, Navigation, Calendar, ShieldAlert, Shield, Landmark,
-  Check, RefreshCw, Eye, Pencil, Trash2, FlaskConical, HelpCircle, ArrowRight,
+  Check, RefreshCw, Eye, EyeOff, Pencil, Trash2, FlaskConical, HelpCircle, ArrowRight,
   ChevronDown, Wheat, Radio, Bot, QrCode, FileText, Phone, Clock, AlertCircle
 } from "lucide-react";
 import api, { clearAuthSession } from "./api";
@@ -38,6 +38,7 @@ import IoTMonitorPage from "./IoTMonitorPage";
 import FarmerPlanningPage from "./FarmerPlanningPage";
 import KrishiAssistantPage from "./KrishiAssistantPage";
 import OperatorPortal from "./OperatorPortal";
+import LandingPage from "./LandingPage";
 
 
 const soilTypes = [
@@ -224,7 +225,7 @@ function Splash({ onDone }) {
   const [lang, , t] = useLang();
   
   useEffect(() => {
-    const timer = setTimeout(onDone, 1800);
+    const timer = setTimeout(onDone, 1200);
     return () => clearTimeout(timer);
   }, [onDone]);
 
@@ -286,6 +287,7 @@ function Auth({ mode = "login", onAuth }) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
@@ -367,6 +369,12 @@ function Auth({ mode = "login", onAuth }) {
       </div>
 
       <form className="card authCard" onSubmit={submit}>
+        <div style={{ textAlign: "left", marginBottom: 4 }}>
+          <Link to="/" className="authBackHomeLink">
+            ← {lang === "hi" ? "मुख्य पृष्ठ पर लौटें (Home)" : "Back to Home"}
+          </Link>
+        </div>
+
         <div className="authBrandHeader">
           <div className="authLogoCircle">
             <Logo size="login" variant="icon" />
@@ -421,7 +429,12 @@ function Auth({ mode = "login", onAuth }) {
                 ? (lang === "hi" ? "सेवा ऑपरेटर पंजीकरण" : "Register Operator")
                 : (t.register || (lang === "hi" ? "पंजीकरण" : "Register")))}
         </h2>
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="error" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            <span>{error}</span>
+          </div>
+        )}
 
         {mode === "register" && (
           <>
@@ -456,16 +469,27 @@ function Auth({ mode = "login", onAuth }) {
         />
         
         <label className="authLabel">{t.password || (lang === "hi" ? "पासवर्ड" : "Password")}</label>
-        <input
-          className="authInput"
-          type="password"
-          minLength="6"
-          maxLength="128"
-          required
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder={lang === "hi" ? "पासवर्ड दर्ज करें" : "Enter password"}
-        />
+        <div className="authPasswordWrapper">
+          <input
+            className="authInput authPasswordInput"
+            type={showPassword ? "text" : "password"}
+            minLength="6"
+            maxLength="128"
+            required
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder={lang === "hi" ? "पासवर्ड दर्ज करें" : "Enter password"}
+          />
+          <button
+            type="button"
+            className="authPasswordToggleBtn"
+            onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? (lang === "hi" ? "पासवर्ड छिपाएं" : "Hide password") : (lang === "hi" ? "पासवर्ड दिखाएं" : "Show password")}
+            title={showPassword ? (lang === "hi" ? "पासवर्ड छिपाएं" : "Hide password") : (lang === "hi" ? "पासवर्ड दिखाएं" : "Show password")}
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
         
         <button
           type="submit"
@@ -652,6 +676,15 @@ function Layout({ children }) {
               <span>{lang === "hi" ? "🏛️ सेवा ऑपरेटर केंद्र" : "🏛️ Seva Operator Portal"}</span>
             </Link>
           )}
+          <Link
+            to="/"
+            onClick={() => setOpen(false)}
+            className="navItem"
+            style={{ marginBottom: 4 }}
+          >
+            <Compass size={20} />
+            <span>{lang === "hi" ? "मुख्य पृष्ठ (Home)" : "Platform Home"}</span>
+          </Link>
           {item("/dashboard", <LayoutDashboard size={20}/>, t("nav.dashboard") || (lang === "hi" ? "डैशबोर्ड" : "Dashboard"))}
 
           {/* CROP FARMING EXPANDABLE PARENT (APPEARS ONLY ONCE) */}
@@ -2666,7 +2699,8 @@ function AppContent() {
             <OperatorPortal />
           </OperatorRoute>
         }/>
-        <Route path="/" element={<RootRedirect />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/home" element={<LandingPage />} />
         <Route path="*" element={
           <FarmerRoute>
             <Layout>
